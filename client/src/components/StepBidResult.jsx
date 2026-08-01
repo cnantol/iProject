@@ -1,0 +1,114 @@
+import { useState } from 'react';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import api, { errorMessage } from '../api';
+import { fmtMoney } from '../utils/helpers';
+import StepWrapper from './StepWrapper';
+
+export default function StepBidResult({ order, readOnly, onChanged }) {
+  const [lostOpen, setLostOpen] = useState(false);
+  const [error, setError] = useState('');
+  const editable = !readOnly && order.status === 'bid_decision';
+  const selectedRound = (order.quotations || []).find((round) => round.id === order.selected_round_id);
+
+  const bid = async (result) => {
+    setError('');
+    try {
+      await api.patch(`/orders/${order.id}/status`, { action: 'bid', result });
+      setLostOpen(false);
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  return (
+    <StepWrapper title="中标结果" subtitle="确认项目中标或未中标" readOnly={readOnly}>
+      {error && (
+        <Box sx={{ mb: 2 }}>
+          <Alert severity="error">{error}</Alert>
+        </Box>
+      )}
+      <Stack spacing={2}>
+        <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            审批选中报价轮次
+          </Typography>
+          <Typography variant="body2">
+            {selectedRound ? `${selectedRound.round_label || `R${selectedRound.round_no}`} · 合计 ¥ ${fmtMoney(selectedRound.total_amount)}` : '未选定'}
+          </Typography>
+        </Box>
+        {selectedRound && (
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>物料号</TableCell>
+                <TableCell>描述</TableCell>
+                <TableCell>价格来源</TableCell>
+                <TableCell align="right">最终单价</TableCell>
+                <TableCell align="right">数量</TableCell>
+                <TableCell align="right">行金额</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(selectedRound.items || []).map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>{item.material_no || '-'}</TableCell>
+                  <TableCell>{item.description || '-'}</TableCell>
+                  <TableCell>{item.price_source || '-'}</TableCell>
+                  <TableCell align="right">{fmtMoney(item.final_unit_price, 4)}</TableCell>
+                  <TableCell align="right">{item.qty}</TableCell>
+                  <TableCell align="right">{fmtMoney(item.line_amount)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {editable && (
+          <Stack direction="row" spacing={2} sx={{ justifyContent: 'flex-end' }}>
+            <Button variant="contained" color="success" startIcon={<EmojiEventsIcon />} onClick={() => bid('won')}>
+              中标（won）
+            </Button>
+            <Button variant="outlined" color="error" onClick={() => setLostOpen(true)}>
+              未中标（lost）
+            </Button>
+          </Stack>
+        )}
+        {order.status === 'lost_closed' && (
+          <Alert severity="warning">
+            该订单已标记未中标并关闭。如需恢复，请在系统设置「数据修正」中回退至中标结果。
+          </Alert>
+        )}
+        {order.status === 'finance' && order.bid_result === 'won' && <Chip size="small" color="success" label="已确认中标" />}
+      </Stack>
+
+      <Dialog open={lostOpen} onClose={() => setLostOpen(false)}>
+        <DialogTitle>确认未中标</DialogTitle>
+        <DialogContent>
+          <DialogContentText>未中标后订单将进入 lost_closed 只读终点，不可在流程中恢复。是否确认？</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLostOpen(false)}>取消</Button>
+          <Button color="error" onClick={() => bid('lost')}>
+            确认未中标
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </StepWrapper>
+  );
+}

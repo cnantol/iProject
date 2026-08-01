@@ -1,0 +1,83 @@
+import { useState } from 'react';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import api, { errorMessage } from '../api';
+import { fmtMoney, fmtDateTime } from '../utils/helpers';
+import StepWrapper from './StepWrapper';
+
+export default function StepCommission({ order, readOnly, onChanged }) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [remark, setRemark] = useState('');
+  const [error, setError] = useState('');
+  const matched = Number(order.commission_matched) === 1;
+  const canManual = !readOnly && order.status === 'commission' && !matched;
+
+  const manual = async () => {
+    if (!Number(amount) || Number(amount) <= 0) {
+      setError('补录金额必须大于 0');
+      return;
+    }
+    setError('');
+    try {
+      await api.post('/commission/manual', { order_id: order.id, amount: Number(amount), remark });
+      setOpen(false);
+      setAmount('');
+      setRemark('');
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  return (
+    <StepWrapper title="佣金结算" subtitle="佣金 Excel 自动匹配或特殊情况人工补录" readOnly={readOnly}>
+      {error && (
+        <Box sx={{ mb: 2 }}>
+          <Alert severity="error">{error}</Alert>
+        </Box>
+      )}
+      {matched ? (
+        <Stack spacing={1}>
+          <Chip size="small" color="success" label="佣金已匹配" sx={{ alignSelf: 'flex-start' }} />
+          <Typography variant="body2">佣金金额：¥ {fmtMoney(order.commission_amount)}</Typography>
+          <Typography variant="body2">结算时间：{fmtDateTime(order.commission_date)}</Typography>
+        </Stack>
+      ) : (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          该订单尚未匹配佣金，保持等待下次佣金 Excel 匹配；特殊情况可由管理员人工补录。
+        </Alert>
+      )}
+      {canManual && (
+        <Button variant="contained" color="warning" onClick={() => setOpen(true)}>
+          人工补录佣金
+        </Button>
+      )}
+
+      <Dialog open={open} onClose={() => setOpen(false)}>
+        <DialogTitle>人工补录佣金</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1, minWidth: 360 }}>
+            <TextField label="佣金金额（必填，>0）" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} fullWidth />
+            <TextField label="补录备注" multiline minRows={2} value={remark} onChange={(e) => setRemark(e.target.value)} fullWidth />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>取消</Button>
+          <Button color="warning" onClick={manual}>
+            确认补录
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </StepWrapper>
+  );
+}

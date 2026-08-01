@@ -1,0 +1,228 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
+import LinearProgress from '@mui/material/LinearProgress';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
+import AddIcon from '@mui/icons-material/Add';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import api from '../api';
+import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
+import { fmtMoney, fmtDate } from '../utils/helpers';
+
+function StatCard({ label, value, accent, badge }) {
+  return (
+    <Card>
+      <CardContent>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+          <Typography variant="body2" color="text.secondary">
+            {label}
+          </Typography>
+          {badge != null && badge > 0 && (
+            <Chip size="small" color="error" icon={<WarningAmberIcon />} label={`逾期 ${badge} 条`} />
+          )}
+        </Stack>
+        <Typography variant="h5" sx={{ mt: 1, fontWeight: 800, color: accent || 'text.primary' }}>
+          {value}
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data: result } = await api.get('/dashboard');
+      setData(result);
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.error || '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  if (error) {
+    return <Alert severity="error" action={<Button onClick={load}>重试</Button>}>{error}</Alert>;
+  }
+  if (!data) return null;
+
+  const maxStatus = Math.max(1, ...(data.statusDistribution || []).map((row) => row.count));
+  const statusMap = new Map((data.statusDistribution || []).map((row) => [row.status, row.count]));
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Typography variant="h5">首页看板</Typography>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/orders/new')}>
+          新建订单
+        </Button>
+      </Stack>
+
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard label="总项目数" value={data.totalOrders ?? 0} accent="#1976D2" />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard label="进行中" value={data.inProgress ?? 0} accent="#F57C00" badge={data.overdueCount} />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard label="已闭环" value={data.closedCount ?? 0} accent="#2E7D32" />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatCard label="闭环总金额" value={`¥ ${fmtMoney(data.totalAmount)}`} accent="#004E9A" />
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={2}>
+        <Grid item xs={12} lg={8}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 1.5 }}>
+                最近项目
+              </Typography>
+              {(data.recentOrders || []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+                  暂无数据
+                </Typography>
+              ) : (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>订单号</TableCell>
+                      <TableCell>项目名称</TableCell>
+                      <TableCell>最终客户</TableCell>
+                      <TableCell>状态</TableCell>
+                      <TableCell align="right">金额</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(data.recentOrders || []).map((order) => (
+                      <TableRow key={order.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/orders/${order.id}`)}>
+                        <TableCell sx={{ fontWeight: 600 }}>{order.order_id}</TableCell>
+                        <TableCell>{order.project_name || '-'}</TableCell>
+                        <TableCell>{order.end_customer_name || '-'}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={STATUS_LABELS[order.status] || order.status}
+                            sx={{ bgcolor: `${STATUS_COLORS[order.status] || '#78909C'}22`, color: STATUS_COLORS[order.status] || '#78909C' }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">{fmtMoney(order.total_amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} lg={4}>
+          <Card sx={{ mb: 2 }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 1.5 }}>
+                状态分布
+              </Typography>
+              <Stack spacing={1.25}>
+                {[...statusMap.entries()].length === 0 && (
+                  <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+                    暂无数据
+                  </Typography>
+                )}
+                {[...statusMap.entries()]
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([status, count]) => (
+                    <Box key={status}>
+                      <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.25 }}>
+                        <Typography variant="body2">{STATUS_LABELS[status] || status}</Typography>
+                        <Typography variant="body2" fontWeight={700}>
+                          {count}
+                        </Typography>
+                      </Stack>
+                      <LinearProgress
+                        variant="determinate"
+                        value={(count / maxStatus) * 100}
+                        sx={{ height: 8, borderRadius: 2, bgcolor: `${STATUS_COLORS[status] || '#78909C'}22`, '& .MuiLinearProgress-bar': { bgcolor: STATUS_COLORS[status] || '#78909C' } }}
+                      />
+                    </Box>
+                  ))}
+              </Stack>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                <Typography variant="h6">待办事项</Typography>
+                <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/todos')}>
+                  查看全部
+                </Button>
+              </Stack>
+              {(data.recentTodos || []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
+                  暂无待办
+                </Typography>
+              ) : (
+                <List dense disablePadding>
+                  {(data.recentTodos || []).map((todo) => (
+                    <Box key={todo.id}>
+                      <ListItemButton
+                        sx={{ px: 1 }}
+                        onClick={() => (todo.order_ref ? navigate(`/orders/${todo.order_ref}`) : navigate('/todos'))}
+                      >
+                        <ListItemText
+                          primary={todo.title}
+                          secondary={todo.due_date ? `截止：${fmtDate(todo.due_date)}` : '无截止日期'}
+                          primaryTypographyProps={{ fontSize: 14 }}
+                        />
+                        {todo.due_date && todo.due_date < new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10) && (
+                          <Chip size="small" color="error" label="逾期" />
+                        )}
+                      </ListItemButton>
+                      <Divider />
+                    </Box>
+                  ))}
+                </List>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+    </Stack>
+  );
+}
