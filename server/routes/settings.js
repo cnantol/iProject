@@ -464,6 +464,7 @@ router.post('/backup', (req, res) => {
 // ---------- 报价单式样 ----------
 const QUOTE_STYLE_LABEL_KEYS = [
   'quote_title',
+  'quote_date',
   'quote_no',
   'order_no',
   'project_name',
@@ -471,7 +472,6 @@ const QUOTE_STYLE_LABEL_KEYS = [
   'contract_customer',
   'detail_title',
   'total',
-  'generated_at',
   'material_no',
   'description',
   'type',
@@ -483,9 +483,11 @@ const QUOTE_STYLE_LABEL_KEYS = [
 
 const QUOTE_STYLE_VISIBILITY_KEYS = [
   'quote_no',
+  'quote_date',
   'order_no',
   'project_name',
-  'customer',
+  'end_customer',
+  'contract_customer',
   'contact_info',
   'material_no',
   'description',
@@ -511,12 +513,17 @@ function defaultQuoteStyle() {
     info_alignment: 'center',
     header_alignment: 'center',
     footer_alignment: 'center',
+    language: 'zh',
+    logo_position: 'center',
+    quote_date: '',
     logo: null,
     field_visibility: {
       quote_no: 1,
+      quote_date: 1,
       order_no: 1,
       project_name: 1,
-      customer: 1,
+      end_customer: 1,
+      contract_customer: 1,
       contact_info: 1,
       material_no: 1,
       description: 1,
@@ -528,6 +535,7 @@ function defaultQuoteStyle() {
     },
     labels: {
       quote_title: '报价单',
+      quote_date: '报价日期',
       quote_no: '报价单编号',
       order_no: '订单号',
       project_name: '项目名称',
@@ -535,7 +543,6 @@ function defaultQuoteStyle() {
       contract_customer: '合同客户',
       detail_title: '报价明细',
       total: '合计（未税）',
-      generated_at: '生成时间',
       material_no: '物料号',
       description: '描述',
       type: '类型',
@@ -543,6 +550,24 @@ function defaultQuoteStyle() {
       unit_price: '单价',
       qty: '数量',
       line_amount: '行金额'
+    },
+    labels_en: {
+      quote_title: 'Quotation',
+      quote_date: 'Quotation Date',
+      quote_no: 'Quotation No.',
+      order_no: 'Order No.',
+      project_name: 'Project Name',
+      end_customer: 'End Customer',
+      contract_customer: 'Contract Customer',
+      detail_title: 'Quotation Details',
+      total: 'Total (Excl. VAT)',
+      material_no: 'Material No.',
+      description: 'Description',
+      type: 'Type',
+      price_source: 'Price Source',
+      unit_price: 'Unit Price',
+      qty: 'Qty',
+      line_amount: 'Line Amount'
     }
   };
 }
@@ -556,6 +581,11 @@ function normalizeQuoteStyle(raw = {}) {
   for (const key of QUOTE_STYLE_LABEL_KEYS) {
     if (rawLabels[key] !== undefined) labels[key] = text(rawLabels[key], labels[key], 40);
   }
+  const labelsEn = { ...defaults.labels_en };
+  const rawLabelsEn = raw.labels_en && typeof raw.labels_en === 'object' ? raw.labels_en : {};
+  for (const key of QUOTE_STYLE_LABEL_KEYS) {
+    if (rawLabelsEn[key] !== undefined) labelsEn[key] = text(rawLabelsEn[key], labelsEn[key], 40);
+  }
   const align = (value, fallback) => (['left', 'center', 'right'].includes(value) ? value : fallback);
   const visibility = { ...defaults.field_visibility };
   const rawVisibility = raw.field_visibility && typeof raw.field_visibility === 'object' ? raw.field_visibility : {};
@@ -563,6 +593,7 @@ function normalizeQuoteStyle(raw = {}) {
     if (rawVisibility[key] !== undefined) visibility[key] = Number(rawVisibility[key]) === 1 || rawVisibility[key] === true ? 1 : 0;
   }
   const logo = raw.logo && /^data:image\/(png|jpeg|jpg);base64,/i.test(String(raw.logo)) && String(raw.logo).length <= 2_400_000 ? String(raw.logo) : null;
+  const quoteDate = raw.quote_date && /^\d{4}-\d{2}-\d{2}$/.test(String(raw.quote_date)) ? String(raw.quote_date) : '';
   return {
     company_name: text(raw.company_name, defaults.company_name, 80),
     primary_color: color(raw.primary_color, defaults.primary_color),
@@ -577,9 +608,13 @@ function normalizeQuoteStyle(raw = {}) {
     info_alignment: align(raw.info_alignment, defaults.info_alignment),
     header_alignment: align(raw.header_alignment, defaults.header_alignment),
     footer_alignment: align(raw.footer_alignment, defaults.footer_alignment),
+    language: ['zh', 'en'].includes(raw.language) ? raw.language : defaults.language,
+    logo_position: ['left', 'center', 'right'].includes(raw.logo_position) ? raw.logo_position : defaults.logo_position,
+    quote_date: quoteDate,
     logo,
     field_visibility: visibility,
-    labels
+    labels,
+    labels_en: labelsEn
   };
 }
 

@@ -29,6 +29,8 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
 import BackupIcon from '@mui/icons-material/Backup';
@@ -737,12 +739,17 @@ const QUOTE_STYLE_DEFAULTS = {
   info_alignment: 'center',
   header_alignment: 'center',
   footer_alignment: 'center',
+  language: 'zh',
+  logo_position: 'center',
+  quote_date: '',
   logo: null,
   field_visibility: {
     quote_no: 1,
+    quote_date: 1,
     order_no: 1,
     project_name: 1,
-    customer: 1,
+    end_customer: 1,
+    contract_customer: 1,
     contact_info: 1,
     material_no: 1,
     description: 1,
@@ -754,6 +761,7 @@ const QUOTE_STYLE_DEFAULTS = {
   },
   labels: {
     quote_title: '报价单',
+    quote_date: '报价日期',
     quote_no: '报价单编号',
     order_no: '订单号',
     project_name: '项目名称',
@@ -761,7 +769,6 @@ const QUOTE_STYLE_DEFAULTS = {
     contract_customer: '合同客户',
     detail_title: '报价明细',
     total: '合计（未税）',
-    generated_at: '生成时间',
     material_no: '物料号',
     description: '描述',
     type: '类型',
@@ -769,18 +776,36 @@ const QUOTE_STYLE_DEFAULTS = {
     unit_price: '单价',
     qty: '数量',
     line_amount: '行金额'
+  },
+  labels_en: {
+    quote_title: 'Quotation',
+    quote_date: 'Quotation Date',
+    quote_no: 'Quotation No.',
+    order_no: 'Order No.',
+    project_name: 'Project Name',
+    end_customer: 'End Customer',
+    contract_customer: 'Contract Customer',
+    detail_title: 'Quotation Details',
+    total: 'Total (Excl. VAT)',
+    material_no: 'Material No.',
+    description: 'Description',
+    type: 'Type',
+    price_source: 'Price Source',
+    unit_price: 'Unit Price',
+    qty: 'Qty',
+    line_amount: 'Line Amount'
   }
 };
 
 const QUOTE_META_FIELDS = [
   { key: 'quote_no', label: '报价单编号', switchKey: 'quote_no' },
+  { key: 'quote_date', label: '报价日期', switchKey: 'quote_date' },
   { key: 'order_no', label: '订单号', switchKey: 'order_no' },
   { key: 'project_name', label: '项目名称', switchKey: 'project_name' },
-  { key: 'end_customer', label: '最终客户', switchKey: 'customer' },
-  { key: 'contract_customer', label: '合同客户' },
+  { key: 'end_customer', label: '最终客户', switchKey: 'end_customer' },
+  { key: 'contract_customer', label: '合同客户', switchKey: 'contract_customer' },
   { key: 'detail_title', label: '明细标题' },
-  { key: 'total', label: '合计文本' },
-  { key: 'generated_at', label: '生成时间' }
+  { key: 'total', label: '合计文本' }
 ];
 
 const QUOTE_COLUMN_FIELDS = [
@@ -793,7 +818,7 @@ const QUOTE_COLUMN_FIELDS = [
   { key: 'line_amount', label: '行金额', switchKey: 'line_amount' }
 ];
 
-const QUOTE_META_VISIBILITY_KEYS = ['quote_no', 'order_no', 'project_name', 'customer', 'contact_info'];
+const QUOTE_META_VISIBILITY_KEYS = ['quote_no', 'quote_date', 'order_no', 'project_name', 'end_customer', 'contract_customer', 'contact_info'];
 
 const QUOTE_ALIGN_OPTIONS = [
   { value: 'left', label: '靠左' },
@@ -805,7 +830,8 @@ function normalizeQuoteStyleForClient(data = {}) {
   return {
     ...QUOTE_STYLE_DEFAULTS,
     ...data,
-    labels: { ...QUOTE_STYLE_DEFAULTS.labels, ...(data.labels || {}) }
+    labels: { ...QUOTE_STYLE_DEFAULTS.labels, ...(data.labels || {}) },
+    labels_en: { ...QUOTE_STYLE_DEFAULTS.labels_en, ...(data.labels_en || {}) }
   };
 }
 
@@ -862,7 +888,10 @@ function QuoteStyle({ onError }) {
   };
 
   const setLabel = (key, value) => {
-    setStyle((prev) => ({ ...prev, labels: { ...prev.labels, [key]: value } }));
+    setStyle((prev) => {
+      const langKey = prev.language === 'en' ? 'labels_en' : 'labels';
+      return { ...prev, [langKey]: { ...prev[langKey], [key]: value } };
+    });
   };
 
   const toggleVisibility = (key) => {
@@ -903,10 +932,11 @@ function QuoteStyle({ onError }) {
     serif: "'Songti SC','SimSun',serif",
     mono: "'Courier New',monospace"
   };
+  const currentLabels = style.language === 'en' ? style.labels_en : style.labels;
   const previewFont = fontFamilies[style.font_family] || fontFamilies.sans;
   const sampleRows = [
-    { no: 'AC-1001', desc: '压缩机组示例', type: '标准', source: '指导价', price: '128,500.5000', qty: 1, amount: '128,500.50' },
-    { no: 'AC-1002', desc: '备件套件示例', type: '非标', source: '手工', price: '0.0000', qty: 1, amount: '0.00' }
+    { no: 'AC-1001', desc: '压缩机组示例', type: '标准', source: '指导价', price: '128,500.50', qty: 1, amount: '128,500.50' },
+    { no: 'AC-1002', desc: '备件套件示例', type: '非标', source: '手工', price: '0.00', qty: 1, amount: '0.00' }
   ];
   const enabledMetaCount = QUOTE_META_VISIBILITY_KEYS.filter((key) => style.field_visibility[key]).length;
   const enabledColumnCount = QUOTE_COLUMN_FIELDS.filter((item) => style.field_visibility[item.key]).length;
@@ -934,13 +964,34 @@ function QuoteStyle({ onError }) {
     <Card>
       <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'secondary.main' }} />
       <CardContent>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-          <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'secondary.main' }} />
-          <Typography variant="h6">报价单式样</Typography>
+        <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ xs: 'flex-start', md: 'center' }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2, flexWrap: 'wrap', rowGap: 1 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'secondary.main' }} />
+            <Box>
+              <Typography variant="h6">报价单式样</Typography>
+              <Typography variant="body2" color="text.secondary">
+                配置 Logo、语言、颜色、联系方式与字段名称，实时预览并测试 PDF
+              </Typography>
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>语言</Typography>
+              <ToggleButtonGroup size="small" exclusive value={style.language} onChange={(_, value) => value && setStyle((prev) => ({ ...prev, language: value }))}>
+                <ToggleButton value="zh">中文</ToggleButton>
+                <ToggleButton value="en">English</ToggleButton>
+              </ToggleButtonGroup>
+            </Stack>
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <Button variant="contained" startIcon={<SaveIcon />} onClick={save} disabled={saving || testing}>
+                {saving ? <CircularProgress size={18} color="inherit" /> : '保存式样'}
+              </Button>
+              <Button variant="outlined" startIcon={<DownloadIcon />} onClick={testPdf} disabled={saving || testing}>
+                {testing ? <CircularProgress size={18} color="inherit" /> : '生成测试 PDF'}
+              </Button>
+            </Stack>
+          </Stack>
         </Stack>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, ml: 0.5 }}>
-          配置报价单 Logo、颜色、联系方式与字段名称，实时预览并测试 PDF
-        </Typography>
         <Grid container spacing={3}>
           <Grid item xs={12} md={5}>
             <Stack spacing={2.5}>
@@ -998,6 +1049,16 @@ function QuoteStyle({ onError }) {
                     </Select>
                   </FormControl>
                 </Stack>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+                  <FormControl size="small" sx={{ minWidth: 160 }}>
+                    <InputLabel>Logo 位置</InputLabel>
+                    <Select value={style.logo_position} label="Logo 位置" onChange={(e) => setStyle((prev) => ({ ...prev, logo_position: e.target.value }))}>
+                      <MenuItem value="left">靠左</MenuItem>
+                      <MenuItem value="center">居中</MenuItem>
+                      <MenuItem value="right">靠右</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Stack>
                 <Box sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: 'action.hover' }}>
                   <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
                     {style.logo ? (
@@ -1029,6 +1090,26 @@ function QuoteStyle({ onError }) {
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>版式设置</Typography>
                 </Stack>
                 <TextField size="small" label="页眉文本" fullWidth value={style.header_text} onChange={(e) => setStyle((prev) => ({ ...prev, header_text: e.target.value }))} sx={{ mb: 1.5 }} />
+                <TextField
+                  size="small"
+                  label="报价日期"
+                  type="date"
+                  fullWidth
+                  value={style.quote_date}
+                  onChange={(e) => setStyle((prev) => ({ ...prev, quote_date: e.target.value }))}
+                  InputLabelProps={{ shrink: true }}
+                  sx={{ mb: 1.5 }}
+                />
+                <TextField
+                  size="small"
+                  label="页脚文本"
+                  multiline
+                  minRows={2}
+                  fullWidth
+                  value={style.footer_text}
+                  onChange={(e) => setStyle((prev) => ({ ...prev, footer_text: e.target.value }))}
+                  sx={{ mb: 1.5 }}
+                />
                 <Grid container spacing={1.5}>
                   <Grid item xs={12} sm={6}>
                     <FormControl size="small" fullWidth>
@@ -1095,7 +1176,7 @@ function QuoteStyle({ onError }) {
                           size="small"
                           label={item.label}
                           fullWidth
-                          value={style.labels[item.key]}
+                          value={currentLabels[item.key]}
                           onChange={(e) => setLabel(item.key, e.target.value)}
                           disabled={Boolean(item.switchKey) && !Boolean(style.field_visibility[item.switchKey])}
                           sx={{ opacity: Boolean(item.switchKey) && !Boolean(style.field_visibility[item.switchKey]) ? 0.55 : 1 }}
@@ -1136,7 +1217,7 @@ function QuoteStyle({ onError }) {
                           size="small"
                           label={item.label}
                           fullWidth
-                          value={style.labels[item.key]}
+                          value={currentLabels[item.key]}
                           onChange={(e) => setLabel(item.key, e.target.value)}
                           disabled={!Boolean(style.field_visibility[item.key])}
                           sx={{ opacity: Boolean(style.field_visibility[item.key]) ? 1 : 0.55 }}
@@ -1151,17 +1232,6 @@ function QuoteStyle({ onError }) {
                   ))}
                 </Grid>
               </Box>
-
-              <TextField label="页脚文本" multiline minRows={2} fullWidth value={style.footer_text} onChange={(e) => setStyle((prev) => ({ ...prev, footer_text: e.target.value }))} />
-
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-                <Button variant="contained" startIcon={<SaveIcon />} onClick={save} disabled={saving || testing}>
-                  {saving ? <CircularProgress size={18} color="inherit" /> : '保存式样'}
-                </Button>
-                <Button variant="outlined" startIcon={<DownloadIcon />} onClick={testPdf} disabled={saving || testing}>
-                  {testing ? <CircularProgress size={18} color="inherit" /> : '生成测试 PDF'}
-                </Button>
-              </Stack>
             </Stack>
           </Grid>
 
@@ -1177,7 +1247,7 @@ function QuoteStyle({ onError }) {
                     {style.header_text}
                   </Box>
                 )}
-                <Box sx={{ textAlign: 'center', mb: 1 }}>
+                <Box sx={{ textAlign: style.logo_position, mb: 1 }}>
                   {style.logo ? (
                     <img src={style.logo} alt="Logo" style={{ maxWidth: 150, maxHeight: 64, objectFit: 'contain' }} />
                   ) : (
@@ -1187,25 +1257,25 @@ function QuoteStyle({ onError }) {
                   )}
                 </Box>
                 <Typography sx={{ textAlign: style.title_alignment, fontSize: 22, fontWeight: 800, color: style.primary_color, mb: 0.5 }}>
-                  {style.company_name} {style.labels.quote_title}
+                  {style.company_name} {currentLabels.quote_title}
                 </Typography>
                 <Stack spacing={0.4} sx={{ fontSize: 12, color: '#475569', textAlign: style.info_alignment, mb: 1.5 }}>
-                  {Boolean(style.field_visibility.quote_no) && <Box>{style.labels.quote_no}：Q-20260802-R1</Box>}
-                  {Boolean(style.field_visibility.order_no) && <Box>{style.labels.order_no}：ORD-2026-TEST</Box>}
-                  {Boolean(style.field_visibility.project_name) && <Box>{style.labels.project_name}：示例项目（测试）</Box>}
-                  {Boolean(style.field_visibility.customer) && (
-                    <Box>
-                      {style.labels.end_customer}：示例最终客户&nbsp;&nbsp;&nbsp;{style.labels.contract_customer}：示例合同客户
-                    </Box>
-                  )}
+                  {Boolean(style.field_visibility.quote_no) && <Box>{currentLabels.quote_no}：Q-20260802-R1</Box>}
+                  {Boolean(style.field_visibility.order_no) && <Box>{currentLabels.order_no}：ORD-2026-TEST</Box>}
+                  {Boolean(style.field_visibility.project_name) && <Box>{currentLabels.project_name}：示例项目（测试）</Box>}
+                  {Boolean(style.field_visibility.end_customer) && <Box>{currentLabels.end_customer}：示例最终客户</Box>}
+                  {Boolean(style.field_visibility.contract_customer) && <Box>{currentLabels.contract_customer}：示例合同客户</Box>}
                   {Boolean(style.field_visibility.contact_info) && (style.company_address || style.company_phone || style.company_email) && (
                     <Box>
                       {[style.company_address, style.company_phone, style.company_email].filter(Boolean).join('　|　')}
                     </Box>
                   )}
+                  {Boolean(style.field_visibility.quote_date) && (
+                    <Box>{currentLabels.quote_date}：{style.quote_date || new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)}</Box>
+                  )}
                 </Stack>
                 <Typography sx={{ fontWeight: 700, color: style.primary_color, borderBottom: `2px solid ${style.secondary_color}`, pb: 0.5, mb: 1 }}>
-                  {style.labels.detail_title}
+                  {currentLabels.detail_title}
                 </Typography>
                 {visibleColumns.length === 0 ? (
                   <Box sx={{ py: 2, textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>未启用任何列</Box>
@@ -1214,7 +1284,7 @@ function QuoteStyle({ onError }) {
                     <Box component="thead">
                       <Box component="tr" sx={{ bgcolor: style.primary_color }}>
                         {visibleColumns.map((item) => (
-                          <Box component="th" sx={{ ...headerCell, textAlign: numericPreviewKeys.has(item.key) ? 'right' : 'left' }} key={item.key}>{style.labels[item.key]}</Box>
+                          <Box component="th" sx={{ ...headerCell, textAlign: numericPreviewKeys.has(item.key) ? 'right' : 'left' }} key={item.key}>{currentLabels[item.key]}</Box>
                         ))}
                       </Box>
                     </Box>
@@ -1230,10 +1300,7 @@ function QuoteStyle({ onError }) {
                   </Box>
                 )}
                 <Box sx={{ textAlign: 'right', mt: 1.5, fontWeight: 800, color: style.primary_color }}>
-                  {style.labels.total}：128,500.50
-                </Box>
-                <Box sx={{ textAlign: style.footer_alignment, mt: 2, fontSize: 11, color: '#94a3b8' }}>
-                  {style.labels.generated_at}：2026/08/02 10:00
+                  {currentLabels.total}：128,500.50
                 </Box>
                 {style.footer_text && (
                   <Box sx={{ textAlign: style.footer_alignment, mt: 0.5, fontSize: 11, color: '#94a3b8' }}>{style.footer_text}</Box>
@@ -1403,46 +1470,63 @@ function SystemManager({ onError }) {
     <Card>
       <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
       <CardContent>
-        <Stack spacing={2}>
-          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6} sx={{ display: 'flex' }}>
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', width: '100%', display: 'flex', flexDirection: 'column' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
               <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <PersonIcon fontSize="small" />
               </Box>
               <Typography variant="h6">账户设置</Typography>
             </Stack>
-            <Stack spacing={1.5} sx={{ maxWidth: 560 }}>
+            <Stack spacing={1.5}>
               <TextField
                 label="当前密码"
                 type="password"
                 size="small"
                 value={account.current_password}
                 onChange={(e) => setAccount((prev) => ({ ...prev, current_password: e.target.value }))}
+                helperText="修改用户名或密码前，需先验证当前密码"
               />
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+              <Box>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  <Box sx={{ width: 4, height: 18, borderRadius: 2, bgcolor: 'primary.main' }} />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>修改用户名</Typography>
+                </Stack>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                  填写新用户名后保存，登录账号将同步更新
+                </Typography>
                 <TextField
                   label="新用户名（留空不修改）"
                   size="small"
                   value={account.username}
                   onChange={(e) => setAccount((prev) => ({ ...prev, username: e.target.value }))}
-                  sx={{ flex: 1 }}
                 />
+              </Box>
+              <Box>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  <Box sx={{ width: 4, height: 18, borderRadius: 2, bgcolor: 'warning.main' }} />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>修改密码</Typography>
+                </Stack>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                  新密码不少于 6 位，留空表示不修改
+                </Typography>
                 <TextField
                   label="新密码（留空不修改）"
                   type="password"
                   size="small"
                   value={account.new_password}
                   onChange={(e) => setAccount((prev) => ({ ...prev, new_password: e.target.value }))}
-                  sx={{ flex: 1 }}
+                  sx={{ mb: 1.5 }}
                 />
-              </Stack>
-              <TextField
-                label="确认新密码"
-                type="password"
-                size="small"
-                value={account.confirm_password}
-                onChange={(e) => setAccount((prev) => ({ ...prev, confirm_password: e.target.value }))}
-              />
+                <TextField
+                  label="确认新密码"
+                  type="password"
+                  size="small"
+                  value={account.confirm_password}
+                  onChange={(e) => setAccount((prev) => ({ ...prev, confirm_password: e.target.value }))}
+                />
+              </Box>
               <Box>
                 <Button variant="contained" startIcon={<SaveIcon />} onClick={saveAccount} disabled={accountSaving}>
                   {accountSaving ? <CircularProgress size={18} color="inherit" /> : '保存账户设置'}
@@ -1450,18 +1534,20 @@ function SystemManager({ onError }) {
               </Box>
             </Stack>
           </Box>
-          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+          </Grid>
+          <Grid item xs={12} md={6} sx={{ display: 'flex' }}>
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', width: '100%', display: 'flex', flexDirection: 'column' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
               <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <BackupIcon fontSize="small" />
               </Box>
               <Typography variant="h6">备份与还原</Typography>
             </Stack>
-            <Stack direction="row" spacing={1.5}>
-              <Button variant="contained" startIcon={<DownloadIcon />} onClick={backup}>
+            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+              <Button variant="contained" startIcon={<DownloadIcon />} onClick={backup} sx={{ flex: '1 1 140px' }}>
                 全站备份
               </Button>
-              <Button component="label" variant="outlined" startIcon={<RestoreIcon />}>
+              <Button component="label" variant="outlined" startIcon={<RestoreIcon />} sx={{ flex: '1 1 140px' }}>
                 从备份还原
                 <input type="file" hidden accept=".zip" onChange={restore} />
               </Button>
@@ -1471,38 +1557,46 @@ function SystemManager({ onError }) {
                 备份完成：<Chip label={backupInfo.filename} component="a" href={authUrl(backupInfo.downloadUrl)} clickable />
               </Typography>
             )}
-            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
-              <FormControlLabel
-                control={<Switch checked={schedule.enabled} onChange={(e) => setSchedule((prev) => ({ ...prev, enabled: e.target.checked }))} />}
-                label="启用应用内定时备份"
-              />
-              <TextField
-                size="small"
-                label="小时 (0-23)"
-                type="number"
-                value={schedule.hour}
-                onChange={(e) => setSchedule((prev) => ({ ...prev, hour: Number(e.target.value) }))}
-                inputProps={{ min: 0, max: 23 }}
-                sx={{ width: 110 }}
-              />
-              <TextField
-                size="small"
-                label="分钟 (0-59)"
-                type="number"
-                value={schedule.minute}
-                onChange={(e) => setSchedule((prev) => ({ ...prev, minute: Number(e.target.value) }))}
-                inputProps={{ min: 0, max: 59 }}
-                sx={{ width: 110 }}
-              />
-              <Button size="small" variant="outlined" onClick={saveSchedule}>
-                保存配置
-              </Button>
-            </Stack>
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-              应用内定时任务每分钟检查一次；也可继续使用 deploy/scripts/backup.sh 的系统 cron 方式。
-            </Typography>
+            <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                <Box sx={{ width: 4, height: 18, borderRadius: 2, bgcolor: 'primary.main' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>定时备份配置</Typography>
+              </Stack>
+              <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                <FormControlLabel
+                  control={<Switch checked={schedule.enabled} onChange={(e) => setSchedule((prev) => ({ ...prev, enabled: e.target.checked }))} />}
+                  label="启用应用内定时备份"
+                />
+                <TextField
+                  size="small"
+                  label="小时 (0-23)"
+                  type="number"
+                  value={schedule.hour}
+                  onChange={(e) => setSchedule((prev) => ({ ...prev, hour: Number(e.target.value) }))}
+                  inputProps={{ min: 0, max: 23 }}
+                  sx={{ width: 110 }}
+                />
+                <TextField
+                  size="small"
+                  label="分钟 (0-59)"
+                  type="number"
+                  value={schedule.minute}
+                  onChange={(e) => setSchedule((prev) => ({ ...prev, minute: Number(e.target.value) }))}
+                  inputProps={{ min: 0, max: 59 }}
+                  sx={{ width: 110 }}
+                />
+                <Button size="small" variant="outlined" onClick={saveSchedule}>
+                  保存配置
+                </Button>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
+                应用内定时任务每分钟检查一次；也可继续使用 deploy/scripts/backup.sh 的系统 cron 方式。
+              </Typography>
+            </Box>
           </Box>
+          </Grid>
 
+          <Grid item xs={12} md={6}>
           <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'rgba(237,108,2,0.04)' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
               <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(237,108,2,0.12)', color: 'warning.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1514,7 +1608,9 @@ function SystemManager({ onError }) {
               打开数据修正
             </Button>
           </Box>
+          </Grid>
 
+          <Grid item xs={12} md={6}>
           <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'rgba(195,61,61,0.04)' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
               <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(195,61,61,0.10)', color: 'error.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1531,6 +1627,8 @@ function SystemManager({ onError }) {
               </Button>
             </Stack>
           </Box>
+          </Grid>
+          </Grid>
 
           <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
@@ -1585,7 +1683,6 @@ function SystemManager({ onError }) {
               </Button>
             </Stack>
           </Box>
-        </Stack>
 
         <Dialog open={correctionOpen} onClose={() => setCorrectionOpen(false)} maxWidth="sm" fullWidth>
           <DialogTitle>数据修正</DialogTitle>

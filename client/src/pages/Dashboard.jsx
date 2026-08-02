@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
+import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Grid from '@mui/material/Grid';
@@ -19,11 +20,21 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import AddIcon from '@mui/icons-material/Add';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import AutoGraphIcon from '@mui/icons-material/AutoGraph';
+import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import DescriptionIcon from '@mui/icons-material/Description';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import LockIcon from '@mui/icons-material/Lock';
+import PaidIcon from '@mui/icons-material/Paid';
+import PersonIcon from '@mui/icons-material/Person';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import api from '../api';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
@@ -57,11 +68,25 @@ function StatCard({ label, value, accent, badge, icon }) {
   );
 }
 
+const STATUS_ICONS = {
+  customer_info: <PersonIcon sx={{ fontSize: 16 }} />,
+  proposal: <DescriptionIcon sx={{ fontSize: 16 }} />,
+  quotation: <RequestQuoteIcon sx={{ fontSize: 16 }} />,
+  approval_pending: <FactCheckIcon sx={{ fontSize: 16 }} />,
+  bid_decision: <EmojiEventsIcon sx={{ fontSize: 16 }} />,
+  finance: <AccountBalanceIcon sx={{ fontSize: 16 }} />,
+  shipping_invoicing: <LocalShippingIcon sx={{ fontSize: 16 }} />,
+  commission: <PaidIcon sx={{ fontSize: 16 }} />,
+  closed: <LockIcon sx={{ fontSize: 16 }} />,
+  lost_closed: <CancelIcon sx={{ fontSize: 16 }} />
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [completingId, setCompletingId] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -79,6 +104,24 @@ export default function Dashboard() {
   useEffect(() => {
     load();
   }, []);
+
+  const toggleTodo = async (todo) => {
+    setCompletingId(todo.id);
+    try {
+      await api.patch(`/todos/${todo.id}/toggle`, { is_completed: Number(todo.is_completed) === 1 ? 0 : 1 });
+      setData((prev) => ({
+        ...prev,
+        recentTodos: (prev.recentTodos || []).map((item) =>
+          item.id === todo.id ? { ...item, is_completed: Number(item.is_completed) === 1 ? 0 : 1 } : item
+        )
+      }));
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.error || '操作失败');
+    } finally {
+      setCompletingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -144,7 +187,12 @@ export default function Dashboard() {
                   .map(([status, count]) => (
                     <Box key={status}>
                       <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.25 }}>
-                        <Typography variant="body2">{STATUS_LABELS[status] || status}</Typography>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Box sx={{ width: 26, height: 26, borderRadius: 1.5, bgcolor: `${STATUS_COLORS[status] || '#78909C'}22`, color: STATUS_COLORS[status] || '#78909C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {STATUS_ICONS[status] || <AutoGraphIcon sx={{ fontSize: 16 }} />}
+                          </Box>
+                          <Typography variant="body2">{STATUS_LABELS[status] || status}</Typography>
+                        </Stack>
                         <Typography variant="body2" fontWeight={700}>
                           {count}
                         </Typography>
@@ -194,12 +242,22 @@ export default function Dashboard() {
                         }}
                         onClick={() => (todo.order_ref ? navigate(`/orders/${todo.order_ref}`) : navigate('/todos'))}
                       >
+                        <Checkbox
+                          size="small"
+                          color="success"
+                          checked={Number(todo.is_completed) === 1}
+                          disabled={completingId === todo.id}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggleTodo(todo)}
+                        />
                         <ListItemText
                           primary={todo.title}
                           secondary={todo.due_date ? `截止：${fmtDate(todo.due_date)}` : '无截止日期'}
                           primaryTypographyProps={{ fontSize: 14, fontWeight: 700 }}
+                          sx={{ textDecoration: Number(todo.is_completed) === 1 ? 'line-through' : 'none', color: Number(todo.is_completed) === 1 ? 'text.disabled' : 'inherit' }}
                         />
-                        {todo.due_date && todo.due_date < new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10) && (
+                        {Number(todo.is_completed) === 1 && <Chip size="small" color="success" label="已完成" />}
+                        {Number(todo.is_completed) !== 1 && todo.due_date && todo.due_date < new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10) && (
                           <Chip size="small" color="error" label="逾期" />
                         )}
                       </ListItemButton>

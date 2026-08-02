@@ -185,7 +185,8 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
     // 使用默认品牌样式
   }
   if (styleOverride) style = styleOverride;
-  const labels = style.labels || {};
+  const language = style.language === 'en' ? 'en' : 'zh';
+  const labels = language === 'en' ? style.labels_en || {} : style.labels || {};
   const titleAlign = style.title_alignment || 'center';
   const infoAlign = style.info_alignment || 'center';
   const headerAlign = style.header_alignment || 'center';
@@ -195,6 +196,15 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
   const fontFile = findCjkFont();
   if (fontFile) doc.registerFont('cjk', fontFile);
   const font = (bold = false) => (fontFile ? (bold ? 'cjk' : 'cjk') : 'Helvetica');
+  const fitFontSize = (text, maxWidth, maxSize = 9, minSize = 6.5) => {
+    let size = maxSize;
+    doc.fontSize(size);
+    while (size > minSize && doc.widthOfString(String(text)) > maxWidth) {
+      size = Math.max(minSize, size - 0.5);
+      doc.fontSize(size);
+    }
+    return size;
+  };
   if (style.header_text) {
     doc.font(font()).fontSize(10).fillColor('#555555').text(String(style.header_text), { align: headerAlign });
     doc.moveDown(0.4);
@@ -203,7 +213,8 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
     try {
       const logoBuffer = Buffer.from(String(style.logo).split(',')[1], 'base64');
       const logoWidth = Math.min(120, (48 + 499 + 48) / 3);
-      doc.image(logoBuffer, (48 + 499 + 48 - logoWidth) / 2, doc.y, { width: logoWidth });
+      const logoX = style.logo_position === 'left' ? 48 : style.logo_position === 'right' ? 48 + 499 - logoWidth : (48 + 499 + 48 - logoWidth) / 2;
+      doc.image(logoBuffer, logoX, doc.y, { width: logoWidth });
       doc.moveDown(0.6);
     } catch {
       // Logo 数据损坏时跳过，不影响 PDF 生成
@@ -215,16 +226,13 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
   if (show('quote_no')) doc.text(`${labels.quote_no || '报价单编号'}：Q-${todayLocal().replace(/-/g, '')}-R${round.round_no}`, { align: infoAlign });
   if (show('order_no')) doc.text(`${labels.order_no || '订单号'}：${order.order_id || ''}`, { align: infoAlign });
   if (show('project_name')) doc.text(`${labels.project_name || '项目名称'}：${order.project_name || ''}`, { align: infoAlign });
-  if (show('customer')) {
-    doc.text(
-      `${labels.end_customer || '最终客户'}：${customerNames.end || ''}    ${labels.contract_customer || '合同客户'}：${customerNames.contract || ''}`,
-      { align: infoAlign }
-    );
-  }
+  if (show('end_customer')) doc.text(`${labels.end_customer || '最终客户'}：${customerNames.end || ''}`, { align: infoAlign });
+  if (show('contract_customer')) doc.text(`${labels.contract_customer || '合同客户'}：${customerNames.contract || ''}`, { align: infoAlign });
   if (show('contact_info')) {
     const contactParts = [style.company_address, style.company_phone, style.company_email].filter(Boolean);
     if (contactParts.length > 0) doc.text(contactParts.join('    '), { align: infoAlign });
   }
+  if (show('quote_date')) doc.text(`${labels.quote_date || '报价日期'}：${style.quote_date || todayLocal()}`, { align: infoAlign });
   doc.moveDown(1);
   doc.fontSize(11).fillColor(style.primary_color).text(labels.detail_title || '报价明细', { underline: true });
   doc.moveDown(0.4);
@@ -232,10 +240,10 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
   const tableTop = doc.y;
   const baseColumns = [
     { key: 'material_no', label: labels.material_no || '物料号', width: 88 },
-    { key: 'description', label: labels.description || '描述', width: 170 },
+    { key: 'description', label: labels.description || '描述', width: 158 },
     { key: 'type', label: labels.type || '类型', width: 62 },
     { key: 'price_source', label: labels.price_source || '价格来源', width: 62 },
-    { key: 'unit_price', label: labels.unit_price || '单价', width: 72 },
+    { key: 'unit_price', label: labels.unit_price || '单价', width: 84 },
     { key: 'qty', label: labels.qty || '数量', width: 58 },
     { key: 'line_amount', label: labels.line_amount || '行金额', width: 82 }
   ];
@@ -259,6 +267,8 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
     doc.rect(48, tableTop, 499, 20).fill(style.primary_color);
     doc.fillColor('#ffffff');
     for (const col of columns) {
+      const headerSize = fitFontSize(col.label, col.width - 8, 9, 6.5);
+      doc.fontSize(headerSize);
       doc.text(col.label, x + 4, tableTop + 6, { width: col.width - 8, align: numericKeys.has(col.key) ? 'right' : 'left', lineBreak: false });
       x += col.width;
     }
@@ -277,13 +287,14 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
       description: (item.description || '').slice(0, 34),
       type: item.material_type === 'non_standard' ? '非标' : '标准',
       price_source: { framework: '协议价', guide_price: '指导价', manual: '手工' }[item.price_source] || item.price_source || '',
-      unit_price: item.unit_price_ex_vat == null ? '' : Number(item.unit_price_ex_vat).toFixed(4),
+      unit_price: item.unit_price_ex_vat == null ? '' : Number(item.unit_price_ex_vat).toFixed(2),
       qty: item.qty == null ? '' : String(item.qty),
       line_amount: item.line_amount == null ? '' : Number(item.line_amount).toFixed(2)
     };
     const values = columns.map((col) => valueMap[col.key]);
-    doc.font(font()).fontSize(9);
     values.forEach((value, idx) => {
+      const cellSize = fitFontSize(value, columns[idx].width - 8, 9, 6.5);
+      doc.fontSize(cellSize);
       doc.text(String(value), x + 4, y + 2, { width: columns[idx].width - 8, align: numericKeys.has(columns[idx].key) ? 'right' : 'left', lineBreak: false });
       x += columns[idx].width;
     });
@@ -292,7 +303,6 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
   doc.moveDown(1);
   doc.font(font(true)).fontSize(11).fillColor(style.primary_color).text(`${labels.total || '合计（未税）'}：${round.total_amount == null ? '0.00' : Number(round.total_amount).toFixed(2)}`, { align: 'right' });
   doc.moveDown(1.4);
-  doc.font(font()).fontSize(9).fillColor('#666666').text(`${labels.generated_at || '生成时间'}：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, { align: footerAlign });
   if (style.footer_text) {
     doc.moveDown(0.6);
     doc.font(font()).fontSize(9).fillColor('#888888').text(String(style.footer_text), { align: footerAlign });
