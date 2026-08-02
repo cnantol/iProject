@@ -9,8 +9,8 @@ import { STEP_KEY_INDEX } from '../utils/helpers';
 
 export default function OrderStepper({ order, activeKey, onSelect }) {
   const currentIndex = STEP_KEY_INDEX[order?.status];
-  const activeIndex = STEP_KEY_INDEX[activeKey];
   const isClosed = ['closed', 'lost_closed'].includes(order?.status);
+  const activeIndex = isClosed ? -1 : STEP_KEY_INDEX[activeKey];
 
   return (
     <Box sx={{ px: 2, pt: 2, pb: 1, overflowX: 'auto' }}>
@@ -25,8 +25,9 @@ export default function OrderStepper({ order, activeKey, onSelect }) {
       <Stepper nonLinear activeStep={activeIndex} alternativeLabel sx={{ minWidth: 880 }}>
         {STEP_ORDER.map((step, index) => {
           const disabled = isClosed ? false : index > currentIndex + 1;
+          const done = isClosed || index < currentIndex || (index === 6 && Number(order?.delivered) === 1 && Number(order?.invoiced) === 1);
           return (
-            <Step key={step.key} completed={index < currentIndex || (index === 6 && Number(order?.delivered) === 1 && Number(order?.invoiced) === 1)}>
+            <Step key={step.key} completed={done}>
               <StepButton onClick={() => onSelect(step.key)} disabled={disabled} sx={{ '& .MuiStepLabel-label': { fontSize: 13 } }}>
                 <StepLabel>{step.label}</StepLabel>
               </StepButton>
