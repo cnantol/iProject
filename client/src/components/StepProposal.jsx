@@ -29,7 +29,9 @@ import DownloadIcon from '@mui/icons-material/Download';
 import SaveIcon from '@mui/icons-material/Save';
 import SkipNextIcon from '@mui/icons-material/SkipNext';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import api, { errorMessage } from '../api';
+import { authUrl } from '../utils/helpers';
 import StepWrapper from './StepWrapper';
 
 const EMPTY_SELECTION = { material_no: '', description: '', material_type: 'standard', qty: '', unit: 'pcs', remark: '' };
@@ -43,6 +45,9 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
   const [skipOpen, setSkipOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
 
   const activeVersion = useMemo(() => versions.find((version) => version.id === activeVersionId) || versions[versions.length - 1], [versions, activeVersionId]);
 
@@ -53,7 +58,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
     } else {
       setRows([]);
     }
-  }, [activeVersion?.id]);
+  }, [activeVersion]);
 
   const createVersion = async () => {
     if (!newVersion.version_label.trim()) {
@@ -71,6 +76,18 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
       setError(errorMessage(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const deleteVersion = async (versionId) => {
+    if (!window.confirm('确认删除该方案版本？关联的方案文件与选型明细将一并删除。')) return;
+    setError('');
+    try {
+      await api.delete(`/orders/${order.id}/versions/${versionId}`);
+      setActiveVersionId(null);
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
     }
   };
 
@@ -122,6 +139,45 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
     }
   };
 
+  const saveAllRows = async () => {
+    setError('');
+    setNotice('');
+    setSaving(true);
+    const validRows = rows.filter((row) => row.material_no || row.qty);
+    const failures = [];
+    for (let i = 0; i < validRows.length; i++) {
+      const row = validRows[i];
+      const payload = {
+        material_no: row.material_no,
+        description: row.description,
+        material_type: row.material_type,
+        qty: Number(row.qty),
+        unit: row.unit || 'pcs',
+        remark: row.remark
+      };
+      if (!Number(payload.qty) || Number(payload.qty) <= 0) {
+        failures.push(`第 ${i + 1} 行：数量必须大于 0`);
+        continue;
+      }
+      try {
+        if (row.id) {
+          await api.put(`/orders/versions/${activeVersion.id}/selections/${row.id}`, payload);
+        } else {
+          await api.post(`/orders/versions/${activeVersion.id}/selections`, payload);
+        }
+      } catch (err) {
+        failures.push(`第 ${i + 1} 行：${errorMessage(err)}`);
+      }
+    }
+    setSaving(false);
+    onChanged();
+    if (failures.length > 0) {
+      setError(`部分行保存失败：${failures.join('；')}`);
+    } else {
+      setNotice(`批量保存完成：${validRows.length} 条`);
+    }
+  };
+
   const uploadFile = async (event) => {
     const file = event.target.files?.[0];
     if (!file || !activeVersion) return;
@@ -138,12 +194,65 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
     }
   };
 
+  const importSelections = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !activeVersion) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    setError('');
+    setNotice('');
+    try {
+      const { data } = await api.post(`/orders/${order.id}/versions/${activeVersion.id}/selections/import`, formData);
+      setNotice(`导入完成：成功 ${data.success_rows} 行，失败 ${data.fail_rows} 行`);
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
   const skipProposal = async () => {
     setSaving(true);
     try {
       await api.patch(`/orders/${order.id}/status`, { action: 'advance', skip: 1 });
       setSkipOpen(false);
       onAdvance();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveAndAdvance = async () => {
+    setError('');
+    setSaving(true);
+    try {
+      await api.patch(`/orders/${order.id}/status`, { action: 'advance' });
+      onAdvance();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitPaste = async () => {
+    const nos = pasteText
+      .split(/[\n\t,，;；\s]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (nos.length === 0) {
+      setError('请粘贴至少一个物料号');
+      return;
+    }
+    setError('');
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/orders/${order.id}/versions/${activeVersion.id}/selections/bulk`, { material_nos: nos });
+      setNotice(`粘贴录入完成：新增 ${data.created} 条明细`);
+      setPasteOpen(false);
+      setPasteText('');
+      onChanged();
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -161,6 +270,13 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
       {error && (
         <Box sx={{ mb: 2 }}>
           <Alert severity="error">{error}</Alert>
+        </Box>
+      )}
+      {notice && (
+        <Box sx={{ mb: 2 }}>
+          <Alert severity="success" onClose={() => setNotice('')}>
+            {notice}
+          </Alert>
         </Box>
       )}
       {!readOnly && Number(order.proposal_skipped) !== 1 && (
@@ -191,7 +307,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
         </Typography>
       ) : (
         <>
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2, flexWrap: 'wrap', rowGap: 1 }}>
             <FormControl size="small" sx={{ minWidth: 200 }}>
               <InputLabel>选择版本</InputLabel>
               <Select
@@ -219,11 +335,22 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
                     icon={<DownloadIcon />}
                     label={file.file_name}
                     component="a"
-                    href={`/api/orders/${order.id}/attachments/${file.id}/download`}
+                    href={authUrl(`/api/orders/${order.id}/attachments/${file.id}/download`)}
                     clickable
                     sx={{ ml: 1 }}
                   />
                 ))}
+                {!readOnly && (
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={() => deleteVersion(activeVersion.id)}
+                    title="删除方案版本"
+                    sx={{ ml: 1 }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                )}
               </Box>
             )}
           </Stack>
@@ -237,7 +364,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
                 <TableCell sx={{ width: 90 }}>数量</TableCell>
                 <TableCell sx={{ width: 90 }}>单位</TableCell>
                 <TableCell>备注</TableCell>
-                <TableCell sx={{ width: 130 }}>操作</TableCell>
+                <TableCell sx={{ width: 120 }}>操作</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -253,7 +380,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
                     />
                   </TableCell>
                   <TableCell>
-                    <TextField size="small" value={row.description} disabled={readOnly} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === index ? { ...r, description: e.target.value } : r)))} />
+                    <TextField size="small" value={row.description || ''} disabled={readOnly} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === index ? { ...r, description: e.target.value } : r)))} />
                   </TableCell>
                   <TableCell>
                     <Select
@@ -279,7 +406,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
                     <TextField size="small" value={row.unit} disabled={readOnly} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === index ? { ...r, unit: e.target.value } : r)))} />
                   </TableCell>
                   <TableCell>
-                    <TextField size="small" value={row.remark} disabled={readOnly} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === index ? { ...r, remark: e.target.value } : r)))} />
+                    <TextField size="small" value={row.remark || ''} disabled={readOnly} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === index ? { ...r, remark: e.target.value } : r)))} />
                   </TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={0.5}>
@@ -298,9 +425,21 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
               {!readOnly && (
                 <TableRow>
                   <TableCell colSpan={7}>
-                    <Button size="small" startIcon={<AddIcon />} onClick={() => setRows((prev) => [...prev, { ...EMPTY_SELECTION }])}>
-                      新增明细
-                    </Button>
+                    <Stack direction="row" spacing={1}>
+                      <Button size="small" variant="contained" startIcon={<SaveIcon />} onClick={saveAllRows} disabled={saving}>
+                        批量保存
+                      </Button>
+                      <Button size="small" startIcon={<AddIcon />} onClick={() => setRows((prev) => [...prev, { ...EMPTY_SELECTION }])}>
+                        新增明细
+                      </Button>
+                      <Button size="small" component="label" variant="outlined" startIcon={<UploadFileIcon />}>
+                        批量导入
+                        <input type="file" hidden accept=".xlsx,.xls" onChange={importSelections} />
+                      </Button>
+                      <Button size="small" variant="outlined" startIcon={<ContentPasteIcon />} onClick={() => setPasteOpen(true)}>
+                        粘贴录入
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               )}
@@ -311,7 +450,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
 
       {!readOnly && Number(order.proposal_skipped) !== 1 && (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-          <Button variant="contained" onClick={onAdvance} disabled={saving}>
+          <Button variant="contained" onClick={saveAndAdvance} disabled={saving}>
             保存并进入下一步
           </Button>
         </Box>
@@ -326,6 +465,28 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
           <Button onClick={() => setSkipOpen(false)}>取消</Button>
           <Button color="warning" onClick={skipProposal} disabled={saving}>
             确认跳过
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={pasteOpen} onClose={() => setPasteOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>粘贴录入选型明细</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            每行一个物料号，支持 Tab / 逗号 / 空格 / 换行分隔；类型默认标准、数量默认 1、描述自动带出。
+          </Typography>
+          <TextField
+            multiline
+            minRows={6}
+            fullWidth
+            placeholder={'AC-1001\nAC-2002\nNON-STD-1'}
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPasteOpen(false)}>取消</Button>
+          <Button variant="contained" onClick={submitPaste} disabled={saving}>
+            确认录入
           </Button>
         </DialogActions>
       </Dialog>

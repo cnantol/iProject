@@ -24,6 +24,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { ORDER_TYPES } from '../utils/constants';
+import { authUrl } from '../utils/helpers';
 import StepWrapper from './StepWrapper';
 
 const YEARS = Array.from({ length: 11 }, (_, i) => String(2020 + i));
@@ -38,6 +39,7 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance
   const [attachments, setAttachments] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     setForm({
@@ -83,12 +85,14 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance
 
   const save = async (advance = false) => {
     setError('');
+    setNotice('');
     setSaving(true);
     try {
       const payload = { ...form, customValues };
       await api.patch(`/orders/${order.id}`, payload);
       if (advance) await api.patch(`/orders/${order.id}/status`, { action: 'advance' });
       onChanged();
+      setNotice(advance ? '已保存并进入下一步' : '客户信息已保存');
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -129,6 +133,13 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance
       {error && (
         <Box sx={{ mb: 2 }}>
           <Alert severity="error">{error}</Alert>
+        </Box>
+      )}
+      {notice && (
+        <Box sx={{ mb: 2 }}>
+          <Alert severity="success" onClose={() => setNotice('')}>
+            {notice}
+          </Alert>
         </Box>
       )}
       <Grid container spacing={2}>
@@ -223,7 +234,7 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance
                 </IconButton>
               )}>
                 <ListItemText primary={item.file_name} secondary={item.uploaded_at} />
-                <IconButton component="a" href={`/api/orders/${order.id}/attachments/${item.id}/download`} title="下载">
+                <IconButton component="a" href={authUrl(`/api/orders/${order.id}/attachments/${item.id}/download`)} title="下载">
                   <DownloadIcon />
                 </IconButton>
               </ListItem>
@@ -238,7 +249,7 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance
         </Grid>
       </Grid>
       {!readOnly && (
-        <Stack direction="row" spacing={1.5} sx={{ mt: 3, justifyContent: 'flex-end' }}>
+        <Stack direction="row" spacing={1.5} sx={{ mt: 3, justifyContent: 'flex-end', flexWrap: 'wrap', rowGap: 1 }}>
           <Button variant="outlined" onClick={() => save(false)} disabled={saving}>
             保存
           </Button>

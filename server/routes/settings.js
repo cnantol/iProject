@@ -40,6 +40,40 @@ router.put('/workflow', (req, res) => {
   return res.json({ steps: result });
 });
 
+// ---------- 步骤字段绑定（展示层配置） ----------
+router.get('/workflow/bindings', (req, res) => {
+  const items = getDb()
+    .prepare(
+      `SELECT wf.step_key, wf.field_id, wf.sort_order, cf.field_name, cf.entity_type
+       FROM workflow_step_fields wf
+       JOIN custom_fields cf ON cf.id = wf.field_id
+       ORDER BY wf.step_key, wf.sort_order`
+    )
+    .all();
+  return res.json({ items });
+});
+
+router.put('/workflow/bindings', (req, res) => {
+  const db = getDb();
+  const { bindings } = req.body || {};
+  if (!Array.isArray(bindings)) return badRequest(res, 'bindings 必须为数组');
+  const stepKeys = new Set(db.prepare('SELECT step_key FROM workflow_steps').all().map((row) => row.step_key));
+  const tx = db.transaction((rows) => {
+    const del = db.prepare('DELETE FROM workflow_step_fields WHERE step_key = ?');
+    const ins = db.prepare('INSERT INTO workflow_step_fields (step_key, field_id, sort_order) VALUES (?,?,?)');
+    for (const item of rows) {
+      if (!stepKeys.has(item.step_key) || !Array.isArray(item.field_ids)) continue;
+      del.run(item.step_key);
+      item.field_ids.forEach((fieldId, index) => {
+        const id = Number(fieldId);
+        if (Number.isFinite(id)) ins.run(item.step_key, id, index);
+      });
+    }
+  });
+  tx(bindings);
+  return res.json({ message: '字段绑定已保存' });
+});
+
 // ---------- 自定义字段 ----------
 router.get('/fields', (req, res) => {
   const db = getDb();
@@ -90,6 +124,7 @@ router.delete('/fields/:id', (req, res) => {
   if (Number(row.is_system) === 1) return badRequest(res, '系统内置字段不可删除');
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM order_custom_fields WHERE field_id = ?').run(row.id);
+    db.prepare('DELETE FROM workflow_step_fields WHERE field_id = ?').run(row.id);
     db.prepare('DELETE FROM custom_fields WHERE id = ?').run(row.id);
   });
   tx();
@@ -395,7 +430,7 @@ router.get('/import-logs', (req, res) => {
 });
 
 // ---------- 备份与还原 ----------
-router.post('/backup', (req, res) => {
+function createBackup() {
   const db = getDb();
   db.pragma('wal_checkpoint(FULL)');
   const dataDir = getDataDir();
@@ -415,9 +450,91 @@ router.post('/backup', (req, res) => {
   }
   const zipPath = path.join(backupDir, filename);
   fs.writeFileSync(zipPath, zip.toBuffer());
-  writeAudit(db, { userId: req.user.id, action: 'other', entityType: 'settings', detail: { event: 'backup', filename } });
-  return res.json({ filename, size: fs.statSync(zipPath).size, downloadUrl: `/api/settings/backup/${filename}/download` });
+  return { filename, size: fs.statSync(zipPath).size, downloadUrl: `/api/settings/backup/${filename}/download` };
+}
+
+router.post('/backup', (req, res) => {
+  const result = createBackup();
+  writeAudit(getDb(), { userId: req.user.id, action: 'other', entityType: 'settings', detail: { event: 'backup', filename: result.filename } });
+  return res.json(result);
 });
+
+// ---------- 报价单式样 ----------
+function quoteStyleFile() {
+  return path.join(getDataDir(), 'quote-style.json');
+}
+
+function readQuoteStyle() {
+  try {
+    return JSON.parse(fs.readFileSync(quoteStyleFile(), 'utf8'));
+  } catch {
+    return { company_name: 'Atlas Copco', primary_color: '#004E9A' };
+  }
+}
+
+router.get('/quote-style', (req, res) => {
+  return res.json(readQuoteStyle());
+});
+
+router.put('/quote-style', (req, res) => {
+  const { company_name: companyName, primary_color: primaryColor } = req.body || {};
+  const style = {
+    company_name: companyName && String(companyName).trim() ? String(companyName).trim() : 'Atlas Copco',
+    primary_color: /^#[0-9A-Fa-f]{6}$/.test(String(primaryColor || '')) ? String(primaryColor) : '#004E9A'
+  };
+  fs.writeFileSync(quoteStyleFile(), JSON.stringify(style, null, 2));
+  return res.json(style);
+});
+
+// ---------- 定时自动备份 ----------
+function backupScheduleFile() {
+  return path.join(getDataDir(), 'backup-schedule.json');
+}
+
+function readBackupSchedule() {
+  try {
+    return JSON.parse(fs.readFileSync(backupScheduleFile(), 'utf8'));
+  } catch {
+    return { enabled: false, hour: 2, minute: 0 };
+  }
+}
+
+router.get('/backup-schedule', (req, res) => {
+  return res.json(readBackupSchedule());
+});
+
+router.put('/backup-schedule', (req, res) => {
+  const { enabled, hour, minute } = req.body || {};
+  const schedule = {
+    enabled: Number(enabled) === 1,
+    hour: Math.min(23, Math.max(0, Number(hour) || 0)),
+    minute: Math.min(59, Math.max(0, Number(minute) || 0))
+  };
+  fs.writeFileSync(backupScheduleFile(), JSON.stringify(schedule, null, 2));
+  return res.json(schedule);
+});
+
+let backupTimer = null;
+let lastScheduledBackupKey = '';
+
+export function startBackupScheduler() {
+  if (backupTimer) return;
+  backupTimer = setInterval(() => {
+    try {
+      const schedule = readBackupSchedule();
+      if (!schedule.enabled) return;
+      const now = new Date();
+      const key = `${now.getHours()}:${now.getMinutes()}`;
+      const target = `${String(schedule.hour).padStart(2, '0')}:${String(schedule.minute).padStart(2, '0')}`;
+      if (key !== target || key === lastScheduledBackupKey) return;
+      lastScheduledBackupKey = key;
+      const result = createBackup();
+      writeAudit(getDb(), { userId: null, action: 'other', entityType: 'settings', detail: { event: 'scheduled_backup', filename: result.filename } });
+    } catch (err) {
+      console.error('定时备份失败:', err);
+    }
+  }, 60000);
+}
 
 router.get('/backup/:filename/download', (req, res) => {
   const filename = String(req.params.filename);
@@ -633,6 +750,7 @@ function deleteBusinessData(db) {
     'todos',
     'orders',
     'import_logs',
+    'workflow_step_fields',
     'custom_fields',
     'guide_prices',
     'materials',

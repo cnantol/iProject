@@ -2,7 +2,9 @@ import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import PDFDocument from 'pdfkit';
-import { getDb, getUploadDir } from '../db/init.js';
+import xlsx from 'xlsx';
+import { getDb, getUploadDir, getDataDir } from '../db/init.js';
+import { upload } from '../middleware/upload.js';
 import {
   nowUtc,
   todayLocal,
@@ -14,7 +16,8 @@ import {
   pick,
   isMoney,
   isQty,
-  isPct
+  isPct,
+  writeAudit
 } from '../utils.js';
 
 const router = Router();
@@ -39,7 +42,10 @@ function resolvePrice(order, materialNo, materialType) {
       )
       .get(order.end_customer_id, String(materialNo).trim(), todayLocal(), todayLocal());
     if (framework) {
-      return { price_source: 'framework', unit_price_ex_vat: framework.unit_price_ex_vat, description: framework.description };
+      const guideDescription = framework.description
+        ? framework.description
+        : (db.prepare('SELECT description FROM guide_prices WHERE material_no = ?').get(String(materialNo).trim()) || {}).description || null;
+      return { price_source: 'framework', unit_price_ex_vat: framework.unit_price_ex_vat, description: guideDescription };
     }
     const guide = db.prepare('SELECT * FROM guide_prices WHERE material_no = ?').get(String(materialNo).trim());
     if (guide) {
@@ -172,10 +178,16 @@ function findCjkFont() {
 
 function buildQuotationPdf(order, round, items, customerNames) {
   const doc = new PDFDocument({ size: 'A4', margin: 48 });
+  let style = { company_name: 'Atlas Copco', primary_color: '#004E9A' };
+  try {
+    style = JSON.parse(fs.readFileSync(path.join(getDataDir(), 'quote-style.json'), 'utf8'));
+  } catch {
+    // 使用默认品牌样式
+  }
   const fontFile = findCjkFont();
   if (fontFile) doc.registerFont('cjk', fontFile);
   const font = (bold = false) => (fontFile ? (bold ? 'cjk' : 'cjk') : 'Helvetica');
-  doc.font(font()).fontSize(16).fillColor('#004E9A').text('Atlas Copco 报价单', { align: 'center' });
+  doc.font(font()).fontSize(16).fillColor(style.primary_color).text(`${style.company_name} 报价单`, { align: 'center' });
   doc.moveDown(0.4);
   doc.fontSize(10).fillColor('#444444');
   doc.text(`报价单编号：Q-${todayLocal().replace(/-/g, '')}-R${round.round_no}`, { align: 'center' });
@@ -198,7 +210,7 @@ function buildQuotationPdf(order, round, items, customerNames) {
   ];
   let x = 48;
   doc.font(font(true)).fontSize(9).fillColor('#ffffff');
-  doc.rect(48, tableTop, 499, 20).fill('#004E9A');
+  doc.rect(48, tableTop, 499, 20).fill(style.primary_color);
   doc.fillColor('#ffffff');
   for (const col of columns) {
     doc.text(col.label, x + 4, tableTop + 6, { width: col.width - 8 });
@@ -229,7 +241,7 @@ function buildQuotationPdf(order, round, items, customerNames) {
     y += 22;
   }
   doc.moveDown(1);
-  doc.font(font(true)).fontSize(11).fillColor('#004E9A').text(`合计（未税）：${round.total_amount == null ? '0.00' : Number(round.total_amount).toFixed(2)}`, { align: 'right' });
+  doc.font(font(true)).fontSize(11).fillColor(style.primary_color).text(`合计（未税）：${round.total_amount == null ? '0.00' : Number(round.total_amount).toFixed(2)}`, { align: 'right' });
   doc.moveDown(2);
   doc.font(font()).fontSize(9).fillColor('#666666').text(`生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, { align: 'center' });
   doc.end();
@@ -462,6 +474,192 @@ router.patch('/:orderId/quotations/:roundId', (req, res) => {
   return res.json(db.prepare('SELECT * FROM quotations WHERE id = ?').get(round.id));
 });
 
+router.delete('/:orderId/quotations/:roundId', (req, res) => {
+  const db = getDb();
+  const order = loadOrder(db, req.params.orderId);
+  if (!order) return notFound(res);
+  const round = db.prepare('SELECT * FROM quotations WHERE id = ? AND order_id = ?').get(Number(req.params.roundId), order.id);
+  if (!round) return notFound(res);
+  if (order.status !== 'quotation') return badRequest(res, '仅报价阶段可删除报价轮次');
+  if (round.status !== 'draft') return badRequest(res, '已提交轮次不可删除');
+  if (Number(order.selected_round_id) === round.id) return badRequest(res, '该轮次为审批选中轮次，不可删除');
+  const referenced = db.prepare('SELECT id FROM approval_records WHERE quotation_id = ? LIMIT 1').get(round.id);
+  if (referenced) return badRequest(res, '该轮次已有审批记录，不可删除');
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM quotation_items WHERE quotation_id = ?').run(round.id);
+    db.prepare('DELETE FROM quotations WHERE id = ?').run(round.id);
+  });
+  tx();
+  return res.json({ message: '报价轮次已删除' });
+});
+
+function headerIndex(headers, ...names) {
+  const map = new Map(headers.map((h, i) => [String(h == null ? '' : h).trim().toLowerCase(), i]));
+  for (const name of names) {
+    const idx = map.get(String(name).trim().toLowerCase());
+    if (idx !== undefined) return idx;
+  }
+  return -1;
+}
+
+function cell(row, idx) {
+  if (idx < 0 || !row) return null;
+  const value = row[idx];
+  return value === undefined ? null : value;
+}
+
+router.post('/:orderId/quotations/:roundId/items/import', upload.single('file'), (req, res) => {
+  if (!req.file) return badRequest(res, '请上传 Excel 文件');
+  const db = getDb();
+  const order = loadOrder(db, req.params.orderId);
+  if (!order) {
+    fs.unlinkSync(req.file.path);
+    return notFound(res);
+  }
+  const round = db.prepare('SELECT * FROM quotations WHERE id = ? AND order_id = ?').get(Number(req.params.roundId), order.id);
+  if (!round) {
+    fs.unlinkSync(req.file.path);
+    return notFound(res);
+  }
+  if (!canEditItems(order, round)) {
+    fs.unlinkSync(req.file.path);
+    return badRequest(res, '当前报价轮次已锁定，不可导入');
+  }
+  const workbook = xlsx.readFile(req.file.path);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  fs.unlinkSync(req.file.path);
+  if (!rows || rows.length < 2) return badRequest(res, 'Excel 无有效数据');
+
+  const headers = rows[0] || [];
+  const idx = {
+    material_no: headerIndex(headers, '物料号'),
+    description: headerIndex(headers, '物料描述'),
+    material_type: headerIndex(headers, '物料类型'),
+    price_source: headerIndex(headers, '价格来源'),
+    unit_price: headerIndex(headers, '未税单价'),
+    pay_percent: headerIndex(headers, '实付比例'),
+    qty: headerIndex(headers, '数量'),
+    unit: headerIndex(headers, '单位'),
+    remark: headerIndex(headers, '备注')
+  };
+  if (idx.material_no < 0 || idx.qty < 0) {
+    return badRequest(res, 'Excel 缺少必填列（物料号/数量）');
+  }
+
+  const sourceMap = { 框架协议价: 'framework', 指导价: 'guide_price', 手工: 'manual', 手工录入: 'manual' };
+  const typeMap = { 标准: 'standard', 非标: 'non_standard' };
+  let success = 0;
+  const failures = [];
+  const insert = db.prepare(
+    `INSERT INTO quotation_items (quotation_id, material_no, description, material_type, price_source, unit_price_ex_vat,
+      pay_percent, final_unit_price, qty, line_amount, unit, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  );
+  const tx = db.transaction((dataRows) => {
+    for (let i = 1; i < dataRows.length; i++) {
+      const row = dataRows[i];
+      const rowNumber = i + 1;
+      if (row.every((value) => value === null || value === undefined || value === '')) continue;
+      const materialNo = cell(row, idx.material_no);
+      const qty = Number(cell(row, idx.qty));
+      if (materialNo === null || String(materialNo).trim() === '' || !isQty(qty)) {
+        failures.push({ row: rowNumber, reason: '物料号或数量无效' });
+        continue;
+      }
+      const materialType = typeMap[String(cell(row, idx.material_type) || '').trim()] || 'standard';
+      const priceSource = sourceMap[String(cell(row, idx.price_source) || '').trim()] || 'manual';
+      const unitPrice = Number(cell(row, idx.unit_price));
+      if (!isMoney(unitPrice)) {
+        failures.push({ row: rowNumber, reason: '未税单价必须大于 0' });
+        continue;
+      }
+      const payPercent = priceSource === 'guide_price' ? Number(cell(row, idx.pay_percent) ?? 100) : 100;
+      if (!isPct(payPercent)) {
+        failures.push({ row: rowNumber, reason: '实付比例必须大于 0 且不超过 100' });
+        continue;
+      }
+      let description = cell(row, idx.description);
+      if (materialType === 'standard' && (description === null || String(description).trim() === '')) {
+        const guide = db.prepare('SELECT description FROM guide_prices WHERE material_no = ?').get(String(materialNo).trim());
+        description = guide ? guide.description : null;
+      }
+      const finalPrice = priceSource === 'guide_price' ? round4((unitPrice * payPercent) / 100) : round4(unitPrice);
+      const lineAmount = round2(finalPrice * qty);
+      insert.run(
+        round.id,
+        String(materialNo).trim(),
+        description == null ? null : String(description),
+        materialType,
+        priceSource,
+        unitPrice,
+        payPercent,
+        finalPrice,
+        qty,
+        lineAmount,
+        cell(row, idx.unit) ? String(cell(row, idx.unit)) : 'pcs',
+        cell(row, idx.remark) ? String(cell(row, idx.remark)) : null
+      );
+      success += 1;
+    }
+  });
+  tx(rows);
+  recomputeTotal(db, round.id);
+  const log = db
+    .prepare('INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, created_at) VALUES (?,?,?,?,?,?)')
+    .run('quotation_item', req.file.originalname, rows.length - 1, success, failures.length, nowUtc());
+  writeAudit(db, {
+    userId: req.user.id,
+    action: 'other',
+    entityType: 'order',
+    entityId: order.id,
+    detail: { event: 'quotation_items_import', import_log_id: log.lastInsertRowid, success, fail: failures.length }
+  });
+  return res.json({ import_log_id: log.lastInsertRowid, success_rows: success, fail_rows: failures.length, failures: failures.slice(0, 50) });
+});
+
+router.post('/:orderId/quotations/:roundId/items/bulk', (req, res) => {
+  const db = getDb();
+  const order = loadOrder(db, req.params.orderId);
+  if (!order) return notFound(res);
+  const round = db.prepare('SELECT * FROM quotations WHERE id = ? AND order_id = ?').get(Number(req.params.roundId), order.id);
+  if (!round) return notFound(res);
+  if (!canEditItems(order, round)) return badRequest(res, '当前报价轮次已锁定，不可粘贴录入');
+  const materialNos = Array.isArray((req.body || {}).material_nos)
+    ? (req.body || {}).material_nos.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  if (materialNos.length === 0) return badRequest(res, '请至少提供一个物料号');
+  const insert = db.prepare(
+    `INSERT INTO quotation_items (quotation_id, material_no, description, material_type, price_source, unit_price_ex_vat,
+      pay_percent, final_unit_price, qty, line_amount, unit, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  );
+  const created = [];
+  const tx = db.transaction((nos) => {
+    for (const materialNo of nos) {
+      const price = resolvePrice(order, materialNo, 'standard');
+      const finalPrice = price.unit_price_ex_vat == null ? null : round4(Number(price.unit_price_ex_vat));
+      const lineAmount = finalPrice == null ? null : round2(finalPrice * 1);
+      const info = insert.run(
+        round.id,
+        materialNo,
+        price.description,
+        'standard',
+        price.price_source,
+        price.unit_price_ex_vat,
+        100,
+        finalPrice,
+        1,
+        lineAmount,
+        'pcs',
+        null
+      );
+      created.push({ id: info.lastInsertRowid, material_no: materialNo, price_source: price.price_source, unit_price_ex_vat: price.unit_price_ex_vat, description: price.description });
+    }
+  });
+  tx(materialNos);
+  const total = recomputeTotal(db, round.id);
+  return res.status(201).json({ created: created.length, total_amount: total, items: created });
+});
+
 router.post('/:orderId/quotations/:roundId/sync-from-proposal', (req, res) => {
   const db = getDb();
   const order = loadOrder(db, req.params.orderId);
@@ -470,9 +668,9 @@ router.post('/:orderId/quotations/:roundId/sync-from-proposal', (req, res) => {
   if (!round) return notFound(res);
   if (!canEditItems(order, round)) return badRequest(res, '当前报价轮次已锁定，不可同步');
   if (Number(order.proposal_skipped) === 1) return badRequest(res, '方案已跳过，禁用「从方案同步」');
-  const version = db
-    .prepare('SELECT * FROM proposal_versions WHERE order_id = ? ORDER BY sort_order DESC, id DESC LIMIT 1')
-    .get(order.id);
+  const version = (req.body || {}).version_id
+    ? db.prepare('SELECT * FROM proposal_versions WHERE id = ? AND order_id = ?').get(Number((req.body || {}).version_id), order.id)
+    : db.prepare('SELECT * FROM proposal_versions WHERE order_id = ? ORDER BY sort_order DESC, id DESC LIMIT 1').get(order.id);
   if (!version) return badRequest(res, '未创建方案版本，报价明细需手工录入');
   const selections = db.prepare('SELECT * FROM proposal_selections WHERE proposal_version_id = ? ORDER BY sort_order, id').all(version.id);
   const existing = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ?').all(round.id);
@@ -483,7 +681,7 @@ router.post('/:orderId/quotations/:roundId/sync-from-proposal', (req, res) => {
         pay_percent, final_unit_price, qty, line_amount, unit, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
     );
     for (const selection of selections) {
-      const materialType = selection.material_type || 'standard';
+      const materialType = selection.material_type === 'non_standard' ? 'non_standard' : 'standard';
       const price = resolvePrice(order, selection.material_no || '', materialType);
       const previous = existing.find((item) => item.material_no === selection.material_no && item.material_type === materialType);
       const unitPrice = price.price_source === 'manual' && previous ? previous.unit_price_ex_vat : price.unit_price_ex_vat;
@@ -495,10 +693,11 @@ router.post('/:orderId/quotations/:roundId/sync-from-proposal', (req, res) => {
             ? round4((Number(unitPrice) * payPercent) / 100)
             : round4(Number(unitPrice));
       const lineAmount = finalPrice === null || finalPrice === undefined ? null : round2(finalPrice * Number(selection.qty));
+      const description = materialType === 'non_standard' ? selection.description || null : price.description || null;
       insert.run(
         round.id,
         selection.material_no,
-        price.description ?? selection.description ?? null,
+        description,
         materialType,
         price.price_source,
         unitPrice,
@@ -506,8 +705,8 @@ router.post('/:orderId/quotations/:roundId/sync-from-proposal', (req, res) => {
         finalPrice,
         Number(selection.qty),
         lineAmount,
-        selection.unit || 'pcs',
-        selection.remark ?? null
+        'pcs',
+        null
       );
     }
   });

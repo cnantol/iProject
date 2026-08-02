@@ -1,5 +1,8 @@
 import { Router } from 'express';
+import fs from 'node:fs';
+import xlsx from 'xlsx';
 import { getDb } from '../db/init.js';
+import { upload } from '../middleware/upload.js';
 import { nowUtc, badRequest, notFound, pick, isQty } from '../utils.js';
 
 const router = Router();
@@ -75,6 +78,130 @@ router.get('/versions/:versionId/selections', (req, res) => {
   if (!version) return notFound(res);
   const items = db.prepare('SELECT * FROM proposal_selections WHERE proposal_version_id = ? ORDER BY sort_order, id').all(version.id);
   return res.json({ items });
+});
+
+function headerIndex(headers, ...names) {
+  const map = new Map(headers.map((h, i) => [String(h == null ? '' : h).trim().toLowerCase(), i]));
+  for (const name of names) {
+    const idx = map.get(String(name).trim().toLowerCase());
+    if (idx !== undefined) return idx;
+  }
+  return -1;
+}
+
+function cell(row, idx) {
+  if (idx < 0 || !row) return null;
+  const value = row[idx];
+  return value === undefined ? null : value;
+}
+
+router.post('/:orderId/versions/:versionId/selections/import', upload.single('file'), (req, res) => {
+  if (!req.file) return badRequest(res, '请上传 Excel 文件');
+  const db = getDb();
+  const order = loadOrder(db, req.params.orderId);
+  if (!order) {
+    fs.unlinkSync(req.file.path);
+    return notFound(res);
+  }
+  const version = loadVersion(db, req.params.versionId);
+  if (!version || Number(version.order_id) !== Number(order.id)) {
+    fs.unlinkSync(req.file.path);
+    return notFound(res);
+  }
+  if (!canEditProposal(order)) {
+    fs.unlinkSync(req.file.path);
+    return badRequest(res, '仅方案阶段可导入选型明细');
+  }
+  const workbook = xlsx.readFile(req.file.path);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  fs.unlinkSync(req.file.path);
+  if (!rows || rows.length < 2) return badRequest(res, 'Excel 无有效数据');
+
+  const headers = rows[0] || [];
+  const idx = {
+    material_no: headerIndex(headers, '物料号'),
+    description: headerIndex(headers, '物料描述'),
+    material_type: headerIndex(headers, '物料类型'),
+    qty: headerIndex(headers, '数量'),
+    unit: headerIndex(headers, '单位'),
+    remark: headerIndex(headers, '备注')
+  };
+  if (idx.material_no < 0 || idx.qty < 0) return badRequest(res, 'Excel 缺少必填列（物料号/数量）');
+
+  const typeMap = { 标准: 'standard', 非标: 'non_standard' };
+  let success = 0;
+  const failures = [];
+  let maxSort = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM proposal_selections WHERE proposal_version_id = ?').get(version.id).m;
+  const insert = db.prepare(
+    'INSERT INTO proposal_selections (proposal_version_id, material_no, description, material_type, qty, unit, sort_order, remark) VALUES (?,?,?,?,?,?,?,?)'
+  );
+  const tx = db.transaction((dataRows) => {
+    for (let i = 1; i < dataRows.length; i++) {
+      const row = dataRows[i];
+      const rowNumber = i + 1;
+      if (row.every((value) => value === null || value === undefined || value === '')) continue;
+      const materialNo = cell(row, idx.material_no);
+      const qty = Number(cell(row, idx.qty));
+      if (materialNo === null || String(materialNo).trim() === '' || !isQty(qty)) {
+        failures.push({ row: rowNumber, reason: '物料号或数量无效' });
+        continue;
+      }
+      const materialType = typeMap[String(cell(row, idx.material_type) || '').trim()] || 'standard';
+      let description = cell(row, idx.description);
+      if (materialType === 'standard' && (description === null || String(description).trim() === '')) {
+        const guide = db.prepare('SELECT description FROM guide_prices WHERE material_no = ?').get(String(materialNo).trim());
+        description = guide ? guide.description : null;
+      }
+      maxSort += 1;
+      insert.run(
+        version.id,
+        String(materialNo).trim(),
+        description == null ? null : String(description),
+        materialType,
+        qty,
+        cell(row, idx.unit) ? String(cell(row, idx.unit)) : 'pcs',
+        maxSort,
+        cell(row, idx.remark) ? String(cell(row, idx.remark)) : null
+      );
+      success += 1;
+    }
+  });
+  tx(rows);
+  const log = db
+    .prepare('INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, created_at) VALUES (?,?,?,?,?,?)')
+    .run('proposal_selection', req.file.originalname, rows.length - 1, success, failures.length, nowUtc());
+  return res.json({ import_log_id: log.lastInsertRowid, success_rows: success, fail_rows: failures.length, failures: failures.slice(0, 50) });
+});
+
+router.post('/:orderId/versions/:versionId/selections/bulk', (req, res) => {
+  const db = getDb();
+  const order = loadOrder(db, req.params.orderId);
+  if (!order) return notFound(res);
+  const version = loadVersion(db, req.params.versionId);
+  if (!version || Number(version.order_id) !== Number(order.id)) return notFound(res);
+  if (!canEditProposal(order)) return badRequest(res, '仅方案阶段可粘贴录入选型明细');
+  const materialNos = Array.isArray((req.body || {}).material_nos)
+    ? (req.body || {}).material_nos.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  if (materialNos.length === 0) return badRequest(res, '请至少提供一个物料号');
+  let maxSort = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM proposal_selections WHERE proposal_version_id = ?').get(version.id).m;
+  const insert = db.prepare(
+    'INSERT INTO proposal_selections (proposal_version_id, material_no, description, material_type, qty, unit, sort_order, remark) VALUES (?,?,?,?,?,?,?,?)'
+  );
+  const created = [];
+  const tx = db.transaction((nos) => {
+    for (const materialNo of nos) {
+      const guide = db.prepare('SELECT description FROM guide_prices WHERE material_no = ?').get(materialNo);
+      const material = db.prepare('SELECT description FROM materials WHERE end_customer_id = ? AND material_no = ? ORDER BY valid_from DESC LIMIT 1').get(order.end_customer_id, materialNo);
+      const description = (guide && guide.description) || (material && material.description) || null;
+      maxSort += 1;
+      const info = insert.run(version.id, materialNo, description, 'standard', 1, 'pcs', maxSort, null);
+      created.push({ id: info.lastInsertRowid, material_no: materialNo, description });
+    }
+  });
+  tx(materialNos);
+  return res.status(201).json({ created: created.length, items: created });
 });
 
 function validateSelection(data) {

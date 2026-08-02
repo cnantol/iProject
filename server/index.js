@@ -24,6 +24,7 @@ import dashboardRoutes from './routes/dashboard.js';
 import salesHistoryRoutes from './routes/salesHistory.js';
 import auditLogRoutes from './routes/auditLogs.js';
 import settingsRoutes from './routes/settings.js';
+import { startBackupScheduler } from './routes/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -85,6 +86,7 @@ const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process
 if (isDirectRun) {
   const dataDir = process.env.DATA_DIR || path.join(__dirname, 'db', 'data');
   initDb(dataDir);
+  startBackupScheduler();
   const port = Number(process.env.PORT) || 3001;
   const app = createApp();
   const server = app.listen(port, () => {

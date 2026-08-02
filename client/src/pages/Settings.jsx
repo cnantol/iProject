@@ -38,7 +38,7 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import SaveIcon from '@mui/icons-material/Save';
 import api, { errorMessage } from '../api';
 import { IMPORT_TARGET_LABELS } from '../utils/constants';
-import { fmtDateTime } from '../utils/helpers';
+import { fmtDateTime, authUrl } from '../utils/helpers';
 
 const ENTITY_CARDS = [
   { key: 'end_customer', label: '客户信息（最终/合同客户）' },
@@ -233,14 +233,30 @@ function FieldManager({ onError }) {
 function WorkflowManager({ onError }) {
   const [steps, setSteps] = useState([]);
   const [transitions, setTransitions] = useState([]);
+  const [allFields, setAllFields] = useState([]);
+  const [bindings, setBindings] = useState({});
+  const [selectedStep, setSelectedStep] = useState('');
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/settings/workflow');
+      const [wf, fields, bindRes] = await Promise.all([
+        api.get('/settings/workflow'),
+        api.get('/settings/fields'),
+        api.get('/settings/workflow/bindings')
+      ]);
+      const { data } = wf;
       setSteps(data.steps || []);
       setTransitions(data.transitions || []);
+      setAllFields(fields.data.items || []);
+      if (data.steps?.length && !selectedStep) setSelectedStep(data.steps[0].step_key);
+      const map = {};
+      (bindRes.data.items || []).forEach((item) => {
+        if (!map[item.step_key]) map[item.step_key] = [];
+        map[item.step_key].push(item.field_id);
+      });
+      setBindings(map);
     } catch (err) {
       onError(errorMessage(err));
     } finally {
@@ -257,6 +273,17 @@ function WorkflowManager({ onError }) {
       await api.put('/settings/workflow', { steps });
       onError('');
       window.alert('流程展示配置已保存');
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
+  const saveBindings = async () => {
+    try {
+      const payload = Object.entries(bindings).map(([step_key, field_ids]) => ({ step_key, field_ids }));
+      await api.put('/settings/workflow/bindings', { bindings: payload });
+      onError('');
+      window.alert('步骤字段绑定已保存');
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -338,6 +365,51 @@ function WorkflowManager({ onError }) {
                 ))}
               </TableBody>
             </Table>
+            <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
+              步骤字段绑定（自定义字段归属展示步骤）
+            </Typography>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+              <FormControl size="small" sx={{ minWidth: 220 }}>
+                <InputLabel>选择步骤</InputLabel>
+                <Select value={selectedStep} label="选择步骤" onChange={(e) => setSelectedStep(e.target.value)}>
+                  {steps.map((step) => (
+                    <MenuItem key={step.step_key} value={step.step_key}>
+                      {step.step_name}（{step.step_key}）
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Button variant="outlined" startIcon={<SaveIcon />} onClick={saveBindings}>
+                保存字段绑定
+              </Button>
+            </Stack>
+            {allFields.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                暂无可绑定字段，请先在“字段管理”中添加自定义字段
+              </Typography>
+            ) : (
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 0.5 }}>
+                {allFields.map((field) => {
+                  const checked = (bindings[selectedStep] || []).includes(field.id);
+                  return (
+                    <FormControlLabel
+                      key={field.id}
+                      control={
+                        <Checkbox
+                          checked={checked}
+                          onChange={(e) => {
+                            const list = bindings[selectedStep] || [];
+                            const next = e.target.checked ? [...list, field.id] : list.filter((id) => id !== field.id);
+                            setBindings((prev) => ({ ...prev, [selectedStep]: next }));
+                          }}
+                        />
+                      }
+                      label={`${field.field_name}（${field.entity_type}）`}
+                    />
+                  );
+                })}
+              </Box>
+            )}
           </>
         )}
       </CardContent>
@@ -391,7 +463,7 @@ function ImportManager({ onError }) {
                 <CardContent>
                   <Typography variant="subtitle2">{IMPORT_TARGET_LABELS[target]}</Typography>
                   <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-                    <Button size="small" component="a" href={`/api/settings/import/${target}/template`} startIcon={<DownloadIcon />}>
+                    <Button size="small" component="a" href={authUrl(`/api/settings/import/${target}/template`)} startIcon={<DownloadIcon />}>
                       下载模板
                     </Button>
                     <Button size="small" component="label" variant="outlined">
@@ -456,19 +528,43 @@ function ImportManager({ onError }) {
 }
 
 function QuoteStyle({ onError }) {
-  const [style, setStyle] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('atlas_quote_style') || '{"company_name":"Atlas Copco","primary_color":"#004E9A"}');
-    } catch {
-      return { company_name: 'Atlas Copco', primary_color: '#004E9A' };
-    }
-  });
+  const [style, setStyle] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const save = () => {
-    localStorage.setItem('atlas_quote_style', JSON.stringify(style));
-    onError('');
-    window.alert('报价单式样已保存到本地');
+  const load = useCallback(async () => {
+    try {
+      const { data } = await api.get('/settings/quote-style');
+      setStyle(data);
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const { data } = await api.put('/settings/quote-style', style);
+      setStyle(data);
+      onError('');
+      window.alert('报价单式样已保存，PDF 导出将使用该样式');
+    } catch (err) {
+      onError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (!style) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Card>
@@ -492,11 +588,11 @@ function QuoteStyle({ onError }) {
               实时预览
             </Typography>
           </Box>
-          <Button variant="contained" startIcon={<SaveIcon />} onClick={save}>
+          <Button variant="contained" startIcon={<SaveIcon />} onClick={save} disabled={saving}>
             保存式样
           </Button>
           <Typography variant="caption" color="text.secondary">
-            说明：PDF 导出默认使用 Atlas Copco 品牌样式；式样保存在本机浏览器中。
+            说明：保存后报价单 PDF 的标题、表头与合计将使用所配置的公司名称与主色。
           </Typography>
         </Stack>
       </CardContent>
@@ -510,6 +606,7 @@ function SystemManager({ onError }) {
   const [correction, setCorrection] = useState({ delivered: '', invoiced: '', total_amount: '', target_status: '' });
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [backupInfo, setBackupInfo] = useState(null);
+  const [schedule, setSchedule] = useState({ enabled: false, hour: 2, minute: 0 });
   const [resetType, setResetType] = useState(null);
   const [password, setPassword] = useState('');
   const [auditLogs, setAuditLogs] = useState([]);
@@ -532,15 +629,36 @@ function SystemManager({ onError }) {
     }
   };
 
+  const loadSchedule = async () => {
+    try {
+      const { data } = await api.get('/settings/backup-schedule');
+      setSchedule(data);
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
   useEffect(() => {
     loadOrders();
     loadAudit();
+    loadSchedule();
   }, []);
 
   const backup = async () => {
     try {
       const { data } = await api.post('/settings/backup');
       setBackupInfo(data);
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
+  const saveSchedule = async () => {
+    try {
+      const { data } = await api.put('/settings/backup-schedule', schedule);
+      setSchedule(data);
+      onError('');
+      window.alert('定时备份配置已保存');
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -616,11 +734,38 @@ function SystemManager({ onError }) {
             </Stack>
             {backupInfo && (
               <Typography variant="body2" sx={{ mt: 1 }}>
-                备份完成：<Chip label={backupInfo.filename} component="a" href={backupInfo.downloadUrl} clickable />
+                备份完成：<Chip label={backupInfo.filename} component="a" href={authUrl(backupInfo.downloadUrl)} clickable />
               </Typography>
             )}
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
+              <FormControlLabel
+                control={<Switch checked={schedule.enabled} onChange={(e) => setSchedule((prev) => ({ ...prev, enabled: e.target.checked }))} />}
+                label="启用应用内定时备份"
+              />
+              <TextField
+                size="small"
+                label="小时 (0-23)"
+                type="number"
+                value={schedule.hour}
+                onChange={(e) => setSchedule((prev) => ({ ...prev, hour: Number(e.target.value) }))}
+                inputProps={{ min: 0, max: 23 }}
+                sx={{ width: 110 }}
+              />
+              <TextField
+                size="small"
+                label="分钟 (0-59)"
+                type="number"
+                value={schedule.minute}
+                onChange={(e) => setSchedule((prev) => ({ ...prev, minute: Number(e.target.value) }))}
+                inputProps={{ min: 0, max: 59 }}
+                sx={{ width: 110 }}
+              />
+              <Button size="small" variant="outlined" onClick={saveSchedule}>
+                保存配置
+              </Button>
+            </Stack>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-              定时自动备份：每日 02:00 通过 deploy/scripts/backup.sh 执行，保留最近 30 天。
+              应用内定时任务每分钟检查一次；也可继续使用 deploy/scripts/backup.sh 的系统 cron 方式。
             </Typography>
           </Box>
 

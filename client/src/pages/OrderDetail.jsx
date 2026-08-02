@@ -11,6 +11,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
@@ -20,7 +21,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import api, { errorMessage } from '../api';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
-import { fmtDateTime, isStepReadOnly } from '../utils/helpers';
+import { fmtDateTime, fmtMoney, isStepReadOnly } from '../utils/helpers';
 import OrderStepper from '../components/OrderStepper';
 import StepCustomerInfo from '../components/StepCustomerInfo';
 import StepProposal from '../components/StepProposal';
@@ -32,6 +33,32 @@ import StepShipping from '../components/StepShipping';
 import StepInvoicing from '../components/StepInvoicing';
 import StepCommission from '../components/StepCommission';
 import StepClose from '../components/StepClose';
+
+function InfoTile({ label, value, color, darkColor }) {
+  return (
+    <Box
+      sx={(theme) => {
+        const c = theme.palette.mode === 'dark' ? darkColor : color;
+        return {
+          borderRadius: 2.5,
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: `${c}1A`,
+          px: 1.75,
+          py: 1.4,
+          height: '100%'
+        };
+      }}
+    >
+      <Typography variant="overline" sx={{ fontWeight: 700, color: (theme) => (theme.palette.mode === 'dark' ? darkColor : color) }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.3, wordBreak: 'break-word' }}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -62,8 +89,9 @@ export default function OrderDetail() {
   useEffect(() => {
     if (detail) {
       setActiveKey((prev) => {
-        if (prev === 'shipping' || prev === 'invoicing') return prev;
-        return detail.order.status === 'shipping_invoicing' ? 'shipping' : detail.order.status;
+        const status = detail.order.status;
+        if (status === 'shipping_invoicing' && (prev === 'shipping' || prev === 'invoicing')) return prev;
+        return status === 'shipping_invoicing' ? 'shipping' : status;
       });
     }
   }, [detail?.order.status]);
@@ -78,7 +106,7 @@ export default function OrderDetail() {
     }
   };
 
-  if (loading) {
+  if (loading && !detail) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
         <CircularProgress />
@@ -91,13 +119,27 @@ export default function OrderDetail() {
   if (!detail) return null;
 
   const { order } = detail;
+  const stepOrder = {
+    ...order,
+    versions: detail.versions,
+    quotations: detail.quotations,
+    approvals: detail.approvals,
+    pos: detail.pos,
+    shippingBatches: detail.shippingBatches,
+    invoices: detail.invoices,
+    attachments: detail.attachments,
+    customFields: detail.customFields,
+    posTotal: detail.posTotal,
+    invoiceTotal: detail.invoiceTotal,
+    batchPercentSum: detail.batchPercentSum
+  };
   const readOnly = isStepReadOnly(order, activeKey);
   const showShippingTabs = order.status === 'shipping_invoicing' && ['shipping', 'invoicing', 'shipping_invoicing'].includes(activeKey);
   const canDelete = ['customer_info', 'proposal', 'quotation'].includes(order.status);
 
   const renderStep = () => {
     const key = activeKey;
-    const common = { order, readOnly: isStepReadOnly(order, key), onChanged: load, onAdvance: load };
+    const common = { order: stepOrder, readOnly: isStepReadOnly(order, key), onChanged: load, onAdvance: load };
     if (key === 'customer_info') return <StepCustomerInfo {...common} />;
     if (key === 'proposal') return <StepProposal {...common} />;
     if (key === 'quotation') return <StepQuotation {...common} />;
@@ -108,26 +150,26 @@ export default function OrderDetail() {
     if (key === 'invoicing') return <StepInvoicing {...common} />;
     if (key === 'commission') return <StepCommission {...common} />;
     if (key === 'closed' || key === 'lost_closed') return <StepClose order={order} />;
-    if (order.status === 'shipping_invoicing') {
+    if (key === 'shipping_invoicing') {
       return (
         <>
-          <StepShipping {...common} readOnly={false} />
+          <StepShipping {...common} readOnly={isStepReadOnly(order, 'shipping')} />
           <Box sx={{ mt: 2 }}>
-            <StepInvoicing {...common} readOnly={false} />
+            <StepInvoicing {...common} readOnly={isStepReadOnly(order, 'invoicing')} />
           </Box>
         </>
       );
     }
-    return <StepClose order={order} />;
+    return null;
   };
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" alignItems="center" spacing={1}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/orders')}>
           返回
         </Button>
-        <Typography variant="h5" sx={{ flex: 1 }}>
+        <Typography variant="h5" sx={{ flex: 1, minWidth: 220 }}>
           {order.order_id}
         </Typography>
         <Chip
@@ -145,21 +187,54 @@ export default function OrderDetail() {
       </Stack>
       {error && <Alert severity="error">{error}</Alert>}
       <Card>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ px: 2, pt: 2 }}>
-          <Typography variant="body2" color="text.secondary">项目：{order.project_name || '-'}</Typography>
-          <Typography variant="body2" color="text.secondary">最终客户：{order.end_customer_name || '-'}</Typography>
-          <Typography variant="body2" color="text.secondary">合同客户：{order.contract_customer_name || '-'}</Typography>
-          <Typography variant="body2" color="text.secondary">创建时间：{fmtDateTime(order.created_at)}</Typography>
-        </Stack>
+        <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
+        <Grid container spacing={1.5} sx={{ px: { xs: 2, md: 3 }, pt: 2.25, pb: 0.5 }}>
+          <Grid item xs={12} sm={6} lg={3}>
+            <InfoTile label="项目名称" value={order.project_name || '-'} color="#004E9A" darkColor="#8FB6E3" />
+          </Grid>
+          <Grid item xs={12} sm={6} lg={3}>
+            <InfoTile
+              label="最终客户 / 合同客户"
+              value={`${order.end_customer_name || '-'} / ${order.contract_customer_name || '-'}`}
+              color="#0093BE"
+              darkColor="#56C4E4"
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} lg={3}>
+            <InfoTile
+              label="订单总金额"
+              value={order.total_amount == null ? '-' : `¥ ${fmtMoney(order.total_amount)}`}
+              color="#B8860B"
+              darkColor="#E5BE63"
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} lg={3}>
+            <InfoTile label="创建时间" value={fmtDateTime(order.created_at)} color="#5E6F80" darkColor="#A7B6C6" />
+          </Grid>
+        </Grid>
         <OrderStepper order={order} activeKey={activeKey} onSelect={setActiveKey} />
       </Card>
 
       {showShippingTabs && (
-        <Card>
-          <Tabs value={activeKey === 'invoicing' ? 'invoicing' : 'shipping'} onChange={(_, value) => setActiveKey(value)}>
-            <Tab value="shipping" label="发货管理" />
-            <Tab value="invoicing" label="开票管理" />
-          </Tabs>
+        <Card sx={{ p: 1.25 }}>
+          <Box sx={{ display: 'flex', gap: 0.75, bgcolor: 'action.hover', borderRadius: 2, p: 0.5 }}>
+            <Button
+              size="small"
+              variant={activeKey === 'invoicing' ? 'outlined' : 'contained'}
+              onClick={() => setActiveKey('shipping')}
+              sx={{ flex: 1, minHeight: 38, fontWeight: 700 }}
+            >
+              发货管理
+            </Button>
+            <Button
+              size="small"
+              variant={activeKey === 'invoicing' ? 'contained' : 'outlined'}
+              onClick={() => setActiveKey('invoicing')}
+              sx={{ flex: 1, minHeight: 38, fontWeight: 700 }}
+            >
+              开票管理
+            </Button>
+          </Box>
         </Card>
       )}
 

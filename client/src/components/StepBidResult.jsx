@@ -38,7 +38,18 @@ export default function StepBidResult({ order, readOnly, onChanged }) {
   };
 
   return (
-    <StepWrapper title="中标结果" subtitle="确认项目中标或未中标" readOnly={readOnly}>
+    <StepWrapper
+      title="中标结果"
+      subtitle="项目中标结果确认"
+      readOnly={readOnly}
+      badge={
+        order.bid_result === 'won' ? (
+          <Chip size="small" color="success" label="中标（won）" sx={{ fontWeight: 700 }} />
+        ) : order.bid_result === 'lost' ? (
+          <Chip size="small" color="error" label="未中标（lost）" sx={{ fontWeight: 700 }} />
+        ) : null
+      }
+    >
       {error && (
         <Box sx={{ mb: 2 }}>
           <Alert severity="error">{error}</Alert>
@@ -80,7 +91,7 @@ export default function StepBidResult({ order, readOnly, onChanged }) {
           </Table>
         )}
         {editable && (
-          <Stack direction="row" spacing={2} sx={{ justifyContent: 'flex-end' }}>
+          <Stack direction="row" spacing={2} sx={{ justifyContent: 'flex-end', flexWrap: 'wrap', rowGap: 1 }}>
             <Button variant="contained" color="success" startIcon={<EmojiEventsIcon />} onClick={() => bid('won')}>
               中标（won）
             </Button>

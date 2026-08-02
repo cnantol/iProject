@@ -82,51 +82,93 @@ export default function StepShipping({ order, readOnly, onChanged }) {
           <Alert severity="error">{error}</Alert>
         </Box>
       )}
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={4}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={delivered}
-                disabled={!editable}
-                onChange={(e) => toggleDelivered(e.target.checked)}
-                color="success"
-              />
-            }
-            label={delivered ? '已全部发货' : '未完成发货'}
-          />
-        </Grid>
-        <Grid item xs={12} sm={4}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 1.5, mb: 2 }}>
+        <Box
+          sx={{
+            p: 1.75,
+            borderRadius: 2.5,
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: delivered ? 'rgba(30,122,70,0.08)' : 'rgba(178,106,0,0.08)'
+          }}
+        >
+          <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
+            发货状态
+          </Typography>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6" sx={{ fontWeight: 800, color: delivered ? '#1E7A46' : '#B26A00' }}>
+              {delivered ? '已全部发货' : '未完成发货'}
+            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={delivered}
+                  disabled={!editable}
+                  onChange={(e) => toggleDelivered(e.target.checked)}
+                  color="success"
+                />
+              }
+              label=""
+              sx={{ m: 0 }}
+            />
+          </Stack>
+        </Box>
+        <Box sx={{ p: 1.75, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}>
+          <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
+            发货日期
+          </Typography>
           <TextField
-            label="发货日期"
+            label=""
             type="date"
             value={deliveredDate}
             disabled={!editable}
             onChange={(e) => setDeliveredDate(e.target.value)}
             fullWidth
             InputLabelProps={{ shrink: true }}
+            size="small"
+            sx={{ mt: 0.75 }}
           />
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Chip
-            color={batches.length === 0 ? 'default' : sum >= 100 ? 'success' : 'warning'}
-            label={batches.length === 0 ? '无批次记录（可直接标记）' : `批次累计 ${sum}%`}
-            sx={{ mt: 1.5 }}
-          />
-        </Grid>
-      </Grid>
+        </Box>
+        <Box
+          sx={{
+            p: 1.75,
+            borderRadius: 2.5,
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: batches.length === 0 ? 'action.hover' : sum >= 100 ? 'rgba(30,122,70,0.08)' : 'rgba(178,106,0,0.08)'
+          }}
+        >
+          <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
+            批次累计
+          </Typography>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.75 }}>
+            <Typography variant="h5" sx={{ fontWeight: 800, color: batches.length === 0 ? 'text.primary' : sum >= 100 ? '#1E7A46' : '#B26A00' }}>
+              {sum}%
+            </Typography>
+            <Chip
+              size="small"
+              color={batches.length === 0 ? 'default' : sum >= 100 ? 'success' : 'warning'}
+              label={batches.length === 0 ? '无批次（可直接标记）' : sum >= 100 ? '已累计完成' : '未全部发货'}
+              sx={{ fontWeight: 700 }}
+            />
+          </Stack>
+        </Box>
+      </Box>
 
-      <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
-        发货批次
-      </Typography>
-      <Table size="small">
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2.5, mb: 1 }}>
+        <Box sx={{ width: 4, height: 20, borderRadius: 2, bgcolor: 'primary.main' }} />
+        <Typography variant="h6" sx={{ fontWeight: 800 }}>
+          发货批次
+        </Typography>
+      </Stack>
+      <Table size="small" sx={{ '& .MuiTableCell-root': { fontSize: '0.9rem', py: 1.25 } }}>
         <TableHead>
           <TableRow>
             <TableCell>批次号</TableCell>
             <TableCell align="right">百分比</TableCell>
             <TableCell>发货日期</TableCell>
             <TableCell>备注</TableCell>
-            <TableCell sx={{ width: 80 }}>操作</TableCell>
+            <TableCell sx={{ width: 120 }}>操作</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -155,9 +197,8 @@ export default function StepShipping({ order, readOnly, onChanged }) {
         </TableBody>
       </Table>
       {editable && (
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mt: 1.5 }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mt: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
           <TextField
-            size="small"
             label="百分比（%）"
             type="number"
             value={form.batch_percent}
@@ -165,14 +206,13 @@ export default function StepShipping({ order, readOnly, onChanged }) {
             inputProps={{ min: 0.01, max: 100 }}
           />
           <TextField
-            size="small"
             label="发货日期"
             type="date"
             value={form.shipped_date}
             onChange={(e) => setForm((prev) => ({ ...prev, shipped_date: e.target.value }))}
             InputLabelProps={{ shrink: true }}
           />
-          <TextField size="small" label="备注" value={form.remark} onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))} />
+          <TextField label="备注" value={form.remark} onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))} />
           <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={addBatch}>
             登记批次
           </Button>

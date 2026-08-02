@@ -42,6 +42,9 @@ router.post('/:orderId/approvals', (req, res) => {
     db.prepare(
       "UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND quotation_id <> ? AND status = 'pending'"
     ).run(order.id, order.selected_round_id);
+    db.prepare(
+      "UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND approval_type = ? AND quotation_id <> ? AND status = 'approved'"
+    ).run(order.id, approvalType, order.selected_round_id);
     // 同一审批线下旧 pending/rejected 记录 superseded
     db.prepare(
       "UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND approval_type = ? AND status IN ('pending','rejected')"
@@ -114,12 +117,9 @@ router.put('/:orderId/approvals/:recordId', (req, res) => {
     let changed = false;
     const tx = db.transaction(() => {
       // 先 supersede 同线下其他 pending/rejected 与另一线 pending（保留 approved 追溯）
-      db.prepare(
-        "UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND approval_type = ? AND status IN ('pending','rejected') AND id <> ?"
-      ).run(order.id, record.approval_type, record.id);
-      db.prepare(
-        "UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND approval_type <> ? AND status = 'pending'"
-      ).run(order.id, record.approval_type);
+    db.prepare(
+      "UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND id <> ? AND status IN ('pending','approved','rejected')"
+    ).run(order.id, record.id);
       db.prepare('UPDATE approval_records SET status = ?, approver_id = ?, responded_at = ?, remark = ? WHERE id = ?')
         .run('rejected', req.user.id, nowUtc(), remark, record.id);
       if (order.selected_round_id) {

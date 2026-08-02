@@ -56,6 +56,12 @@ export function todayStr() {
   return new Date(now.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+export function authUrl(path) {
+  const token = localStorage.getItem('atlas_token') || '';
+  const sep = String(path).includes('?') ? '&' : '?';
+  return `${path}${sep}token=${encodeURIComponent(token)}`;
+}
+
 export function isStepReadOnly(order, stepKey) {
   if (!order) return true;
   if (['closed', 'lost_closed'].includes(order.status)) return true;

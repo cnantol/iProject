@@ -67,10 +67,13 @@ router.get('/lookup', (req, res) => {
   if (hasFramework) {
     const framework = latestFramework(customerId, materialNo);
     if (framework) {
+      const guideDescription = framework.description
+        ? framework.description
+        : (getDb().prepare('SELECT description FROM guide_prices WHERE material_no = ?').get(materialNo) || {}).description || null;
       return res.json({
         price_source: 'framework',
         unit_price_ex_vat: framework.unit_price_ex_vat,
-        description: framework.description,
+        description: guideDescription,
         material_type: 'standard'
       });
     }

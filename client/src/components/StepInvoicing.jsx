@@ -131,21 +131,23 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
           <Alert severity="error">{error}</Alert>
         </Box>
       )}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={12} sm={4}>
-          <Typography variant="body2" color="text.secondary">PO 总金额</Typography>
-          <Typography variant="h6">¥ {fmtMoney(poTotal)}</Typography>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Typography variant="body2" color="text.secondary">累计开票</Typography>
-          <Typography variant="h6" color={difference < 0 ? 'error' : 'inherit'}>¥ {fmtMoney(invoiceTotal)}</Typography>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Typography variant="body2" color="text.secondary">差额</Typography>
-          <Typography variant="h6" color={difference > 0 ? 'warning.main' : 'success.main'}>
-            ¥ {fmtMoney(Math.abs(difference))}
-          </Typography>
-        </Grid>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        {[
+          { label: 'PO 总金额', value: `¥ ${fmtMoney(poTotal)}`, color: '#004E9A' },
+          { label: '累计开票', value: `¥ ${fmtMoney(invoiceTotal)}`, color: difference < 0 ? '#C33D3D' : '#0093BE' },
+          { label: '差额', value: `¥ ${fmtMoney(Math.abs(difference))}`, color: difference > 0 ? '#B26A00' : '#1E7A46' }
+        ].map((item) => (
+          <Grid item xs={12} sm={4} key={item.label}>
+            <Box sx={{ p: 1.75, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: `${item.color}10` }}>
+              <Typography variant="overline" sx={{ color: item.color, fontWeight: 700 }}>
+                {item.label}
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 800, color: item.color, mt: 0.5 }}>
+                {item.value}
+              </Typography>
+            </Box>
+          </Grid>
+        ))}
       </Grid>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
         <FormControlLabel
@@ -164,7 +166,13 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
         {invoiceTotal >= poTotal && <Chip size="small" color="success" label="累计开票已达 PO 总额" />}
       </Stack>
 
-      <Table size="small">
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2.5, mb: 1 }}>
+        <Box sx={{ width: 4, height: 20, borderRadius: 2, bgcolor: 'secondary.main' }} />
+        <Typography variant="h6" sx={{ fontWeight: 800 }}>
+          发票记录
+        </Typography>
+      </Stack>
+      <Table size="small" sx={{ '& .MuiTableCell-root': { fontSize: '0.9rem', py: 1.25 } }}>
         <TableHead>
           <TableRow>
             <TableCell>发票号</TableCell>
@@ -172,7 +180,7 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
             <TableCell align="right">金额</TableCell>
             <TableCell>开票日期</TableCell>
             <TableCell>备注</TableCell>
-            <TableCell sx={{ width: 70 }}>操作</TableCell>
+            <TableCell sx={{ width: 120 }}>操作</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -203,8 +211,8 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
       </Table>
 
       {editable && (
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mt: 2 }}>
-          <FormControl size="small" sx={{ minWidth: 180 }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mt: 2, flexWrap: 'wrap', rowGap: 1 }}>
+          <FormControl sx={{ minWidth: 180 }}>
             <InputLabel>对应 PO</InputLabel>
             <Select value={form.po_id} label="对应 PO" onChange={(e) => setForm((prev) => ({ ...prev, po_id: e.target.value }))}>
               {pos.map((po) => (
@@ -214,17 +222,16 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
               ))}
             </Select>
           </FormControl>
-          <TextField size="small" label="发票号" value={form.invoice_no} onChange={(e) => setForm((prev) => ({ ...prev, invoice_no: e.target.value }))} />
-          <TextField size="small" label="金额" type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} />
+          <TextField label="发票号" value={form.invoice_no} onChange={(e) => setForm((prev) => ({ ...prev, invoice_no: e.target.value }))} />
+          <TextField label="金额" type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} />
           <TextField
-            size="small"
             label="开票日期"
             type="date"
             value={form.invoice_date}
             onChange={(e) => setForm((prev) => ({ ...prev, invoice_date: e.target.value }))}
             InputLabelProps={{ shrink: true }}
           />
-          <TextField size="small" label="备注" value={form.remark} onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))} />
+          <TextField label="备注" value={form.remark} onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))} />
           <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={addInvoice}>
             添加发票
           </Button>

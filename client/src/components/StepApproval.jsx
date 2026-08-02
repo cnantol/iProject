@@ -10,10 +10,15 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import api, { errorMessage } from '../api';
-import { fmtDateTime } from '../utils/helpers';
+import { fmtDateTime, fmtMoney } from '../utils/helpers';
 import StepWrapper from './StepWrapper';
 
 const LINES = [
@@ -23,6 +28,7 @@ const LINES = [
 
 const STATUS_LABELS = { pending: '待审批', approved: '已通过', rejected: '已驳回', superseded: '已取代' };
 const STATUS_COLORS = { pending: 'warning', approved: 'success', rejected: 'error', superseded: 'default' };
+const STATUS_HEX = { pending: '#F57C00', approved: '#1E7A46', rejected: '#C33D3D', superseded: '#78909C' };
 
 export default function StepApproval({ order, readOnly, onChanged }) {
   const [rejectTarget, setRejectTarget] = useState(null);
@@ -64,16 +70,71 @@ export default function StepApproval({ order, readOnly, onChanged }) {
           <Alert severity="error">{error}</Alert>
         </Box>
       )}
-      <Typography variant="body2" sx={{ mb: 2 }}>
-        审批报价轮次：
-        <Chip size="small" label={selectedRound ? `${selectedRound.round_label || `R${selectedRound.round_no}`}（¥ ${selectedRound.total_amount ?? 0}）` : '未选定'} sx={{ ml: 1 }} />
-      </Typography>
+      <Box
+        sx={{
+          mb: 2.5,
+          p: 2,
+          borderRadius: 2.5,
+          border: '1px solid',
+          borderColor: 'primary.main',
+          bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(0,78,154,0.22)' : 'rgba(0,78,154,0.06)'),
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          flexWrap: 'wrap'
+        }}
+      >
+        <Box
+          sx={{
+            width: 46,
+            height: 46,
+            borderRadius: 2.5,
+            bgcolor: 'primary.main',
+            color: '#FFFFFF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 22,
+            fontWeight: 800,
+            flexShrink: 0
+          }}
+        >
+          {selectedRound ? String(selectedRound.round_label || `R${selectedRound.round_no}`).replace(/^R/, '') : '?'}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 180 }}>
+          <Typography variant="overline" sx={{ color: 'primary.main', fontWeight: 700 }}>
+            当前审批报价轮次
+          </Typography>
+          <Typography variant="h6" sx={{ mt: 0.25 }}>
+            {selectedRound ? selectedRound.round_label || `R${selectedRound.round_no}` : '未选定'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            合计：¥ {fmtMoney(selectedRound?.total_amount)}
+          </Typography>
+        </Box>
+        <Chip
+          size="small"
+          color={selectedRound ? (selectedRound.status === 'submitted' ? 'success' : 'warning') : 'default'}
+          label={selectedRound ? (selectedRound.status === 'submitted' ? '已提交' : '草稿/重提') : '未选定'}
+          sx={{ fontWeight: 700 }}
+        />
+      </Box>
       <Grid container spacing={2}>
         {LINES.map((line) => {
           const record = latest(line.key);
           return (
             <Grid item xs={12} md={6} key={line.key}>
-              <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+              <Box
+                sx={(theme) => ({
+                  p: 2,
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 2.5,
+                  height: '100%',
+                  borderLeft: '4px solid',
+                  borderLeftColor: record ? STATUS_HEX[record.status] : theme.palette.divider
+                })}
+              >
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                     {line.label}
@@ -90,8 +151,8 @@ export default function StepApproval({ order, readOnly, onChanged }) {
                     {record.remark ? `｜备注：${record.remark}` : ''}
                   </Typography>
                 )}
-                <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
-                  {!record && editable && (
+                <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
+                  {(!record || record.status === 'rejected' || record.status === 'superseded') && editable && (
                     <Button size="small" variant="contained" onClick={() => submitLine(line.key)}>
                       提交申请
                     </Button>
@@ -107,27 +168,52 @@ export default function StepApproval({ order, readOnly, onChanged }) {
                     </>
                   )}
                 </Stack>
-                {history(line.key).length > 1 && (
-                  <>
-                    <Divider sx={{ my: 1 }} />
-                    <Typography variant="caption" color="text.secondary">
-                      历史记录：
-                    </Typography>
-                    {history(line.key)
-                      .slice(0, -1)
-                      .reverse()
-                      .map((item) => (
-                        <Typography key={item.id} variant="caption" display="block" color="text.secondary">
-                          {STATUS_LABELS[item.status]} · {fmtDateTime(item.responded_at || item.applied_at)}
-                        </Typography>
-                      ))}
-                  </>
-                )}
               </Box>
             </Grid>
           );
         })}
       </Grid>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+          审批历史汇总
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>时间</TableCell>
+              <TableCell>审批线</TableCell>
+              <TableCell>报价轮次</TableCell>
+              <TableCell>状态</TableCell>
+              <TableCell>备注</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {approvals.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} align="center" sx={{ color: 'text.secondary' }}>
+                  暂无审批记录
+                </TableCell>
+              </TableRow>
+            )}
+            {approvals.map((item) => {
+              const line = LINES.find((lineDef) => lineDef.key === item.approval_type);
+              const round = (order.quotations || []).find((roundDef) => roundDef.id === item.quotation_id);
+              return (
+                <TableRow key={item.id}>
+                  <TableCell>{fmtDateTime(item.responded_at || item.applied_at)}</TableCell>
+                  <TableCell>{line ? line.label : item.approval_type}</TableCell>
+                  <TableCell>{round ? round.round_label || `R${round.round_no}` : `#${item.quotation_id || '-'}`}</TableCell>
+                  <TableCell>
+                    <Chip size="small" color={STATUS_COLORS[item.status]} label={STATUS_LABELS[item.status] || item.status} />
+                  </TableCell>
+                  <TableCell>{item.remark || '-'}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Box>
 
       <Dialog open={Boolean(rejectTarget)} onClose={() => setRejectTarget(null)}>
         <DialogTitle>确认驳回审批</DialogTitle>

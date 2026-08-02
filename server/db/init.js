@@ -68,6 +68,15 @@ export function initDb(dir) {
 
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workflow_step_fields (
+      id INTEGER PRIMARY KEY,
+      step_key TEXT NOT NULL,
+      field_id INTEGER NOT NULL REFERENCES custom_fields(id),
+      sort_order INTEGER DEFAULT 0,
+      UNIQUE(step_key, field_id)
+    );
+  `);
 
   const admin = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
   if (!admin) {
