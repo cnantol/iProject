@@ -116,14 +116,20 @@ export default function MaterialList() {
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography variant="h5">基础数据</Typography>
+      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1.5} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+        <Box>
+          <Typography variant="h5">基础数据</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+            最终客户、合同客户、框架协议价与系统指导价
+          </Typography>
+        </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
           新增
         </Button>
       </Stack>
       <Card>
-        <Tabs value={tab} onChange={(_, value) => setTab(value)}>
+        <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
+        <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ px: 1.5, pt: 0.5 }}>
           {TABS.map((item) => (
             <Tab key={item.key} value={item.key} label={item.label} />
           ))}
@@ -135,7 +141,7 @@ export default function MaterialList() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
-            sx={{ mb: 2, width: 320 }}
+            sx={{ mb: 2, width: { xs: '100%', md: 320 } }}
           />
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           {loading ? (
@@ -149,22 +155,32 @@ export default function MaterialList() {
                   {tabDef[tab].fields.map((field) => (
                     <TableCell key={field}>{tabDef[tab].labels[field]}</TableCell>
                   ))}
-                  <TableCell sx={{ width: 100 }}>操作</TableCell>
+                  <TableCell sx={{ width: 120 }}>操作</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {items.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={tabDef[tab].fields.length + 1} align="center" sx={{ color: 'text.secondary' }}>
+                    <TableCell colSpan={tabDef[tab].fields.length + 1} align="center" sx={{ py: 8, color: 'text.secondary' }}>
                       暂无数据
                     </TableCell>
                   </TableRow>
                 )}
                 {items.map((row) => (
                   <TableRow key={row.id} hover>
-                    {tabDef[tab].fields.map((field) => (
-                      <TableCell key={field}>{fieldValue(row, field)}</TableCell>
-                    ))}
+                    {tabDef[tab].fields.map((field) => {
+                      const nowrapFields = {
+                        end_customer: ['customer_name', 'phone', 'email'],
+                        contract_customer: ['customer_name', 'phone', 'email'],
+                        material: ['material_no', 'unit_price_ex_vat', 'valid_from', 'valid_to'],
+                        guide_price: ['material_no', 'guide_unit_price_ex_vat']
+                      };
+                      return (
+                        <TableCell key={field} sx={nowrapFields[tab]?.includes(field) ? { whiteSpace: 'nowrap' } : undefined}>
+                          {fieldValue(row, field)}
+                        </TableCell>
+                      );
+                    })}
                     <TableCell>
                       <IconButton size="small" onClick={() => openEdit(row)} title="编辑">
                         <EditIcon />

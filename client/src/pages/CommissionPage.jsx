@@ -121,25 +121,51 @@ export default function CommissionPage() {
 
   return (
     <Stack spacing={2}>
-      <Typography variant="h5">佣金结算</Typography>
+      <Box>
+        <Typography variant="h5">佣金结算</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+          上传佣金 Excel 全局匹配，或对等待清单人工补录
+        </Typography>
+      </Box>
       {error && <Alert severity="error">{error}</Alert>}
 
       <Card>
+        <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'secondary.main' }} />
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 1.5 }}>
-            佣金 Excel 全局匹配
-          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+            <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'secondary.main' }} />
+            <Typography variant="h6">佣金 Excel 全局匹配</Typography>
+          </Stack>
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={3}>
-              <Button component="label" variant="outlined" startIcon={<UploadFileIcon />} sx={{ width: '100%' }}>
-                选择 Excel
+              <Box
+                component="label"
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  border: '1.5px dashed',
+                  borderColor: file ? 'success.main' : 'secondary.main',
+                  borderRadius: 2.5,
+                  px: 2,
+                  py: 1.75,
+                  cursor: 'pointer',
+                  bgcolor: file ? 'rgba(30,122,70,0.06)' : 'rgba(0,147,190,0.06)',
+                  width: '100%',
+                  minWidth: 0
+                }}
+              >
+                <UploadFileIcon color={file ? 'success' : 'secondary'} />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {file ? file.name : '选择佣金 Excel'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    支持 .xlsx / .xls
+                  </Typography>
+                </Box>
                 <input type="file" hidden accept=".xlsx,.xls" onChange={pickFile} />
-              </Button>
-              {file && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                  {file.name}
-                </Typography>
-              )}
+              </Box>
             </Grid>
             <Grid item xs={12} md={3}>
               <FormControl fullWidth size="small">
@@ -173,12 +199,12 @@ export default function CommissionPage() {
           </Grid>
           {result && (
             <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
-              <Chip label={`匹配成功 ${result.matched}`} color="success" />
-              <Chip label={`未匹配 ${result.unmatched}`} color="default" />
-              <Chip label={`失败行 ${result.fail_rows}`} color="error" />
-              <Chip label={`重复 SO ${result.duplicate_so_count}`} color="warning" />
-              <Chip label={`多余 SO ${result.extra_so_count}`} color="info" />
-              <Chip label={`已闭环跳过 ${result.skipped_matched_count}`} color="default" />
+              <Chip label={`匹配成功 ${result.matched}`} color="success" variant="outlined" sx={{ fontWeight: 700 }} />
+              <Chip label={`未匹配 ${result.unmatched}`} variant="outlined" sx={{ fontWeight: 700 }} />
+              <Chip label={`失败行 ${result.fail_rows}`} color="error" variant="outlined" sx={{ fontWeight: 700 }} />
+              <Chip label={`重复 SO ${result.duplicate_so_count}`} color="warning" variant="outlined" sx={{ fontWeight: 700 }} />
+              <Chip label={`多余 SO ${result.extra_so_count}`} color="info" variant="outlined" sx={{ fontWeight: 700 }} />
+              <Chip label={`已闭环跳过 ${result.skipped_matched_count}`} variant="outlined" sx={{ fontWeight: 700 }} />
             </Stack>
           )}
         </CardContent>
@@ -186,9 +212,10 @@ export default function CommissionPage() {
 
       <Card>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 1.5 }}>
-            等待下次匹配清单
-          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+            <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+            <Typography variant="h6">等待下次匹配清单</Typography>
+          </Stack>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
@@ -201,7 +228,7 @@ export default function CommissionPage() {
                   <TableCell>项目名称</TableCell>
                   <TableCell>Sales Order</TableCell>
                   <TableCell>最终客户</TableCell>
-                  <TableCell>操作</TableCell>
+                  <TableCell sx={{ width: 120 }}>操作</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -214,10 +241,10 @@ export default function CommissionPage() {
                 )}
                 {waiting.map((order) => (
                   <TableRow key={order.id} hover>
-                    <TableCell sx={{ fontWeight: 600 }}>{order.order_id}</TableCell>
-                    <TableCell>{order.project_name || '-'}</TableCell>
-                    <TableCell>{order.sales_order || '-'}</TableCell>
-                    <TableCell>{order.end_customer_name || '-'}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{order.order_id}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.project_name || '-'}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.sales_order || '-'}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.end_customer_name || '-'}</TableCell>
                     <TableCell>
                       <Button size="small" variant="outlined" color="warning" onClick={() => setManualTarget(order)}>
                         人工补录
@@ -233,9 +260,10 @@ export default function CommissionPage() {
 
       <Card>
         <CardContent>
-          <Typography variant="h6" sx={{ mb: 1.5 }}>
-            匹配历史
-          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+            <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+            <Typography variant="h6">匹配历史</Typography>
+          </Stack>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -249,11 +277,11 @@ export default function CommissionPage() {
             <TableBody>
               {imports.map((row) => (
                 <TableRow key={row.id}>
-                  <TableCell>{fmtDateTime(row.created_at)}</TableCell>
-                  <TableCell>{row.file_name}</TableCell>
-                  <TableCell align="right">{row.total_rows}</TableCell>
-                  <TableCell align="right">{row.success_rows}</TableCell>
-                  <TableCell align="right">{row.fail_rows}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{fmtDateTime(row.created_at)}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.file_name}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{row.total_rows}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{row.success_rows}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{row.fail_rows}</TableCell>
                 </TableRow>
               ))}
               {imports.length === 0 && (

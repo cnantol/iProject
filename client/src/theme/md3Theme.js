@@ -37,7 +37,16 @@ export function buildTheme(mode) {
         styleOverrides: { root: { borderRadius: 8, border: '1px solid rgba(0,0,0,0.08)' } }
       },
       MuiTableCell: {
-        styleOverrides: { root: { padding: '10px 12px' } }
+        styleOverrides: {
+          root: { padding: '10px 12px', verticalAlign: 'middle' },
+          head: {
+            whiteSpace: 'nowrap',
+            fontWeight: 700,
+            fontSize: '0.8rem',
+            color: mode === 'dark' ? '#A7B6C6' : '#5E6F80',
+            backgroundColor: mode === 'dark' ? 'rgba(168,190,214,0.05)' : 'rgba(22,48,78,0.03)'
+          }
+        }
       },
       MuiChip: {
         styleOverrides: { root: { fontWeight: 600 } }

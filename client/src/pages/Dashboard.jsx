@@ -23,25 +23,36 @@ import Alert from '@mui/material/Alert';
 import AddIcon from '@mui/icons-material/Add';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import AutoGraphIcon from '@mui/icons-material/AutoGraph';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import api from '../api';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { fmtMoney, fmtDate } from '../utils/helpers';
 
-function StatCard({ label, value, accent, badge }) {
+function StatCard({ label, value, accent, badge, icon }) {
   return (
     <Card>
-      <CardContent>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-          <Typography variant="body2" color="text.secondary">
-            {label}
-          </Typography>
-          {badge != null && badge > 0 && (
-            <Chip size="small" color="error" icon={<WarningAmberIcon />} label={`逾期 ${badge} 条`} />
+      <CardContent sx={{ p: 2.25 }}>
+        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
+          <Box>
+            <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+              {label}
+            </Typography>
+            <Typography variant="h5" sx={{ mt: 0.75, fontWeight: 800, color: accent || 'text.primary', whiteSpace: 'nowrap' }}>
+              {value}
+            </Typography>
+            {badge != null && badge > 0 && (
+              <Chip size="small" color="error" icon={<WarningAmberIcon />} label={`逾期 ${badge} 条`} sx={{ mt: 1, fontWeight: 700 }} />
+            )}
+          </Box>
+          {icon && (
+            <Box sx={{ width: 44, height: 44, borderRadius: 2.5, bgcolor: `${accent}18`, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {icon}
+            </Box>
           )}
         </Stack>
-        <Typography variant="h5" sx={{ mt: 1, fontWeight: 800, color: accent || 'text.primary' }}>
-          {value}
-        </Typography>
       </CardContent>
     </Card>
   );
@@ -87,8 +98,13 @@ export default function Dashboard() {
 
   return (
     <Stack spacing={3}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography variant="h5">首页看板</Typography>
+      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1.5} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+        <Box>
+          <Typography variant="h5">首页看板</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+            {new Intl.DateTimeFormat('zh-CN', { dateStyle: 'full' }).format(new Date())}
+          </Typography>
+        </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/orders/new')}>
           新建订单
         </Button>
@@ -96,16 +112,16 @@ export default function Dashboard() {
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard label="总项目数" value={data.totalOrders ?? 0} accent="#1976D2" />
+          <StatCard label="总项目数" value={data.totalOrders ?? 0} accent="#1976D2" icon={<AssignmentIcon />} />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard label="进行中" value={data.inProgress ?? 0} accent="#F57C00" badge={data.overdueCount} />
+          <StatCard label="进行中" value={data.inProgress ?? 0} accent="#F57C00" badge={data.overdueCount} icon={<AutoGraphIcon />} />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard label="已闭环" value={data.closedCount ?? 0} accent="#2E7D32" />
+          <StatCard label="已闭环" value={data.closedCount ?? 0} accent="#2E7D32" icon={<CheckCircleOutlineIcon />} />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <StatCard label="闭环总金额" value={`¥ ${fmtMoney(data.totalAmount)}`} accent="#004E9A" />
+          <StatCard label="闭环总金额" value={`¥ ${fmtMoney(data.totalAmount)}`} accent="#004E9A" icon={<PaymentsOutlinedIcon />} />
         </Grid>
       </Grid>
 
@@ -113,9 +129,12 @@ export default function Dashboard() {
         <Grid item xs={12} lg={8}>
           <Card>
             <CardContent>
-              <Typography variant="h6" sx={{ mb: 1.5 }}>
-                最近项目
-              </Typography>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Typography variant="h6">最近项目</Typography>
+                <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/orders')}>
+                  全部订单
+                </Button>
+              </Stack>
               {(data.recentOrders || []).length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
                   暂无数据
@@ -134,17 +153,18 @@ export default function Dashboard() {
                   <TableBody>
                     {(data.recentOrders || []).map((order) => (
                       <TableRow key={order.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/orders/${order.id}`)}>
-                        <TableCell sx={{ fontWeight: 600 }}>{order.order_id}</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{order.order_id}</TableCell>
                         <TableCell>{order.project_name || '-'}</TableCell>
                         <TableCell>{order.end_customer_name || '-'}</TableCell>
                         <TableCell>
                           <Chip
                             size="small"
                             label={STATUS_LABELS[order.status] || order.status}
+                            icon={<Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: STATUS_COLORS[order.status] || '#78909C' }} />}
                             sx={{ bgcolor: `${STATUS_COLORS[order.status] || '#78909C'}22`, color: STATUS_COLORS[order.status] || '#78909C' }}
                           />
                         </TableCell>
-                        <TableCell align="right">{fmtMoney(order.total_amount)}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtMoney(order.total_amount)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -202,7 +222,7 @@ export default function Dashboard() {
                   {(data.recentTodos || []).map((todo) => (
                     <Box key={todo.id}>
                       <ListItemButton
-                        sx={{ px: 1 }}
+                        sx={{ px: 1, borderRadius: 1.5 }}
                         onClick={() => (todo.order_ref ? navigate(`/orders/${todo.order_ref}`) : navigate('/todos'))}
                       >
                         <ListItemText

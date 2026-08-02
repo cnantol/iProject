@@ -21,6 +21,7 @@ import Alert from '@mui/material/Alert';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
+import InboxIcon from '@mui/icons-material/Inbox';
 import api from '../api';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { fmtMoney } from '../utils/helpers';
@@ -57,14 +58,25 @@ export default function OrderList() {
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography variant="h5">订单列表</Typography>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        justifyContent="space-between"
+        spacing={1.5}
+        sx={{ flexWrap: 'wrap', rowGap: 1 }}
+      >
+        <Box>
+          <Typography variant="h5">订单列表</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+            查看与管理全部销售订单，点击行进入详情
+          </Typography>
+        </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/orders/new')}>
           新建订单
         </Button>
       </Stack>
-      <Card sx={{ p: 2 }}>
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+      <Card sx={{ px: 2.25, py: 2 }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', md: 'center' }}>
           <TextField
             size="small"
             label="搜索订单号/项目/SO"
@@ -94,7 +106,7 @@ export default function OrderList() {
               </MenuItem>
             ))}
           </TextField>
-          <IconButton onClick={() => load()} title="刷新">
+          <IconButton onClick={() => load()} title="刷新" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
             <RefreshIcon />
           </IconButton>
         </Stack>
@@ -125,14 +137,17 @@ export default function OrderList() {
               <TableBody>
                 {(data?.items || []).length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 6, color: 'text.secondary' }}>
-                      暂无数据
+                    <TableCell colSpan={7} align="center" sx={{ py: 8, color: 'text.secondary' }}>
+                      <Stack spacing={1} alignItems="center">
+                        <InboxIcon sx={{ fontSize: 42, color: 'text.disabled' }} />
+                        <Typography variant="body2">暂无符合条件的订单</Typography>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 )}
                 {(data?.items || []).map((order) => (
                   <TableRow key={order.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/orders/${order.id}`)}>
-                    <TableCell sx={{ fontWeight: 600 }}>{order.order_id}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'primary.main' }}>{order.order_id}</TableCell>
                     <TableCell>{order.project_name || '-'}</TableCell>
                     <TableCell>{order.end_customer_name || '-'}</TableCell>
                     <TableCell>{order.contract_customer_name || '-'}</TableCell>
@@ -141,16 +156,17 @@ export default function OrderList() {
                       <Chip
                         size="small"
                         label={STATUS_LABELS[order.status] || order.status}
+                        icon={<Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: STATUS_COLORS[order.status] || '#78909C' }} />}
                         sx={{ bgcolor: `${STATUS_COLORS[order.status] || '#78909C'}22`, color: STATUS_COLORS[order.status] || '#78909C' }}
                       />
                     </TableCell>
-                    <TableCell align="right">{fmtMoney(order.total_amount)}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600 }}>{fmtMoney(order.total_amount)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
             {(data?.total || 0) > limit && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2.5 }}>
                 <Pagination
                   count={Math.ceil((data.total || 0) / limit)}
                   page={page}

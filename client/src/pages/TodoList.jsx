@@ -178,10 +178,16 @@ export default function TodoList() {
 
   return (
     <Stack spacing={2}>
-      <Typography variant="h5">待办事项</Typography>
+      <Box>
+        <Typography variant="h5">待办事项</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+          按逾期、今日、未来与已完成四区管理个人日程
+        </Typography>
+      </Box>
       {error && <Alert severity="error">{error}</Alert>}
 
       <Card>
+        <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
         <CardContent>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
             <TextField size="small" label="标题（必填）" value={quick.title} onChange={(e) => setQuick((prev) => ({ ...prev, title: e.target.value }))} sx={{ flex: 1 }} />
@@ -219,13 +225,19 @@ export default function TodoList() {
           <Card>
             <CardContent>
               <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <IconButton onClick={() => setCursor((prev) => (prev.month === 0 ? { year: prev.year - 1, month: 11 } : { ...prev, month: prev.month - 1 }))}>
+                <IconButton
+                  onClick={() => setCursor((prev) => (prev.month === 0 ? { year: prev.year - 1, month: 11 } : { ...prev, month: prev.month - 1 }))}
+                  sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+                >
                   <ChevronLeftIcon />
                 </IconButton>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
                   {cursor.year} 年 {cursor.month + 1} 月
                 </Typography>
-                <IconButton onClick={() => setCursor((prev) => (prev.month === 11 ? { year: prev.year + 1, month: 0 } : { ...prev, month: prev.month + 1 }))}>
+                <IconButton
+                  onClick={() => setCursor((prev) => (prev.month === 11 ? { year: prev.year + 1, month: 0 } : { ...prev, month: prev.month + 1 }))}
+                  sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+                >
                   <ChevronRightIcon />
                 </IconButton>
               </Stack>
@@ -243,6 +255,7 @@ export default function TodoList() {
                   const key = dateKey(day);
                   const hasTodo = todoDates.has(key);
                   const selected = key === selectedDate;
+                  const isToday = key === today;
                   return (
                     <Box
                       key={key}
@@ -257,7 +270,11 @@ export default function TodoList() {
                         bgcolor: selected ? 'primary.main' : 'transparent',
                         color: selected ? 'primary.contrastText' : 'inherit',
                         position: 'relative',
-                        '&:hover': { bgcolor: selected ? 'primary.main' : 'action.hover' }
+                        border: isToday && !selected ? '1.5px solid' : 'none',
+                        borderColor: 'primary.main',
+                        fontWeight: isToday ? 800 : 500,
+                        '&:hover': { bgcolor: selected ? 'primary.main' : 'action.hover', transform: 'scale(1.06)' },
+                        transition: 'transform 0.15s ease'
                       }}
                     >
                       {day}
@@ -299,21 +316,30 @@ export default function TodoList() {
               ) : (
                 <Stack spacing={2}>
                   <Box>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'error.main' }}>
-                      已逾期（{overdue.length}）
-                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                      <Box sx={{ width: 4, height: 20, borderRadius: 2, bgcolor: '#C33D3D' }} />
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'error.main' }}>
+                        已逾期（{overdue.length}）
+                      </Typography>
+                    </Stack>
                     {renderList(overdue, '无逾期待办')}
                   </Box>
                   <Box>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                      今天到期（{todayList.length}）
-                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                      <Box sx={{ width: 4, height: 20, borderRadius: 2, bgcolor: '#004E9A' }} />
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'primary.main' }}>
+                        今天到期（{todayList.length}）
+                      </Typography>
+                    </Stack>
                     {renderList(todayList, '今天无到期待办')}
                   </Box>
                   <Box>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                      未来（{future.length}）
-                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                      <Box sx={{ width: 4, height: 20, borderRadius: 2, bgcolor: '#0093BE' }} />
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                        未来（{future.length}）
+                      </Typography>
+                    </Stack>
                     {renderList(future, '暂无未来待办')}
                   </Box>
                   <Box>
