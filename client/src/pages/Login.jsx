@@ -10,9 +10,13 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import InputAdornment from '@mui/material/InputAdornment';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import KeyIcon from '@mui/icons-material/Key';
 import LoginIcon from '@mui/icons-material/Login';
+import BrightnessAutoIcon from '@mui/icons-material/BrightnessAuto';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { useAuth } from '../context/AuthContext';
@@ -21,9 +25,10 @@ import { errorMessage } from '../api';
 
 export default function Login() {
   const { login } = useAuth();
-  const { mode, toggleMode } = useThemeMode();
+  const { preference, setPreference } = useThemeMode();
   const navigate = useNavigate();
   const location = useLocation();
+  const [themeMenu, setThemeMenu] = useState(null);
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,8 +64,8 @@ export default function Login() {
       }}
     >
       <IconButton
-        onClick={toggleMode}
-        aria-label={mode === 'dark' ? '切换亮色模式' : '切换暗色模式'}
+        onClick={(event) => setThemeMenu(event.currentTarget)}
+        aria-label="主题模式"
         sx={{
           position: 'absolute',
           top: 16,
@@ -68,8 +73,46 @@ export default function Login() {
           color: 'text.secondary'
         }}
       >
-        {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+        {preference === 'dark' ? <DarkModeIcon /> : preference === 'light' ? <LightModeIcon /> : <BrightnessAutoIcon />}
       </IconButton>
+      <Menu anchorEl={themeMenu} open={Boolean(themeMenu)} onClose={() => setThemeMenu(null)}>
+        <MenuItem
+          selected={preference === 'light'}
+          onClick={() => {
+            setPreference('light');
+            setThemeMenu(null);
+          }}
+        >
+          <ListItemIcon>
+            <LightModeIcon fontSize="small" />
+          </ListItemIcon>
+          亮色模式
+        </MenuItem>
+        <MenuItem
+          selected={preference === 'dark'}
+          onClick={() => {
+            setPreference('dark');
+            setThemeMenu(null);
+          }}
+        >
+          <ListItemIcon>
+            <DarkModeIcon fontSize="small" />
+          </ListItemIcon>
+          暗色模式
+        </MenuItem>
+        <MenuItem
+          selected={preference === 'system'}
+          onClick={() => {
+            setPreference('system');
+            setThemeMenu(null);
+          }}
+        >
+          <ListItemIcon>
+            <BrightnessAutoIcon fontSize="small" />
+          </ListItemIcon>
+          跟随系统
+        </MenuItem>
+      </Menu>
       <Card sx={{ width: '100%', maxWidth: 420, p: { xs: 3, md: 4 }, boxShadow: (theme) => (theme.palette.mode === 'dark' ? '0 18px 48px rgba(0,0,0,0.45)' : '0 18px 48px rgba(20,50,85,0.10)') }}>
         <Stack spacing={3}>
           <Box sx={{ textAlign: 'center' }}>

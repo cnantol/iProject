@@ -1,18 +1,28 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { buildTheme } from '../theme/md3Theme';
 
-const ThemeContext = createContext({ mode: 'light', toggleMode: () => {} });
+const STORAGE_KEY = 'atlas_theme_preference';
+const ThemeContext = createContext({ mode: 'light', preference: 'system', setPreference: () => {} });
 
 export function ThemeContextProvider({ children }) {
   const systemDark = useMediaQuery('(prefers-color-scheme: dark)');
-  const [manualMode, setManualMode] = useState(null);
-  const mode = manualMode || (systemDark ? 'dark' : 'light');
+  const [preference, setPreferenceState] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return ['light', 'dark', 'system'].includes(saved) ? saved : 'system';
+  });
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, preference);
+  }, [preference]);
+  const mode = preference === 'system' ? (systemDark ? 'dark' : 'light') : preference;
   const theme = useMemo(() => buildTheme(mode), [mode]);
+  const setPreference = (value) => {
+    if (['light', 'dark', 'system'].includes(value)) setPreferenceState(value);
+  };
   const value = useMemo(
-    () => ({ mode, toggleMode: () => setManualMode((prev) => (prev === 'dark' ? 'light' : prev === 'light' ? 'dark' : systemDark ? 'light' : 'dark')) }),
-    [mode, systemDark]
+    () => ({ mode, preference, setPreference }),
+    [mode, preference]
   );
   return (
     <ThemeContext.Provider value={value}>

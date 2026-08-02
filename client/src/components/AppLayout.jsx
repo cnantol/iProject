@@ -8,7 +8,6 @@ import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import Tooltip from '@mui/material/Tooltip';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
@@ -23,6 +22,7 @@ import PaymentsIcon from '@mui/icons-material/Payments';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import StorageIcon from '@mui/icons-material/Storage';
 import SettingsIcon from '@mui/icons-material/Settings';
+import BrightnessAutoIcon from '@mui/icons-material/BrightnessAuto';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
@@ -49,9 +49,10 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const { mode, toggleMode } = useThemeMode();
+  const { mode, preference, setPreference } = useThemeMode();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(null);
+  const [themeMenu, setThemeMenu] = useState(null);
 
   const drawerContent = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -126,11 +127,47 @@ export default function AppLayout() {
             <Typography variant="subtitle1" sx={{ fontWeight: 700, flex: 1 }}>
               项目全生命周期管理
             </Typography>
-            <Tooltip title={mode === 'dark' ? '切换亮色模式' : '切换暗色模式'}>
-              <IconButton onClick={toggleMode} color="inherit">
-                {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
-              </IconButton>
-            </Tooltip>
+            <IconButton onClick={(event) => setThemeMenu(event.currentTarget)} color="inherit" title="主题模式">
+              {preference === 'dark' ? <DarkModeIcon /> : preference === 'light' ? <LightModeIcon /> : <BrightnessAutoIcon />}
+            </IconButton>
+            <Menu anchorEl={themeMenu} open={Boolean(themeMenu)} onClose={() => setThemeMenu(null)}>
+              <MenuItem
+                selected={preference === 'light'}
+                onClick={() => {
+                  setPreference('light');
+                  setThemeMenu(null);
+                }}
+              >
+                <ListItemIcon>
+                  <LightModeIcon fontSize="small" />
+                </ListItemIcon>
+                亮色模式
+              </MenuItem>
+              <MenuItem
+                selected={preference === 'dark'}
+                onClick={() => {
+                  setPreference('dark');
+                  setThemeMenu(null);
+                }}
+              >
+                <ListItemIcon>
+                  <DarkModeIcon fontSize="small" />
+                </ListItemIcon>
+                暗色模式
+              </MenuItem>
+              <MenuItem
+                selected={preference === 'system'}
+                onClick={() => {
+                  setPreference('system');
+                  setThemeMenu(null);
+                }}
+              >
+                <ListItemIcon>
+                  <BrightnessAutoIcon fontSize="small" />
+                </ListItemIcon>
+                跟随系统
+              </MenuItem>
+            </Menu>
             <IconButton onClick={(event) => setUserMenu(event.currentTarget)} color="inherit">
               <AccountCircleIcon />
             </IconButton>

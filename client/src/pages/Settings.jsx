@@ -38,12 +38,14 @@ import EditIcon from '@mui/icons-material/Edit';
 import HistoryIcon from '@mui/icons-material/History';
 import LinkIcon from '@mui/icons-material/Link';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
+import PersonIcon from '@mui/icons-material/Person';
 import RestoreIcon from '@mui/icons-material/Restore';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SaveIcon from '@mui/icons-material/Save';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import api, { errorMessage } from '../api';
+import { useAuth } from '../context/AuthContext';
 import { IMPORT_TARGET_LABELS } from '../utils/constants';
 import { fmtDateTime, authUrl } from '../utils/helpers';
 
@@ -1246,6 +1248,7 @@ function QuoteStyle({ onError }) {
 }
 
 function SystemManager({ onError }) {
+  const { updateUser } = useAuth();
   const [orderOptions, setOrderOptions] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [correction, setCorrection] = useState({ delivered: '', invoiced: '', total_amount: '', target_status: '' });
@@ -1257,6 +1260,8 @@ function SystemManager({ onError }) {
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditPage, setAuditPage] = useState(1);
   const [auditTotal, setAuditTotal] = useState(0);
+  const [account, setAccount] = useState({ current_password: '', username: '', new_password: '', confirm_password: '' });
+  const [accountSaving, setAccountSaving] = useState(false);
 
   const loadOrders = async () => {
     try {
@@ -1363,11 +1368,88 @@ function SystemManager({ onError }) {
     }
   };
 
+  const saveAccount = async () => {
+    if (!account.current_password) {
+      onError('请输入当前密码');
+      return;
+    }
+    if (account.new_password && account.new_password !== account.confirm_password) {
+      onError('两次输入的新密码不一致');
+      return;
+    }
+    if (!account.username.trim() && !account.new_password) {
+      onError('请填写新用户名或新密码');
+      return;
+    }
+    setAccountSaving(true);
+    onError('');
+    try {
+      const { data } = await api.put('/auth/profile', {
+        currentPassword: account.current_password,
+        username: account.username.trim() || undefined,
+        newPassword: account.new_password || undefined
+      });
+      if (data.user) updateUser(data.user);
+      setAccount({ current_password: '', username: '', new_password: '', confirm_password: '' });
+      window.alert('账户信息已更新');
+    } catch (err) {
+      onError(errorMessage(err));
+    } finally {
+      setAccountSaving(false);
+    }
+  };
+
   return (
     <Card>
       <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
       <CardContent>
         <Stack spacing={2}>
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
+              <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <PersonIcon fontSize="small" />
+              </Box>
+              <Typography variant="h6">账户设置</Typography>
+            </Stack>
+            <Stack spacing={1.5} sx={{ maxWidth: 560 }}>
+              <TextField
+                label="当前密码"
+                type="password"
+                size="small"
+                value={account.current_password}
+                onChange={(e) => setAccount((prev) => ({ ...prev, current_password: e.target.value }))}
+              />
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                <TextField
+                  label="新用户名（留空不修改）"
+                  size="small"
+                  value={account.username}
+                  onChange={(e) => setAccount((prev) => ({ ...prev, username: e.target.value }))}
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  label="新密码（留空不修改）"
+                  type="password"
+                  size="small"
+                  value={account.new_password}
+                  onChange={(e) => setAccount((prev) => ({ ...prev, new_password: e.target.value }))}
+                  sx={{ flex: 1 }}
+                />
+              </Stack>
+              <TextField
+                label="确认新密码"
+                type="password"
+                size="small"
+                value={account.confirm_password}
+                onChange={(e) => setAccount((prev) => ({ ...prev, confirm_password: e.target.value }))}
+              />
+              <Box>
+                <Button variant="contained" startIcon={<SaveIcon />} onClick={saveAccount} disabled={accountSaving}>
+                  {accountSaving ? <CircularProgress size={18} color="inherit" /> : '保存账户设置'}
+                </Button>
+              </Box>
+            </Stack>
+          </Box>
           <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
               <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

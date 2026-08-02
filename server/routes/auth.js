@@ -36,4 +36,32 @@ router.post('/change-password', authenticate, (req, res) => {
   return res.json({ message: '密码修改成功' });
 });
 
+router.put('/profile', authenticate, (req, res) => {
+  const { currentPassword, username: newUsername, newPassword } = req.body || {};
+  if (!currentPassword) return badRequest(res, '请输入当前密码');
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return badRequest(res, '用户不存在');
+  if (!bcrypt.compareSync(String(currentPassword), user.password)) {
+    return badRequest(res, '当前密码不正确');
+  }
+  let nextUsername = user.username;
+  if (newUsername !== undefined && String(newUsername).trim() !== '') {
+    const trimmed = String(newUsername).trim();
+    if (trimmed.length < 2 || trimmed.length > 50) return badRequest(res, '用户名长度需为 2-50 位');
+    if (!/^[\w\u4e00-\u9fa5.-]+$/.test(trimmed)) return badRequest(res, '用户名包含非法字符');
+    const exists = db.prepare('SELECT id FROM users WHERE username = ? AND id <> ?').get(trimmed, user.id);
+    if (exists) return badRequest(res, '用户名已被使用');
+    nextUsername = trimmed;
+  }
+  let nextPassword = user.password;
+  if (newPassword !== undefined && String(newPassword) !== '') {
+    if (String(newPassword).length < 6) return badRequest(res, '新密码长度不能少于 6 位');
+    nextPassword = bcrypt.hashSync(String(newPassword), 10);
+  }
+  db.prepare('UPDATE users SET username = ?, password = ?, updated_at = ? WHERE id = ?').run(nextUsername, nextPassword, nowUtc(), user.id);
+  writeAudit(db, { userId: user.id, action: 'other', entityType: 'user', entityId: user.id, detail: { event: 'update_profile' } });
+  return res.json({ user: { id: user.id, username: nextUsername }, message: '账户信息已更新' });
+});
+
 export default router;

@@ -4,6 +4,15 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import CheckIcon from '@mui/icons-material/Check';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import DescriptionIcon from '@mui/icons-material/Description';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import LockIcon from '@mui/icons-material/Lock';
+import PaidIcon from '@mui/icons-material/Paid';
+import PersonIcon from '@mui/icons-material/Person';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import { STEP_ORDER, STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { STEP_KEY_INDEX } from '../utils/helpers';
 
@@ -22,6 +31,18 @@ const fillLine = keyframes({
   from: { width: '0%' },
   to: { width: '100%' }
 });
+
+const STEP_ICONS = {
+  customer_info: <PersonIcon sx={{ fontSize: 18 }} />,
+  proposal: <DescriptionIcon sx={{ fontSize: 18 }} />,
+  quotation: <RequestQuoteIcon sx={{ fontSize: 18 }} />,
+  approval_pending: <FactCheckIcon sx={{ fontSize: 18 }} />,
+  bid_decision: <EmojiEventsIcon sx={{ fontSize: 18 }} />,
+  finance: <AccountBalanceIcon sx={{ fontSize: 18 }} />,
+  shipping_invoicing: <LocalShippingIcon sx={{ fontSize: 18 }} />,
+  commission: <PaidIcon sx={{ fontSize: 18 }} />,
+  closed: <LockIcon sx={{ fontSize: 18 }} />
+};
 
 export default function OrderStepper({ order, activeKey, onSelect }) {
   const currentIndex = STEP_KEY_INDEX[order?.status];
@@ -82,7 +103,7 @@ export default function OrderStepper({ order, activeKey, onSelect }) {
                     '&:hover': disabled ? undefined : { transform: 'scale(1.06)' }
                   })}
                 >
-                  {done ? <CheckIcon sx={{ fontSize: 18 }} /> : index + 1}
+                  {done ? <CheckIcon sx={{ fontSize: 18 }} /> : STEP_ICONS[step.key] || index + 1}
                 </Box>
                 <Typography
                   variant="caption"

@@ -19,10 +19,11 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
 import InboxIcon from '@mui/icons-material/Inbox';
-import api from '../api';
+import api, { errorMessage } from '../api';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { fmtMoney } from '../utils/helpers';
 
@@ -34,7 +35,8 @@ export default function OrderList() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const limit = 20;
+  const [deletingId, setDeletingId] = useState(null);
+  const limit = 10;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,6 +57,20 @@ export default function OrderList() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const removeOrder = async (order) => {
+    if (!window.confirm(`确认删除订单「${order.order_id}」？删除后不可恢复。`)) return;
+    setDeletingId(order.id);
+    setError('');
+    try {
+      await api.delete(`/orders/${order.id}`);
+      load();
+    } catch (err) {
+      setError(errorMessage(err, '删除订单失败'));
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <Stack spacing={2}>
@@ -124,7 +140,7 @@ export default function OrderList() {
           <>
             <Table size="small">
               <TableHead>
-                <TableRow>
+                <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
                   <TableCell>订单号</TableCell>
                   <TableCell>项目名称</TableCell>
                   <TableCell>最终客户</TableCell>
@@ -132,21 +148,23 @@ export default function OrderList() {
                   <TableCell>Sales Order</TableCell>
                   <TableCell>状态</TableCell>
                   <TableCell align="right">金额</TableCell>
+                  <TableCell align="right" sx={{ width: 80 }}>操作</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {(data?.items || []).length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 8, color: 'text.secondary' }}>
+                    <TableCell colSpan={8} align="center" sx={{ py: 8, color: 'text.secondary' }}>
                       <Stack spacing={1} alignItems="center">
-                        <InboxIcon sx={{ fontSize: 42, color: 'text.disabled' }} />
-                        <Typography variant="body2">暂无符合条件的订单</Typography>
+                        <InboxIcon sx={{ fontSize: 56, color: 'text.disabled' }} />
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>暂无符合条件的订单</Typography>
+                        <Typography variant="caption" color="text.secondary">可调整搜索条件或点击右上角“新建订单”</Typography>
                       </Stack>
                     </TableCell>
                   </TableRow>
                 )}
                 {(data?.items || []).map((order) => (
-                  <TableRow key={order.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/orders/${order.id}`)}>
+                  <TableRow key={order.id} hover sx={{ cursor: 'pointer', transition: 'background-color 0.15s ease' }} onClick={() => navigate(`/orders/${order.id}`)}>
                     <TableCell sx={{ fontWeight: 700, color: 'primary.main' }}>{order.order_id}</TableCell>
                     <TableCell>{order.project_name || '-'}</TableCell>
                     <TableCell>{order.end_customer_name || '-'}</TableCell>
@@ -161,19 +179,31 @@ export default function OrderList() {
                       />
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>{fmtMoney(order.total_amount)}</TableCell>
+                    <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        title="删除订单"
+                        disabled={deletingId === order.id}
+                        onClick={() => removeOrder(order)}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-            {(data?.total || 0) > limit && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2.5 }}>
+            {(data?.total || 0) > 0 && (
+              <Stack direction="row" alignItems="center" justifyContent="center" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ py: 1.5, px: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+                <Typography variant="body2" color="text.secondary">共 {data?.total || 0} 条</Typography>
                 <Pagination
-                  count={Math.ceil((data.total || 0) / limit)}
+                  count={Math.max(1, Math.ceil((data?.total || 0) / limit))}
                   page={page}
                   onChange={(_, value) => setPage(value)}
                   color="primary"
                 />
-              </Box>
+              </Stack>
             )}
           </>
         )}
