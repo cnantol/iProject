@@ -33,10 +33,10 @@ import { useThemeMode } from '../context/ThemeContext';
 
 const NAV_ITEMS = [
   { path: '/', label: '首页看板', icon: <DashboardIcon /> },
+  { path: '/todos', label: '待办事项', icon: <CheckCircleIcon /> },
   { path: '/orders', label: '订单列表', icon: <ListAltIcon /> },
   { path: '/sales-history', label: '历史销售', icon: <HistoryIcon /> },
   { path: '/commission', label: '佣金结算', icon: <PaymentsIcon /> },
-  { path: '/todos', label: '待办事项', icon: <CheckCircleIcon /> },
   { path: '/materials', label: '基础数据', icon: <StorageIcon /> },
   { path: '/settings', label: '系统设置', icon: <SettingsIcon /> }
 ];
@@ -124,7 +124,7 @@ export default function AppLayout() {
               </IconButton>
             )}
             <Typography variant="subtitle1" sx={{ fontWeight: 700, flex: 1 }}>
-              Atlas Copco 销售项目全生命周期管理
+              项目全生命周期管理
             </Typography>
             <Tooltip title={mode === 'dark' ? '切换亮色模式' : '切换暗色模式'}>
               <IconButton onClick={toggleMode} color="inherit">

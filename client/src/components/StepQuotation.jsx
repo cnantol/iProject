@@ -362,56 +362,83 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
           </Alert>
         </Box>
       )}
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2, flexWrap: 'wrap', rowGap: 1 }} alignItems="center">
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>报价轮次</InputLabel>
-          <Select value={activeRound?.id || ''} label="报价轮次" onChange={(e) => setActiveRoundId(Number(e.target.value))}>
-            {quotations.map((round) => (
-              <MenuItem key={round.id} value={round.id}>
-                {round.round_label || `R${round.round_no}`}（{round.status === 'submitted' ? '已提交' : '草稿'}）
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        {activeRound && (
-          <Chip
-            label={`合计：¥ ${fmtMoney(rows.length > 0 ? displayTotal : activeRound.total_amount)}`}
-            color={roundLocked ? 'success' : 'default'}
-            variant={roundLocked ? 'filled' : 'outlined'}
-          />
-        )}
-        {activeRound && (
-          <Chip
-            icon={<Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: saveStatus.color }} />}
-            label={saveStatus.label}
-            sx={{ color: saveStatus.color, bgcolor: `${saveStatus.color}1A`, border: `1px solid ${saveStatus.color}38`, fontWeight: 700 }}
-          />
-        )}
-        <Box sx={{ flex: 1 }} />
+      <Box sx={{ mb: 2, borderRadius: 2.5, border: 1, borderColor: 'divider', overflow: 'hidden', bgcolor: 'background.paper' }}>
+        <Box sx={{ height: 4, bgcolor: 'primary.main' }} />
+        <Stack spacing={1.5} sx={{ p: 1.5 }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', md: 'center' }} flexWrap="wrap" rowGap={1}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 92 }}>
+              <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>报价信息</Typography>
+            </Stack>
+            <FormControl size="small" sx={{ minWidth: 220 }}>
+              <InputLabel>报价轮次</InputLabel>
+              <Select value={activeRound?.id || ''} label="报价轮次" onChange={(e) => setActiveRoundId(Number(e.target.value))}>
+                {quotations.map((round) => (
+                  <MenuItem key={round.id} value={round.id}>
+                    {round.round_label || `R${round.round_no}`}（{round.status === 'submitted' ? '已提交' : '草稿'}）
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {activeRound && (
+              <Chip
+                label={`合计：¥ ${fmtMoney(rows.length > 0 ? displayTotal : activeRound.total_amount)}`}
+                color={roundLocked ? 'success' : 'default'}
+                variant={roundLocked ? 'filled' : 'outlined'}
+                sx={{ whiteSpace: 'nowrap' }}
+              />
+            )}
+            {activeRound && (
+              <Chip
+                icon={<Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: saveStatus.color }} />}
+                label={saveStatus.label}
+                sx={{ color: saveStatus.color, bgcolor: `${saveStatus.color}1A`, border: `1px solid ${saveStatus.color}38`, fontWeight: 700, whiteSpace: 'nowrap' }}
+              />
+            )}
+            <Box sx={{ flex: 1 }} />
+          </Stack>
           {!readOnly && order.status === 'quotation' && (
-            <>
-              <Button size="small" variant="contained" startIcon={<SaveIcon />} onClick={saveAllItems} disabled={saving}>
-                批量保存
-              </Button>
-              <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={addRound}>
-                新增轮次
-              </Button>
-              <Button size="small" variant="outlined" component="label" startIcon={<UploadFileIcon />}>
-                批量导入
-                <input type="file" hidden accept=".xlsx,.xls" onChange={importItems} />
-              </Button>
-              <Button size="small" variant="outlined" startIcon={<ContentPasteIcon />} onClick={() => setPasteOpen(true)}>
-                粘贴录入
-              </Button>
-              <IconButton size="small" color="error" onClick={deleteRound} title="删除当前轮次">
-                <DeleteIcon />
-              </IconButton>
-              <Button size="small" variant="outlined" startIcon={<PictureAsPdfIcon />} onClick={exportPdf}>
-                导出 PDF
-            </Button>
-          </>
-        )}
-      </Stack>
+            <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 1.5 }}>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', md: 'center' }} justifyContent="space-between" flexWrap="wrap" rowGap={1}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>操作</Typography>
+                </Stack>
+                <Stack direction="row" spacing={2} alignItems="center" justifyContent={{ xs: 'flex-start', md: 'flex-end' }} sx={{ flexWrap: { xs: 'wrap', md: 'nowrap' }, minWidth: 0 }}>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>明细</Typography>
+                    <Button size="small" variant="contained" startIcon={<SaveIcon />} onClick={saveAllItems} disabled={saving}>
+                      批量保存
+                    </Button>
+                    <Button size="small" variant="outlined" component="label" startIcon={<UploadFileIcon />}>
+                      批量导入
+                      <input type="file" hidden accept=".xlsx,.xls" onChange={importItems} />
+                    </Button>
+                    <Button size="small" variant="outlined" startIcon={<ContentPasteIcon />} onClick={() => setPasteOpen(true)}>
+                      粘贴录入
+                    </Button>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>轮次</Typography>
+                    <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={addRound}>
+                      新增轮次
+                    </Button>
+                    <IconButton size="small" color="error" onClick={deleteRound} title="删除当前轮次">
+                      <DeleteIcon />
+                    </IconButton>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>输出</Typography>
+                    <Button size="small" variant="outlined" startIcon={<PictureAsPdfIcon />} onClick={exportPdf} sx={{ whiteSpace: 'nowrap', minWidth: 'max-content' }}>
+                      导出 PDF
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Stack>
+            </Box>
+          )}
+        </Stack>
+      </Box>
 
       <Table size="small">
         <TableHead>

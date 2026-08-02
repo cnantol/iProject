@@ -6,10 +6,8 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
 import LinearProgress from '@mui/material/LinearProgress';
-import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
@@ -33,7 +31,8 @@ import { fmtMoney, fmtDate } from '../utils/helpers';
 
 function StatCard({ label, value, accent, badge, icon }) {
   return (
-    <Card>
+    <Card sx={{ position: 'relative', overflow: 'hidden', height: '100%', transition: 'transform 0.2s ease, box-shadow 0.2s ease', '&:hover': { transform: 'translateY(-2px)', boxShadow: 3 } }}>
+      <Box sx={{ height: 4, bgcolor: accent || 'primary.main' }} />
       <CardContent sx={{ p: 2.25 }}>
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
           <Box>
@@ -126,59 +125,14 @@ export default function Dashboard() {
       </Grid>
 
       <Grid container spacing={2}>
-        <Grid item xs={12} lg={8}>
-          <Card>
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}>
+            <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
             <CardContent>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
-                <Typography variant="h6">最近项目</Typography>
-                <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/orders')}>
-                  全部订单
-                </Button>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+                <Typography variant="h6">状态汇总</Typography>
               </Stack>
-              {(data.recentOrders || []).length === 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                  暂无数据
-                </Typography>
-              ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>订单号</TableCell>
-                      <TableCell>项目名称</TableCell>
-                      <TableCell>最终客户</TableCell>
-                      <TableCell>状态</TableCell>
-                      <TableCell align="right">金额</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {(data.recentOrders || []).map((order) => (
-                      <TableRow key={order.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/orders/${order.id}`)}>
-                        <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{order.order_id}</TableCell>
-                        <TableCell>{order.project_name || '-'}</TableCell>
-                        <TableCell>{order.end_customer_name || '-'}</TableCell>
-                        <TableCell>
-                          <Chip
-                            size="small"
-                            label={STATUS_LABELS[order.status] || order.status}
-                            icon={<Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: STATUS_COLORS[order.status] || '#78909C' }} />}
-                            sx={{ bgcolor: `${STATUS_COLORS[order.status] || '#78909C'}22`, color: STATUS_COLORS[order.status] || '#78909C' }}
-                          />
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtMoney(order.total_amount)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} lg={4}>
-          <Card sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 1.5 }}>
-                状态分布
-              </Typography>
               <Stack spacing={1.25}>
                 {[...statusMap.entries()].length === 0 && (
                   <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
@@ -205,44 +159,112 @@ export default function Dashboard() {
               </Stack>
             </CardContent>
           </Card>
-          <Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card sx={{ height: '100%' }}>
+            <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
             <CardContent>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-                <Typography variant="h6">待办事项</Typography>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+                  <Typography variant="h6">待办事项</Typography>
+                </Stack>
                 <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/todos')}>
                   查看全部
                 </Button>
               </Stack>
               {(data.recentTodos || []).length === 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
                   暂无待办
                 </Typography>
               ) : (
-                <List dense disablePadding>
+                <Grid container spacing={1.5}>
                   {(data.recentTodos || []).map((todo) => (
-                    <Box key={todo.id}>
+                    <Grid item xs={12} sm={6} key={todo.id}>
                       <ListItemButton
-                        sx={{ px: 1, borderRadius: 1.5 }}
+                        sx={{
+                          height: '100%',
+                          px: 1.5,
+                          py: 1.25,
+                          border: 1,
+                          borderColor: 'divider',
+                          borderRadius: 2,
+                          transition: 'transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease',
+                          '&:hover': { bgcolor: 'action.hover', transform: 'translateY(-2px)', boxShadow: 2 }
+                        }}
                         onClick={() => (todo.order_ref ? navigate(`/orders/${todo.order_ref}`) : navigate('/todos'))}
                       >
                         <ListItemText
                           primary={todo.title}
                           secondary={todo.due_date ? `截止：${fmtDate(todo.due_date)}` : '无截止日期'}
-                          primaryTypographyProps={{ fontSize: 14 }}
+                          primaryTypographyProps={{ fontSize: 14, fontWeight: 700 }}
                         />
                         {todo.due_date && todo.due_date < new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10) && (
                           <Chip size="small" color="error" label="逾期" />
                         )}
                       </ListItemButton>
-                      <Divider />
-                    </Box>
+                    </Grid>
                   ))}
-                </List>
+                </Grid>
               )}
             </CardContent>
           </Card>
         </Grid>
       </Grid>
+      <Card>
+        <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
+        <CardContent>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+              <Typography variant="h6">最近项目</Typography>
+            </Stack>
+            <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/orders')}>
+              全部订单
+            </Button>
+          </Stack>
+          {(data.recentOrders || []).length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+              暂无数据
+            </Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                  <TableCell>订单号</TableCell>
+                  <TableCell>项目名称</TableCell>
+                  <TableCell>最终客户</TableCell>
+                  <TableCell>状态</TableCell>
+                  <TableCell align="right">金额</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(data.recentOrders || []).slice(0, 10).map((order) => (
+                  <TableRow
+                    key={order.id}
+                    hover
+                    sx={{ cursor: 'pointer', transition: 'background-color 0.15s ease', '&:hover': { bgcolor: 'action.hover' } }}
+                    onClick={() => navigate(`/orders/${order.id}`)}
+                  >
+                    <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{order.order_id}</TableCell>
+                    <TableCell>{order.project_name || '-'}</TableCell>
+                    <TableCell>{order.end_customer_name || '-'}</TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        label={STATUS_LABELS[order.status] || order.status}
+                        icon={<Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: STATUS_COLORS[order.status] || '#78909C' }} />}
+                        sx={{ bgcolor: `${STATUS_COLORS[order.status] || '#78909C'}22`, color: STATUS_COLORS[order.status] || '#78909C' }}
+                      />
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtMoney(order.total_amount)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </Stack>
   );
 }

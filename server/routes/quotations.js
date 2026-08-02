@@ -176,7 +176,7 @@ function findCjkFont() {
   return null;
 }
 
-function buildQuotationPdf(order, round, items, customerNames) {
+function buildQuotationPdf(order, round, items, customerNames, styleOverride = null) {
   const doc = new PDFDocument({ size: 'A4', margin: 48 });
   let style = { company_name: 'Atlas Copco', primary_color: '#004E9A' };
   try {
@@ -184,66 +184,119 @@ function buildQuotationPdf(order, round, items, customerNames) {
   } catch {
     // 使用默认品牌样式
   }
+  if (styleOverride) style = styleOverride;
+  const labels = style.labels || {};
+  const titleAlign = style.title_alignment || 'center';
+  const infoAlign = style.info_alignment || 'center';
+  const headerAlign = style.header_alignment || 'center';
+  const footerAlign = style.footer_alignment || 'center';
+  const visibility = style.field_visibility || {};
+  const show = (key) => visibility[key] !== 0 && visibility[key] !== false;
   const fontFile = findCjkFont();
   if (fontFile) doc.registerFont('cjk', fontFile);
   const font = (bold = false) => (fontFile ? (bold ? 'cjk' : 'cjk') : 'Helvetica');
-  doc.font(font()).fontSize(16).fillColor(style.primary_color).text(`${style.company_name} 报价单`, { align: 'center' });
-  doc.moveDown(0.4);
+  if (style.header_text) {
+    doc.font(font()).fontSize(10).fillColor('#555555').text(String(style.header_text), { align: headerAlign });
+    doc.moveDown(0.4);
+  }
+  if (style.logo && /^data:image\/(png|jpeg|jpg);base64,/i.test(String(style.logo))) {
+    try {
+      const logoBuffer = Buffer.from(String(style.logo).split(',')[1], 'base64');
+      const logoWidth = Math.min(120, (48 + 499 + 48) / 3);
+      doc.image(logoBuffer, (48 + 499 + 48 - logoWidth) / 2, doc.y, { width: logoWidth });
+      doc.moveDown(0.6);
+    } catch {
+      // Logo 数据损坏时跳过，不影响 PDF 生成
+    }
+  }
+  doc.font(font()).fontSize(16).fillColor(style.primary_color).text(`${style.company_name || 'Atlas Copco'} ${labels.quote_title || '报价单'}`, { align: titleAlign });
+  doc.moveDown(0.5);
   doc.fontSize(10).fillColor('#444444');
-  doc.text(`报价单编号：Q-${todayLocal().replace(/-/g, '')}-R${round.round_no}`, { align: 'center' });
-  doc.text(`订单号：${order.order_id || ''}`, { align: 'center' });
-  doc.text(`项目名称：${order.project_name || ''}`, { align: 'center' });
-  doc.text(`最终客户：${customerNames.end || ''}    合同客户：${customerNames.contract || ''}`, { align: 'center' });
+  if (show('quote_no')) doc.text(`${labels.quote_no || '报价单编号'}：Q-${todayLocal().replace(/-/g, '')}-R${round.round_no}`, { align: infoAlign });
+  if (show('order_no')) doc.text(`${labels.order_no || '订单号'}：${order.order_id || ''}`, { align: infoAlign });
+  if (show('project_name')) doc.text(`${labels.project_name || '项目名称'}：${order.project_name || ''}`, { align: infoAlign });
+  if (show('customer')) {
+    doc.text(
+      `${labels.end_customer || '最终客户'}：${customerNames.end || ''}    ${labels.contract_customer || '合同客户'}：${customerNames.contract || ''}`,
+      { align: infoAlign }
+    );
+  }
+  if (show('contact_info')) {
+    const contactParts = [style.company_address, style.company_phone, style.company_email].filter(Boolean);
+    if (contactParts.length > 0) doc.text(contactParts.join('    '), { align: infoAlign });
+  }
   doc.moveDown(1);
-  doc.fontSize(11).fillColor('#000000').text('报价明细', { underline: true });
+  doc.fontSize(11).fillColor(style.primary_color).text(labels.detail_title || '报价明细', { underline: true });
   doc.moveDown(0.4);
 
   const tableTop = doc.y;
-  const columns = [
-    { label: '物料号', width: 88 },
-    { label: '描述', width: 170 },
-    { label: '类型', width: 62 },
-    { label: '价格来源', width: 62 },
-    { label: '单价', width: 72 },
-    { label: '数量', width: 58 },
-    { label: '行金额', width: 82 }
+  const baseColumns = [
+    { key: 'material_no', label: labels.material_no || '物料号', width: 88 },
+    { key: 'description', label: labels.description || '描述', width: 170 },
+    { key: 'type', label: labels.type || '类型', width: 62 },
+    { key: 'price_source', label: labels.price_source || '价格来源', width: 62 },
+    { key: 'unit_price', label: labels.unit_price || '单价', width: 72 },
+    { key: 'qty', label: labels.qty || '数量', width: 58 },
+    { key: 'line_amount', label: labels.line_amount || '行金额', width: 82 }
   ];
+  const columns = baseColumns.filter((col) => show(col.key));
+  const baseTotal = baseColumns.reduce((sum, col) => sum + col.width, 0);
+  let usedWidth = 0;
+  columns.forEach((col, index) => {
+    if (index === columns.length - 1) {
+      col.width = 499 - usedWidth;
+    } else {
+      col.width = Math.round((col.width / baseTotal) * 499);
+      usedWidth += col.width;
+    }
+  });
+  const numericKeys = new Set(['unit_price', 'qty', 'line_amount']);
   let x = 48;
-  doc.font(font(true)).fontSize(9).fillColor('#ffffff');
-  doc.rect(48, tableTop, 499, 20).fill(style.primary_color);
-  doc.fillColor('#ffffff');
-  for (const col of columns) {
-    doc.text(col.label, x + 4, tableTop + 6, { width: col.width - 8 });
-    x += col.width;
+  if (columns.length === 0) {
+    doc.font(font()).fontSize(10).fillColor('#888888').text('未启用任何列', { align: infoAlign });
+  } else {
+    doc.font(font(true)).fontSize(9).fillColor('#ffffff');
+    doc.rect(48, tableTop, 499, 20).fill(style.primary_color);
+    doc.fillColor('#ffffff');
+    for (const col of columns) {
+      doc.text(col.label, x + 4, tableTop + 6, { width: col.width - 8, align: numericKeys.has(col.key) ? 'right' : 'left', lineBreak: false });
+      x += col.width;
+    }
   }
   doc.font(font()).fillColor('#000000');
   let y = tableTop + 24;
   for (const item of items) {
+    if (columns.length === 0) break;
     if (y > 760) {
       doc.addPage();
       y = 48;
     }
     x = 48;
-    const values = [
-      item.material_no || '',
-      (item.description || '').slice(0, 34),
-      item.material_type === 'non_standard' ? '非标' : '标准',
-      { framework: '协议价', guide_price: '指导价', manual: '手工' }[item.price_source] || item.price_source || '',
-      item.unit_price_ex_vat == null ? '' : Number(item.unit_price_ex_vat).toFixed(4),
-      item.qty == null ? '' : String(item.qty),
-      item.line_amount == null ? '' : Number(item.line_amount).toFixed(2)
-    ];
+    const valueMap = {
+      material_no: item.material_no || '',
+      description: (item.description || '').slice(0, 34),
+      type: item.material_type === 'non_standard' ? '非标' : '标准',
+      price_source: { framework: '协议价', guide_price: '指导价', manual: '手工' }[item.price_source] || item.price_source || '',
+      unit_price: item.unit_price_ex_vat == null ? '' : Number(item.unit_price_ex_vat).toFixed(4),
+      qty: item.qty == null ? '' : String(item.qty),
+      line_amount: item.line_amount == null ? '' : Number(item.line_amount).toFixed(2)
+    };
+    const values = columns.map((col) => valueMap[col.key]);
     doc.font(font()).fontSize(9);
     values.forEach((value, idx) => {
-      doc.text(String(value), x + 4, y + 2, { width: columns[idx].width - 8 });
+      doc.text(String(value), x + 4, y + 2, { width: columns[idx].width - 8, align: numericKeys.has(columns[idx].key) ? 'right' : 'left', lineBreak: false });
       x += columns[idx].width;
     });
     y += 22;
   }
   doc.moveDown(1);
-  doc.font(font(true)).fontSize(11).fillColor(style.primary_color).text(`合计（未税）：${round.total_amount == null ? '0.00' : Number(round.total_amount).toFixed(2)}`, { align: 'right' });
-  doc.moveDown(2);
-  doc.font(font()).fontSize(9).fillColor('#666666').text(`生成时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, { align: 'center' });
+  doc.font(font(true)).fontSize(11).fillColor(style.primary_color).text(`${labels.total || '合计（未税）'}：${round.total_amount == null ? '0.00' : Number(round.total_amount).toFixed(2)}`, { align: 'right' });
+  doc.moveDown(1.4);
+  doc.font(font()).fontSize(9).fillColor('#666666').text(`${labels.generated_at || '生成时间'}：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`, { align: footerAlign });
+  if (style.footer_text) {
+    doc.moveDown(0.6);
+    doc.font(font()).fontSize(9).fillColor('#888888').text(String(style.footer_text), { align: footerAlign });
+  }
   doc.end();
   return doc;
 }
@@ -717,4 +770,4 @@ router.post('/:orderId/quotations/:roundId/sync-from-proposal', (req, res) => {
 });
 
 export default router;
-export { resolvePrice, createRound, recomputeTotal };
+export { resolvePrice, createRound, recomputeTotal, buildQuotationPdf };

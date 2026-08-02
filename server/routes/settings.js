@@ -8,6 +8,7 @@ import { getDb, getDataDir, getUploadDir, closeDb, initDb, seedWorkflow, rotateJ
 import { upload } from '../middleware/upload.js';
 import { nowUtc, todayLocal, badRequest, notFound, conflict, isMoney, isBool, isValidDate, normalizeSo, writeAudit } from '../utils.js';
 import { loadOrderDetail, checkSalesOrderUnique } from './orders.js';
+import { buildQuotationPdf } from './quotations.js';
 
 const router = Router();
 
@@ -441,6 +442,7 @@ function createBackup() {
   const filename = `atlas-backup-${ts}.zip`;
   const zip = new AdmZip();
   if (fs.existsSync(dbPath)) zip.addFile('database.sqlite', fs.readFileSync(dbPath));
+  if (fs.existsSync(quoteStyleFile())) zip.addFile('quote-style.json', fs.readFileSync(quoteStyleFile()));
   const uploads = getUploadDir();
   if (fs.existsSync(uploads)) {
     for (const file of fs.readdirSync(uploads)) {
@@ -460,15 +462,136 @@ router.post('/backup', (req, res) => {
 });
 
 // ---------- 报价单式样 ----------
+const QUOTE_STYLE_LABEL_KEYS = [
+  'quote_title',
+  'quote_no',
+  'order_no',
+  'project_name',
+  'end_customer',
+  'contract_customer',
+  'detail_title',
+  'total',
+  'generated_at',
+  'material_no',
+  'description',
+  'type',
+  'price_source',
+  'unit_price',
+  'qty',
+  'line_amount'
+];
+
+const QUOTE_STYLE_VISIBILITY_KEYS = [
+  'quote_no',
+  'order_no',
+  'project_name',
+  'customer',
+  'contact_info',
+  'material_no',
+  'description',
+  'type',
+  'price_source',
+  'unit_price',
+  'qty',
+  'line_amount'
+];
+
+function defaultQuoteStyle() {
+  return {
+    company_name: 'Atlas Copco',
+    primary_color: '#004E9A',
+    secondary_color: '#DCE8F5',
+    company_address: '',
+    company_phone: '',
+    company_email: '',
+    header_text: '',
+    footer_text: '',
+    font_family: 'sans',
+    title_alignment: 'center',
+    info_alignment: 'center',
+    header_alignment: 'center',
+    footer_alignment: 'center',
+    logo: null,
+    field_visibility: {
+      quote_no: 1,
+      order_no: 1,
+      project_name: 1,
+      customer: 1,
+      contact_info: 1,
+      material_no: 1,
+      description: 1,
+      type: 1,
+      price_source: 1,
+      unit_price: 1,
+      qty: 1,
+      line_amount: 1
+    },
+    labels: {
+      quote_title: '报价单',
+      quote_no: '报价单编号',
+      order_no: '订单号',
+      project_name: '项目名称',
+      end_customer: '最终客户',
+      contract_customer: '合同客户',
+      detail_title: '报价明细',
+      total: '合计（未税）',
+      generated_at: '生成时间',
+      material_no: '物料号',
+      description: '描述',
+      type: '类型',
+      price_source: '价格来源',
+      unit_price: '单价',
+      qty: '数量',
+      line_amount: '行金额'
+    }
+  };
+}
+
+function normalizeQuoteStyle(raw = {}) {
+  const defaults = defaultQuoteStyle();
+  const text = (value, fallback, max = 200) => (value === undefined || value === null ? fallback : String(value).trim().slice(0, max));
+  const color = (value, fallback) => (/^#[0-9A-Fa-f]{6}$/.test(String(value || '')) ? String(value) : fallback);
+  const labels = { ...defaults.labels };
+  const rawLabels = raw.labels && typeof raw.labels === 'object' ? raw.labels : {};
+  for (const key of QUOTE_STYLE_LABEL_KEYS) {
+    if (rawLabels[key] !== undefined) labels[key] = text(rawLabels[key], labels[key], 40);
+  }
+  const align = (value, fallback) => (['left', 'center', 'right'].includes(value) ? value : fallback);
+  const visibility = { ...defaults.field_visibility };
+  const rawVisibility = raw.field_visibility && typeof raw.field_visibility === 'object' ? raw.field_visibility : {};
+  for (const key of QUOTE_STYLE_VISIBILITY_KEYS) {
+    if (rawVisibility[key] !== undefined) visibility[key] = Number(rawVisibility[key]) === 1 || rawVisibility[key] === true ? 1 : 0;
+  }
+  const logo = raw.logo && /^data:image\/(png|jpeg|jpg);base64,/i.test(String(raw.logo)) && String(raw.logo).length <= 2_400_000 ? String(raw.logo) : null;
+  return {
+    company_name: text(raw.company_name, defaults.company_name, 80),
+    primary_color: color(raw.primary_color, defaults.primary_color),
+    secondary_color: color(raw.secondary_color, defaults.secondary_color),
+    company_address: text(raw.company_address, '', 200),
+    company_phone: text(raw.company_phone, '', 60),
+    company_email: text(raw.company_email, '', 120),
+    header_text: text(raw.header_text, '', 200),
+    footer_text: text(raw.footer_text, '', 200),
+    font_family: ['sans', 'serif', 'mono'].includes(raw.font_family) ? raw.font_family : defaults.font_family,
+    title_alignment: align(raw.title_alignment, defaults.title_alignment),
+    info_alignment: align(raw.info_alignment, defaults.info_alignment),
+    header_alignment: align(raw.header_alignment, defaults.header_alignment),
+    footer_alignment: align(raw.footer_alignment, defaults.footer_alignment),
+    logo,
+    field_visibility: visibility,
+    labels
+  };
+}
+
 function quoteStyleFile() {
   return path.join(getDataDir(), 'quote-style.json');
 }
 
 function readQuoteStyle() {
   try {
-    return JSON.parse(fs.readFileSync(quoteStyleFile(), 'utf8'));
+    return normalizeQuoteStyle(JSON.parse(fs.readFileSync(quoteStyleFile(), 'utf8')));
   } catch {
-    return { company_name: 'Atlas Copco', primary_color: '#004E9A' };
+    return defaultQuoteStyle();
   }
 }
 
@@ -477,13 +600,45 @@ router.get('/quote-style', (req, res) => {
 });
 
 router.put('/quote-style', (req, res) => {
-  const { company_name: companyName, primary_color: primaryColor } = req.body || {};
-  const style = {
-    company_name: companyName && String(companyName).trim() ? String(companyName).trim() : 'Atlas Copco',
-    primary_color: /^#[0-9A-Fa-f]{6}$/.test(String(primaryColor || '')) ? String(primaryColor) : '#004E9A'
-  };
+  const style = normalizeQuoteStyle(req.body || {});
   fs.writeFileSync(quoteStyleFile(), JSON.stringify(style, null, 2));
   return res.json(style);
+});
+
+router.post('/quote-style/test-pdf', (req, res) => {
+  const style = normalizeQuoteStyle(req.body?.style || readQuoteStyle());
+  const sampleOrder = { order_id: 'ORD-2026-TEST', project_name: '示例项目（测试）' };
+  const sampleRound = { round_no: 1, total_amount: 128500.5 };
+  const sampleItems = [
+    {
+      material_no: 'AC-1001',
+      description: '压缩机组示例',
+      material_type: 'standard',
+      price_source: 'guide_price',
+      unit_price_ex_vat: 128500.5,
+      qty: 1,
+      line_amount: 128500.5
+    },
+    {
+      material_no: 'AC-1002',
+      description: '备件套件示例',
+      material_type: 'non_standard',
+      price_source: 'manual',
+      unit_price_ex_vat: 0,
+      qty: 1,
+      line_amount: 0
+    }
+  ];
+  const customerNames = { end: '示例最终客户', contract: '示例合同客户' };
+  const doc = buildQuotationPdf(sampleOrder, sampleRound, sampleItems, customerNames, style);
+  const chunks = [];
+  doc.on('data', (chunk) => chunks.push(chunk));
+  doc.on('end', () => {
+    const buffer = Buffer.concat(chunks);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="quote-style-test.pdf"');
+    res.send(buffer);
+  });
 });
 
 // ---------- 定时自动备份 ----------
@@ -564,6 +719,8 @@ router.post('/restore', upload.single('file'), (req, res) => {
       fs.rmSync(getUploadDir(), { recursive: true, force: true });
       fs.cpSync(uploadsZip, getUploadDir(), { recursive: true });
     }
+    const styleZip = path.join(tmpDir, 'quote-style.json');
+    if (fs.existsSync(styleZip)) fs.copyFileSync(styleZip, quoteStyleFile());
     initDb(dataDir);
     writeAudit(getDb(), { userId: req.user.id, action: 'other', entityType: 'settings', detail: { event: 'restore', filename: req.file.originalname } });
     return res.json({ message: '还原成功' });

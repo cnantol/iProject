@@ -3,6 +3,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -26,14 +27,19 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
+import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import HandshakeIcon from '@mui/icons-material/Handshake';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import PriceCheckIcon from '@mui/icons-material/PriceCheck';
+import InboxIcon from '@mui/icons-material/Inbox';
 import api, { errorMessage } from '../api';
 import { fmtMoney } from '../utils/helpers';
 
 const TABS = [
-  { key: 'end_customer', label: '最终客户', url: 'end-customers' },
-  { key: 'contract_customer', label: '合同客户', url: 'contract-customers' },
-  { key: 'material', label: '框架协议价', url: 'materials' },
-  { key: 'guide_price', label: '系统指导价', url: 'guide-prices' }
+  { key: 'end_customer', label: '最终客户', url: 'end-customers', icon: <PeopleAltIcon /> },
+  { key: 'contract_customer', label: '合同客户', url: 'contract-customers', icon: <HandshakeIcon /> },
+  { key: 'material', label: '框架协议价', url: 'materials', icon: <InventoryIcon /> },
+  { key: 'guide_price', label: '系统指导价', url: 'guide-prices', icon: <PriceCheckIcon /> }
 ];
 
 export default function MaterialList() {
@@ -113,6 +119,7 @@ export default function MaterialList() {
     if (['unit_price_ex_vat', 'guide_unit_price_ex_vat'].includes(field)) return fmtMoney(row[field]);
     return row[field] || '-';
   };
+  const priceFields = ['unit_price_ex_vat', 'guide_unit_price_ex_vat'];
 
   return (
     <Stack spacing={2}>
@@ -129,21 +136,35 @@ export default function MaterialList() {
       </Stack>
       <Card>
         <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
-        <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ px: 1.5, pt: 0.5 }}>
+        <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ px: 1.5, pt: 0.5, '& .MuiTabs-indicator': { height: 3, borderRadius: 2 } }}>
           {TABS.map((item) => (
-            <Tab key={item.key} value={item.key} label={item.label} />
+            <Tab
+              key={item.key}
+              value={item.key}
+              label={item.label}
+              icon={item.icon}
+              iconPosition="start"
+              sx={{ '&.Mui-selected': { fontWeight: 800, color: 'primary.main' } }}
+            />
           ))}
         </Tabs>
         <Box sx={{ p: 2 }}>
-          <TextField
-            size="small"
-            label="搜索"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
-            sx={{ mb: 2, width: { xs: '100%', md: 320 } }}
-          />
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          <Box sx={{ p: 1.5, mb: 2, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'action.hover', display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
+              label="搜索"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
+              sx={{ width: { xs: '100%', md: 320 } }}
+            />
+            {!loading && <Chip size="small" label={`共 ${items.length} 条`} variant="outlined" sx={{ fontWeight: 700 }} />}
+            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+              支持按名称 / 物料号 / 协议号搜索
+            </Typography>
+            <Box sx={{ flex: 1 }} />
+          </Box>
+          {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2, '& .MuiAlert-icon': { color: 'error.main' } }}>{error}</Alert>}
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
               <CircularProgress />
@@ -151,24 +172,30 @@ export default function MaterialList() {
           ) : (
             <Table size="small">
               <TableHead>
-                <TableRow>
+                <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
                   {tabDef[tab].fields.map((field) => (
-                    <TableCell key={field}>{tabDef[tab].labels[field]}</TableCell>
+                    <TableCell key={field} sx={{ textAlign: priceFields.includes(field) ? 'right' : 'left' }}>
+                      {tabDef[tab].labels[field]}
+                    </TableCell>
                   ))}
-                  <TableCell sx={{ width: 120 }}>操作</TableCell>
+                  <TableCell sx={{ width: 120, textAlign: 'right' }}>操作</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {items.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={tabDef[tab].fields.length + 1} align="center" sx={{ py: 8, color: 'text.secondary' }}>
-                      暂无数据
+                      <Stack spacing={1} alignItems="center">
+                        <InboxIcon sx={{ fontSize: 56, color: 'text.disabled' }} />
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>暂无数据</Typography>
+                        <Typography variant="caption" color="text.secondary">可点击右上角“新增”开始录入</Typography>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 )}
                 {items.map((row) => (
-                  <TableRow key={row.id} hover>
-                    {tabDef[tab].fields.map((field) => {
+                  <TableRow key={row.id} hover sx={{ transition: 'background-color 0.15s ease' }}>
+                    {tabDef[tab].fields.map((field, index) => {
                       const nowrapFields = {
                         end_customer: ['customer_name', 'phone', 'email'],
                         contract_customer: ['customer_name', 'phone', 'email'],
@@ -176,7 +203,14 @@ export default function MaterialList() {
                         guide_price: ['material_no', 'guide_unit_price_ex_vat']
                       };
                       return (
-                        <TableCell key={field} sx={nowrapFields[tab]?.includes(field) ? { whiteSpace: 'nowrap' } : undefined}>
+                        <TableCell
+                          key={field}
+                          sx={{
+                            ...(index === 0 ? { fontWeight: 700, color: 'text.primary' } : {}),
+                            ...(nowrapFields[tab]?.includes(field) ? { whiteSpace: 'nowrap' } : {}),
+                            ...(priceFields.includes(field) ? { textAlign: 'right', whiteSpace: 'nowrap' } : {})
+                          }}
+                        >
                           {fieldValue(row, field)}
                         </TableCell>
                       );
@@ -198,6 +232,7 @@ export default function MaterialList() {
       </Card>
 
       <Dialog open={Boolean(editor)} onClose={() => setEditor(null)} maxWidth="sm" fullWidth>
+        <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
         <DialogTitle>{editor?.id ? '编辑' : '新增'}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>

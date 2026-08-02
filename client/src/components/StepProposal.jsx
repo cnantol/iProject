@@ -279,14 +279,6 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
           </Alert>
         </Box>
       )}
-      {!readOnly && Number(order.proposal_skipped) !== 1 && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-          <Button variant="outlined" color="warning" startIcon={<SkipNextIcon />} onClick={() => setSkipOpen(true)}>
-            跳过此阶段，直接进入报价
-          </Button>
-        </Box>
-      )}
-
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={12} sm={6} md={3}>
           <TextField label="版本标签" value={newVersion.version_label} onChange={(e) => setNewVersion((prev) => ({ ...prev, version_label: e.target.value }))} fullWidth disabled={readOnly} placeholder="如 V1.0" />
@@ -449,7 +441,10 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
       )}
 
       {!readOnly && Number(order.proposal_skipped) !== 1 && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mt: 3, gap: 1.5, flexWrap: 'wrap' }}>
+          <Button variant="outlined" color="warning" startIcon={<SkipNextIcon />} onClick={() => setSkipOpen(true)} sx={{ whiteSpace: 'nowrap' }}>
+            跳过此阶段，直接进入报价
+          </Button>
           <Button variant="contained" onClick={saveAndAdvance} disabled={saving}>
             保存并进入下一步
           </Button>
