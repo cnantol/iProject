@@ -16,8 +16,10 @@ import SearchIcon from '@mui/icons-material/Search';
 import InboxIcon from '@mui/icons-material/Inbox';
 import api from '../api';
 import { fmtMoney } from '../utils/helpers';
+import { useFieldLabels } from '../utils/fieldLabels';
 
 export default function SalesHistory() {
+  const { t } = useFieldLabels();
   const [search, setSearch] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,7 @@ export default function SalesHistory() {
       <Card sx={{ px: 2.25, py: 2 }}>
         <TextField
           size="small"
-          label="按最终客户/物料号/描述/销售机会编号搜索"
+          label={`按${t('end_customer')}/物料号/描述/${t('order_id')}搜索`}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{ width: { xs: '100%', md: 420 } }}
@@ -72,7 +74,7 @@ export default function SalesHistory() {
             return [
               { label: '历史销售机会数', value: String(orderIds.size), color: '#004E9A' },
               { label: '历史销售总价', value: `¥ ${fmtMoney(totalSales)}`, color: '#0093BE' },
-              { label: '销售机会总金额（修正后）', value: `¥ ${fmtMoney(totalOrderAmount)}`, diff: difference, color: difference === 0 ? '#1E7A46' : '#B26A00' }
+              { label: `${t('amount')}（修正后）`, value: `¥ ${fmtMoney(totalOrderAmount)}`, diff: difference, color: difference === 0 ? '#1E7A46' : '#B26A00' }
             ].map((item) => (
               <Box key={item.label} sx={{ p: 1.75, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: `${item.color}10` }}>
                 <Typography variant="overline" sx={{ color: item.color, fontWeight: 700 }}>
@@ -103,17 +105,17 @@ export default function SalesHistory() {
             <Table size="small" sx={{ minWidth: 1200 }}>
               <TableHead>
                 <TableRow>
-                  <TableCell>销售机会编号</TableCell>
-                  <TableCell>最终客户</TableCell>
-                  <TableCell>合同客户</TableCell>
-                  <TableCell>Sales Order</TableCell>
+                  <TableCell>{t('order_id')}</TableCell>
+                  <TableCell>{t('end_customer')}</TableCell>
+                  <TableCell>{t('contract_customer')}</TableCell>
+                  <TableCell>{t('sales_order')}</TableCell>
                   <TableCell>PO</TableCell>
                   <TableCell>物料号</TableCell>
                   <TableCell>描述</TableCell>
                   <TableCell align="right">数量</TableCell>
                   <TableCell align="right">销售单价</TableCell>
                   <TableCell align="right">历史销售总价</TableCell>
-                  <TableCell align="right">销售机会总金额（修正后）</TableCell>
+                  <TableCell align="right">{t('amount')}（修正后）</TableCell>
                   <TableCell align="right">金额差异</TableCell>
                 </TableRow>
               </TableHead>

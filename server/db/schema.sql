@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS end_customers (
   id INTEGER PRIMARY KEY,
   customer_name TEXT NOT NULL UNIQUE,
+  short_name TEXT,
   contact_person TEXT,
   phone TEXT,
   email TEXT,
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS end_customers (
 CREATE TABLE IF NOT EXISTS contract_customers (
   id INTEGER PRIMARY KEY,
   customer_name TEXT NOT NULL UNIQUE,
+  short_name TEXT,
   contact_person TEXT,
   phone TEXT,
   email TEXT,

@@ -26,8 +26,10 @@ import Typography from '@mui/material/Typography';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { fmtDateTime } from '../utils/helpers';
+import { useFieldLabels } from '../utils/fieldLabels';
 
 export default function CommissionPage() {
+  const { t } = useFieldLabels();
   const [waiting, setWaiting] = useState([]);
   const [imports, setImports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -224,10 +226,10 @@ export default function CommissionPage() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>销售机会编号</TableCell>
-                  <TableCell>项目名称</TableCell>
-                  <TableCell>Sales Order</TableCell>
-                  <TableCell>最终客户</TableCell>
+                  <TableCell>{t('order_id')}</TableCell>
+                  <TableCell>{t('project_name')}</TableCell>
+                  <TableCell>{t('sales_order')}</TableCell>
+                  <TableCell>{t('end_customer')}</TableCell>
                   <TableCell sx={{ width: 120 }}>操作</TableCell>
                 </TableRow>
               </TableHead>
@@ -300,7 +302,7 @@ export default function CommissionPage() {
         <DialogTitle>人工补录佣金</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1, minWidth: 360 }}>
-            <TextField label="销售机会编号" value={manualTarget?.order_id || ''} disabled />
+            <TextField label={t('order_id')} value={manualTarget?.order_id || ''} disabled />
             <TextField label="佣金金额（必填，>0）" type="number" value={manualAmount} onChange={(e) => setManualAmount(e.target.value)} fullWidth />
             <TextField label="补录备注" multiline minRows={2} value={manualRemark} onChange={(e) => setManualRemark(e.target.value)} fullWidth />
           </Stack>

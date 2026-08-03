@@ -5,9 +5,11 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { fmtMoney, fmtDateTime } from '../utils/helpers';
 import { STATUS_LABELS } from '../utils/constants';
+import { useFieldLabels } from '../utils/fieldLabels';
 import StepWrapper from './StepWrapper';
 
 export default function StepClose({ order }) {
+  const { t } = useFieldLabels();
   const closed = order.status === 'closed';
   const lostClosed = order.status === 'lost_closed';
   const notClosed = !closed && !lostClosed;
@@ -35,7 +37,7 @@ export default function StepClose({ order }) {
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Typography variant="body2" color="text.secondary">销售机会总金额</Typography>
+          <Typography variant="body2" color="text.secondary">{t('amount')}</Typography>
           <Typography variant="h6">¥ {fmtMoney(order.total_amount)}</Typography>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>

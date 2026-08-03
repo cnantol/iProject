@@ -78,6 +78,16 @@ export function initDb(dir) {
     );
   `);
 
+  const ensureShortName = (table) => {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (!columns.some((col) => col.name === 'short_name')) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN short_name TEXT`);
+    }
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_short_name ON ${table}(short_name)`);
+  };
+  ensureShortName('end_customers');
+  ensureShortName('contract_customers');
+
   const admin = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
   if (!admin) {
     const hash = bcrypt.hashSync('admin123', 10);

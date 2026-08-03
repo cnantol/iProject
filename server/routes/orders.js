@@ -148,8 +148,9 @@ function upsertCustomValues(db, orderId, customValues) {
   tx(customValues);
 }
 
-function generateOrderId(db, tryInsert) {
-  const prefix = `OPP-${todayLocal().replace(/-/g, '')}-`;
+function generateOrderId(db, tryInsert, shortName = null) {
+  const datePart = todayLocal().replace(/-/g, '');
+  const prefix = shortName ? `OPP-${shortName}-${datePart}-` : `OPP-${datePart}-`;
   for (let attempt = 0; attempt < 3; attempt++) {
     const last = db.prepare('SELECT order_id FROM orders WHERE order_id LIKE ? ORDER BY order_id DESC LIMIT 1').get(`${prefix}%`);
     let seq = 1;
@@ -232,6 +233,9 @@ router.post('/', (req, res) => {
   if (!data.project_owner || !String(data.project_owner).trim()) return badRequest(res, '项目负责人必填');
 
   const hasFramework = hasFrameworkForCustomer(Number(data.end_customer_id)) ? 1 : 0;
+  const endCustomer = db.prepare('SELECT short_name FROM end_customers WHERE id = ?').get(Number(data.end_customer_id));
+  const contractCustomer = db.prepare('SELECT short_name FROM contract_customers WHERE id = ?').get(Number(data.contract_customer_id));
+  const shortName = endCustomer?.short_name || contractCustomer?.short_name || null;
   const ts = nowUtc();
   const insert = db.prepare(
     `INSERT INTO orders (order_id, year, month, end_customer_id, contract_customer_id, order_type, project_no, workshop,
@@ -257,7 +261,7 @@ router.post('/', (req, res) => {
       ts
     );
     return info.lastInsertRowid;
-  });
+  }, shortName);
 
   upsertCustomValues(db, orderId, body.customValues);
   const detail = loadOrderDetail(db, orderId);

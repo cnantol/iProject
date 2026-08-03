@@ -193,6 +193,9 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
   const footerAlign = style.footer_alignment || 'center';
   const visibility = style.field_visibility || {};
   const show = (key) => visibility[key] !== 0 && visibility[key] !== false;
+  const quoteShort = customerNames.endShort || customerNames.contractShort || null;
+  const quoteDatePart = todayLocal().replace(/-/g, '');
+  const quoteNo = quoteShort ? `Q-${quoteShort}-${quoteDatePart}-R${round.round_no}` : `Q-${quoteDatePart}-R${round.round_no}`;
   const fontFile = findCjkFont();
   if (fontFile) doc.registerFont('cjk', fontFile);
   const font = (bold = false) => (fontFile ? (bold ? 'cjk' : 'cjk') : 'Helvetica');
@@ -223,7 +226,7 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
   doc.font(font()).fontSize(16).fillColor(style.primary_color).text(`${style.company_name || 'Atlas Copco'} ${labels.quote_title || '报价单'}`, { align: titleAlign });
   doc.moveDown(0.5);
   doc.fontSize(10).fillColor('#444444');
-  if (show('quote_no')) doc.text(`${labels.quote_no || '报价单编号'}：Q-${todayLocal().replace(/-/g, '')}-R${round.round_no}`, { align: infoAlign });
+  if (show('quote_no')) doc.text(`${labels.quote_no || '报价单编号'}：${quoteNo}`, { align: infoAlign });
   if (show('order_no')) doc.text(`${labels.order_no || '销售机会编号'}：${order.order_id || ''}`, { align: infoAlign });
   if (show('project_name')) doc.text(`${labels.project_name || '项目名称'}：${order.project_name || ''}`, { align: infoAlign });
   if (show('end_customer')) doc.text(`${labels.end_customer || '最终客户'}：${customerNames.end || ''}`, { align: infoAlign });
@@ -357,9 +360,9 @@ router.get('/:orderId/quotations/:roundId/pdf', (req, res) => {
   const round = db.prepare('SELECT * FROM quotations WHERE id = ? AND order_id = ?').get(Number(req.params.roundId), order.id);
   if (!round) return notFound(res);
   const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id').all(round.id);
-  const ec = db.prepare('SELECT customer_name FROM end_customers WHERE id = ?').get(order.end_customer_id);
-  const cc = db.prepare('SELECT customer_name FROM contract_customers WHERE id = ?').get(order.contract_customer_id);
-  const doc = buildQuotationPdf(order, round, items, { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '' });
+  const ec = db.prepare('SELECT customer_name, short_name FROM end_customers WHERE id = ?').get(order.end_customer_id);
+  const cc = db.prepare('SELECT customer_name, short_name FROM contract_customers WHERE id = ?').get(order.contract_customer_id);
+  const doc = buildQuotationPdf(order, round, items, { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '', endShort: ec?.short_name || null, contractShort: cc?.short_name || null });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="quotation-${order.order_id}-R${round.round_no}.pdf"`);
   doc.pipe(res);
@@ -372,9 +375,9 @@ router.post('/:orderId/quotations/:roundId/pdf', (req, res) => {
   const round = db.prepare('SELECT * FROM quotations WHERE id = ? AND order_id = ?').get(Number(req.params.roundId), order.id);
   if (!round) return notFound(res);
   const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id').all(round.id);
-  const ec = db.prepare('SELECT customer_name FROM end_customers WHERE id = ?').get(order.end_customer_id);
-  const cc = db.prepare('SELECT customer_name FROM contract_customers WHERE id = ?').get(order.contract_customer_id);
-  const doc = buildQuotationPdf(order, round, items, { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '' });
+  const ec = db.prepare('SELECT customer_name, short_name FROM end_customers WHERE id = ?').get(order.end_customer_id);
+  const cc = db.prepare('SELECT customer_name, short_name FROM contract_customers WHERE id = ?').get(order.contract_customer_id);
+  const doc = buildQuotationPdf(order, round, items, { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '', endShort: ec?.short_name || null, contractShort: cc?.short_name || null });
   const uploads = getUploadDir();
   fs.mkdirSync(uploads, { recursive: true });
   const filename = `quotation-${order.order_id}-R${round.round_no}.pdf`;

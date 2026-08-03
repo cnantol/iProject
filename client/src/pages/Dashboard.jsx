@@ -39,6 +39,7 @@ import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import api from '../api';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { fmtMoney, fmtDate } from '../utils/helpers';
+import { useFieldLabels } from '../utils/fieldLabels';
 
 function StatCard({ label, value, accent, badge, icon }) {
   return (
@@ -83,6 +84,7 @@ const STATUS_ICONS = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { t } = useFieldLabels();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -289,11 +291,11 @@ export default function Dashboard() {
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                  <TableCell>销售机会编号</TableCell>
-                  <TableCell>项目名称</TableCell>
-                  <TableCell>最终客户</TableCell>
-                  <TableCell>状态</TableCell>
-                  <TableCell align="right">金额</TableCell>
+                  <TableCell>{t('order_id')}</TableCell>
+                  <TableCell>{t('project_name')}</TableCell>
+                  <TableCell>{t('end_customer')}</TableCell>
+                  <TableCell>{t('status')}</TableCell>
+                  <TableCell align="right">{t('amount')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>

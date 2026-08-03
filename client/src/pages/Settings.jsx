@@ -48,6 +48,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { FIELD_LABEL_DEFAULTS } from '../utils/fieldLabels';
 import { IMPORT_TARGET_LABELS } from '../utils/constants';
 import { fmtDateTime, authUrl } from '../utils/helpers';
 
@@ -364,7 +365,7 @@ function FlowFieldManager({ onError }) {
                       </Button>
                     </Stack>
                   </Box>
-                  <Box sx={{ mb: 2, p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+                  <Box sx={{ mb: 2, p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                       <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
                       <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>内置字段</Typography>
@@ -1260,8 +1261,8 @@ function QuoteStyle({ onError }) {
                   {style.company_name} {currentLabels.quote_title}
                 </Typography>
                 <Stack spacing={0.4} sx={{ fontSize: 12, color: '#475569', textAlign: style.info_alignment, mb: 1.5 }}>
-                  {Boolean(style.field_visibility.quote_no) && <Box>{currentLabels.quote_no}：Q-20260802-R1</Box>}
-                  {Boolean(style.field_visibility.order_no) && <Box>{currentLabels.order_no}：ORD-2026-TEST</Box>}
+                  {Boolean(style.field_visibility.quote_no) && <Box>{currentLabels.quote_no}：Q-AC-20260802-R1</Box>}
+                  {Boolean(style.field_visibility.order_no) && <Box>{currentLabels.order_no}：OPP-2026-TEST</Box>}
                   {Boolean(style.field_visibility.project_name) && <Box>{currentLabels.project_name}：示例项目（测试）</Box>}
                   {Boolean(style.field_visibility.end_customer) && <Box>{currentLabels.end_customer}：示例最终客户</Box>}
                   {Boolean(style.field_visibility.contract_customer) && <Box>{currentLabels.contract_customer}：示例合同客户</Box>}
@@ -1329,6 +1330,8 @@ function SystemManager({ onError }) {
   const [auditTotal, setAuditTotal] = useState(0);
   const [account, setAccount] = useState({ current_password: '', username: '', new_password: '', confirm_password: '' });
   const [accountSaving, setAccountSaving] = useState(false);
+  const [fieldLabels, setFieldLabels] = useState({ ...FIELD_LABEL_DEFAULTS });
+  const [fieldSaving, setFieldSaving] = useState(false);
 
   const loadOrders = async () => {
     try {
@@ -1358,10 +1361,20 @@ function SystemManager({ onError }) {
     }
   };
 
+  const loadFieldLabels = async () => {
+    try {
+      const { data } = await api.get('/settings/field-display-names');
+      setFieldLabels({ ...FIELD_LABEL_DEFAULTS, ...data });
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
   useEffect(() => {
     loadOrders();
     loadAudit();
     loadSchedule();
+    loadFieldLabels();
   }, [auditPage]);
 
   const backup = async () => {
@@ -1466,13 +1479,27 @@ function SystemManager({ onError }) {
     }
   };
 
+  const saveFieldLabels = async () => {
+    setFieldSaving(true);
+    onError('');
+    try {
+      const { data } = await api.put('/settings/field-display-names', fieldLabels);
+      setFieldLabels({ ...FIELD_LABEL_DEFAULTS, ...data });
+      window.alert('字段显示名称已保存');
+    } catch (err) {
+      onError(errorMessage(err));
+    } finally {
+      setFieldSaving(false);
+    }
+  };
+
   return (
     <Card>
       <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
       <CardContent>
-        <Grid container spacing={2}>
+        <Grid container spacing={3} sx={{ mb: 3 }}>
           <Grid item xs={12} md={6} sx={{ display: 'flex' }}>
-          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', width: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'background.paper', width: '100%', display: 'flex', flexDirection: 'column' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
               <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <PersonIcon fontSize="small" />
@@ -1536,7 +1563,7 @@ function SystemManager({ onError }) {
           </Box>
           </Grid>
           <Grid item xs={12} md={6} sx={{ display: 'flex' }}>
-          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', width: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'background.paper', width: '100%', display: 'flex', flexDirection: 'column' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
               <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <BackupIcon fontSize="small" />
@@ -1597,7 +1624,7 @@ function SystemManager({ onError }) {
           </Grid>
 
           <Grid item xs={12} md={6}>
-          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'rgba(237,108,2,0.04)' }}>
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'rgba(237,108,2,0.04)' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
               <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(237,108,2,0.12)', color: 'warning.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <WarningAmberIcon fontSize="small" />
@@ -1611,7 +1638,7 @@ function SystemManager({ onError }) {
           </Grid>
 
           <Grid item xs={12} md={6}>
-          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'rgba(195,61,61,0.04)' }}>
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'rgba(195,61,61,0.04)' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
               <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(195,61,61,0.10)', color: 'error.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <RestartAltIcon fontSize="small" />
@@ -1630,7 +1657,36 @@ function SystemManager({ onError }) {
           </Grid>
           </Grid>
 
-          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'background.paper', mb: 3 }}>
+            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
+              <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <EditIcon fontSize="small" />
+              </Box>
+              <Typography variant="h6">字段显示名称配置</Typography>
+              <Typography variant="caption" color="text.secondary">只修改展示名称，不修改数据库真实列名</Typography>
+            </Stack>
+            <Grid container spacing={1.5}>
+              {Object.entries(FIELD_LABEL_DEFAULTS).map(([key, label]) => (
+                <Grid item xs={12} sm={6} md={4} key={key}>
+                  <TextField
+                    size="small"
+                    label={label}
+                    fullWidth
+                    value={fieldLabels[key] || ''}
+                    onChange={(e) => setFieldLabels((prev) => ({ ...prev, [key]: e.target.value }))}
+                    helperText={`原名称：${label}`}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+            <Box sx={{ mt: 1.5 }}>
+              <Button variant="contained" startIcon={<SaveIcon />} onClick={saveFieldLabels} disabled={fieldSaving}>
+                {fieldSaving ? <CircularProgress size={18} color="inherit" /> : '保存字段显示名称'}
+              </Button>
+            </Box>
+          </Box>
+
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
               <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <HistoryIcon fontSize="small" />

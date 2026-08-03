@@ -22,6 +22,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import api, { errorMessage } from '../api';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { fmtDateTime, fmtMoney, isStepReadOnly } from '../utils/helpers';
+import { useFieldLabels } from '../utils/fieldLabels';
 import OrderStepper from '../components/OrderStepper';
 import StepCustomerInfo from '../components/StepCustomerInfo';
 import StepProposal from '../components/StepProposal';
@@ -61,6 +62,7 @@ function InfoTile({ label, value, color, darkColor }) {
 }
 
 export default function OrderDetail() {
+  const { t } = useFieldLabels();
   const { id } = useParams();
   const navigate = useNavigate();
   const [detail, setDetail] = useState(null);
@@ -190,11 +192,11 @@ export default function OrderDetail() {
         <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
         <Grid container spacing={1.5} sx={{ px: { xs: 2, md: 3 }, pt: 2.25, pb: 0.5 }}>
           <Grid item xs={12} sm={6} lg={3}>
-            <InfoTile label="项目名称" value={order.project_name || '-'} color="#004E9A" darkColor="#8FB6E3" />
+            <InfoTile label={t('project_name')} value={order.project_name || '-'} color="#004E9A" darkColor="#8FB6E3" />
           </Grid>
           <Grid item xs={12} sm={6} lg={3}>
             <InfoTile
-              label="最终客户 / 合同客户"
+              label={`${t('end_customer')} / ${t('contract_customer')}`}
               value={`${order.end_customer_name || '-'} / ${order.contract_customer_name || '-'}`}
               color="#0093BE"
               darkColor="#56C4E4"
@@ -202,7 +204,7 @@ export default function OrderDetail() {
           </Grid>
           <Grid item xs={12} sm={6} lg={3}>
             <InfoTile
-              label="销售机会总金额"
+              label={t('amount')}
               value={order.total_amount == null ? '-' : `¥ ${fmtMoney(order.total_amount)}`}
               color="#B8860B"
               darkColor="#E5BE63"

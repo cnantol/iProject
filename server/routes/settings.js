@@ -143,12 +143,12 @@ router.delete('/fields/:id', (req, res) => {
 const IMPORT_TARGETS = {
   end_customer: {
     label: '最终客户导入',
-    headers: ['客户名称', '联系人', '电话', '邮箱', '备注'],
+    headers: ['客户名称', '客户简称', '联系人', '电话', '邮箱', '备注'],
     required: ['客户名称']
   },
   contract_customer: {
     label: '合同客户导入',
-    headers: ['客户名称', '联系人', '电话', '邮箱', '备注'],
+    headers: ['客户名称', '客户简称', '联系人', '电话', '邮箱', '备注'],
     required: ['客户名称']
   },
   material: {
@@ -245,9 +245,16 @@ function importRow(db, target, headers, row) {
     const name = value('客户名称');
     if (name === null || String(name).trim() === '') return '客户名称必填';
     const table = target === IMPORT_TARGETS.end_customer ? 'end_customers' : 'contract_customers';
+    const shortRaw = value('客户简称');
+    let shortName = null;
+    if (shortRaw !== null && String(shortRaw).trim() !== '') {
+      shortName = String(shortRaw).trim().toUpperCase();
+      if (!/^[A-Z0-9]{2,8}$/.test(shortName)) return '客户简称需为 2-8 位英文或数字';
+    }
     try {
-      db.prepare(`INSERT INTO ${table} (customer_name, contact_person, phone, email, remark, created_at, updated_at) VALUES (?,?,?,?,?,?,?)`).run(
+      db.prepare(`INSERT INTO ${table} (customer_name, short_name, contact_person, phone, email, remark, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`).run(
         String(name).trim(),
+        shortName,
         value('联系人') != null ? String(value('联系人')) : null,
         value('电话') != null ? String(value('电话')) : null,
         value('邮箱') != null ? String(value('邮箱')) : null,
@@ -257,7 +264,7 @@ function importRow(db, target, headers, row) {
       );
       return null;
     } catch (err) {
-      if (String(err.message).includes('UNIQUE')) return '客户名称已存在';
+      if (String(err.message).includes('UNIQUE')) return '客户名称或简称已存在';
       throw err;
     }
   }
@@ -443,6 +450,7 @@ function createBackup() {
   const zip = new AdmZip();
   if (fs.existsSync(dbPath)) zip.addFile('database.sqlite', fs.readFileSync(dbPath));
   if (fs.existsSync(quoteStyleFile())) zip.addFile('quote-style.json', fs.readFileSync(quoteStyleFile()));
+  if (fs.existsSync(fieldDisplayFile())) zip.addFile('field-display-names.json', fs.readFileSync(fieldDisplayFile()));
   const uploads = getUploadDir();
   if (fs.existsSync(uploads)) {
     for (const file of fs.readdirSync(uploads)) {
@@ -642,7 +650,7 @@ router.put('/quote-style', (req, res) => {
 
 router.post('/quote-style/test-pdf', (req, res) => {
   const style = normalizeQuoteStyle(req.body?.style || readQuoteStyle());
-  const sampleOrder = { order_id: 'ORD-2026-TEST', project_name: '示例项目（测试）' };
+  const sampleOrder = { order_id: 'OPP-2026-TEST', project_name: '示例项目（测试）' };
   const sampleRound = { round_no: 1, total_amount: 128500.5 };
   const sampleItems = [
     {
@@ -664,7 +672,7 @@ router.post('/quote-style/test-pdf', (req, res) => {
       line_amount: 0
     }
   ];
-  const customerNames = { end: '示例最终客户', contract: '示例合同客户' };
+  const customerNames = { end: '示例最终客户', contract: '示例合同客户', endShort: 'AC', contractShort: null };
   const doc = buildQuotationPdf(sampleOrder, sampleRound, sampleItems, customerNames, style);
   const chunks = [];
   doc.on('data', (chunk) => chunks.push(chunk));
@@ -674,6 +682,76 @@ router.post('/quote-style/test-pdf', (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="quote-style-test.pdf"');
     res.send(buffer);
   });
+});
+
+// ---------- 字段显示名称配置 ----------
+const FIELD_DISPLAY_KEYS = [
+  'order_id',
+  'project_name',
+  'project_no',
+  'workshop',
+  'project_owner',
+  'project_remark',
+  'end_customer',
+  'contract_customer',
+  'short_name',
+  'order_type',
+  'status',
+  'amount',
+  'sales_order',
+  'payment_terms',
+  'delivered_date',
+  'invoiced_date',
+  'commission_amount'
+];
+
+const FIELD_DISPLAY_DEFAULTS = {
+  order_id: '销售机会编号',
+  project_name: '项目名称',
+  project_no: '项目编号',
+  workshop: '车间',
+  project_owner: '项目负责人',
+  project_remark: '项目备注',
+  end_customer: '最终客户',
+  contract_customer: '合同客户',
+  short_name: '客户简称',
+  order_type: '销售机会类型',
+  status: '状态',
+  amount: '金额',
+  sales_order: 'Sales Order',
+  payment_terms: '付款条款',
+  delivered_date: '发货日期',
+  invoiced_date: '开票日期',
+  commission_amount: '佣金金额'
+};
+
+function fieldDisplayFile() {
+  return path.join(getDataDir(), 'field-display-names.json');
+}
+
+function readFieldDisplayNames() {
+  try {
+    return { ...FIELD_DISPLAY_DEFAULTS, ...JSON.parse(fs.readFileSync(fieldDisplayFile(), 'utf8')) };
+  } catch {
+    return { ...FIELD_DISPLAY_DEFAULTS };
+  }
+}
+
+router.get('/field-display-names', (req, res) => {
+  return res.json(readFieldDisplayNames());
+});
+
+router.put('/field-display-names', (req, res) => {
+  const raw = req.body && typeof req.body === 'object' ? req.body : {};
+  const labels = { ...FIELD_DISPLAY_DEFAULTS };
+  for (const key of FIELD_DISPLAY_KEYS) {
+    if (raw[key] !== undefined) {
+      const value = String(raw[key]).trim().slice(0, 40);
+      if (value) labels[key] = value;
+    }
+  }
+  fs.writeFileSync(fieldDisplayFile(), JSON.stringify(labels, null, 2));
+  return res.json(labels);
 });
 
 // ---------- 定时自动备份 ----------
@@ -756,6 +834,8 @@ router.post('/restore', upload.single('file'), (req, res) => {
     }
     const styleZip = path.join(tmpDir, 'quote-style.json');
     if (fs.existsSync(styleZip)) fs.copyFileSync(styleZip, quoteStyleFile());
+    const fieldZip = path.join(tmpDir, 'field-display-names.json');
+    if (fs.existsSync(fieldZip)) fs.copyFileSync(fieldZip, fieldDisplayFile());
     initDb(dataDir);
     writeAudit(getDb(), { userId: req.user.id, action: 'other', entityType: 'settings', detail: { event: 'restore', filename: req.file.originalname } });
     return res.json({ message: '还原成功' });

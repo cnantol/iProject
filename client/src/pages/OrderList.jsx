@@ -26,9 +26,11 @@ import InboxIcon from '@mui/icons-material/Inbox';
 import api, { errorMessage } from '../api';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { fmtMoney } from '../utils/helpers';
+import { useFieldLabels } from '../utils/fieldLabels';
 
 export default function OrderList() {
   const navigate = useNavigate();
+  const { t } = useFieldLabels();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
@@ -95,7 +97,7 @@ export default function OrderList() {
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', md: 'center' }}>
           <TextField
             size="small"
-            label="搜索销售机会编号/项目/SO"
+            label={`搜索${t('order_id')}/项目/SO`}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -141,13 +143,13 @@ export default function OrderList() {
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                  <TableCell>销售机会编号</TableCell>
-                  <TableCell>项目名称</TableCell>
-                  <TableCell>最终客户</TableCell>
-                  <TableCell>合同客户</TableCell>
-                  <TableCell>Sales Order</TableCell>
-                  <TableCell>状态</TableCell>
-                  <TableCell align="right">金额</TableCell>
+                  <TableCell>{t('order_id')}</TableCell>
+                  <TableCell>{t('project_name')}</TableCell>
+                  <TableCell>{t('end_customer')}</TableCell>
+                  <TableCell>{t('contract_customer')}</TableCell>
+                  <TableCell>{t('sales_order')}</TableCell>
+                  <TableCell>{t('status')}</TableCell>
+                  <TableCell align="right">{t('amount')}</TableCell>
                   <TableCell align="right" sx={{ width: 80 }}>操作</TableCell>
                 </TableRow>
               </TableHead>

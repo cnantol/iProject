@@ -22,12 +22,14 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveIcon from '@mui/icons-material/Save';
 import api, { errorMessage } from '../api';
 import { ORDER_TYPES } from '../utils/constants';
+import { useFieldLabels } from '../utils/fieldLabels';
 
 const YEARS = Array.from({ length: 11 }, (_, i) => String(2020 + i));
 const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1));
 
 export default function OrderCreate() {
   const navigate = useNavigate();
+  const { t } = useFieldLabels();
   const [form, setForm] = useState({
     year: String(new Date().getFullYear()),
     month: String(new Date().getMonth() + 1),
@@ -150,7 +152,7 @@ export default function OrderCreate() {
                     set('end_customer_id', option ? option.id : null);
                     checkFramework(option ? option.id : null);
                   }}
-                  renderInput={(params) => <TextField {...params} label="最终客户（必填）" required />}
+                  renderInput={(params) => <TextField {...params} label={`${t('end_customer')}（必填）`} required />}
                   isOptionEqualToValue={(option, value) => option.id === value?.id}
                   renderOption={(props, option) => (
                     <li {...props} key={option.id}>
@@ -165,7 +167,7 @@ export default function OrderCreate() {
                   getOptionLabel={(option) => option.customer_name || ''}
                   value={contractCustomers.find((item) => item.id === form.contract_customer_id) || null}
                   onChange={(_, option) => set('contract_customer_id', option ? option.id : null)}
-                  renderInput={(params) => <TextField {...params} label="合同客户（必填）" required />}
+                  renderInput={(params) => <TextField {...params} label={`${t('contract_customer')}（必填）`} required />}
                   isOptionEqualToValue={(option, value) => option.id === value?.id}
                   renderOption={(props, option) => (
                     <li {...props} key={option.id}>
@@ -176,7 +178,7 @@ export default function OrderCreate() {
               </Grid>
               <Grid item xs={12} md={6}>
                 <FormControl>
-                  <FormLabel>销售机会类型</FormLabel>
+                  <FormLabel>{t('order_type')}</FormLabel>
                   <RadioGroup row value={form.order_type} onChange={(e) => set('order_type', e.target.value)}>
                     {ORDER_TYPES.map((type) => (
                       <FormControlLabel key={type} value={type} control={<Radio />} label={type} />
@@ -186,19 +188,19 @@ export default function OrderCreate() {
                 {hasFramework && <Chip size="small" color="success" label="有框架协议" sx={{ mt: 1 }} />}
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <TextField label="项目编号" value={form.project_no} onChange={(e) => set('project_no', e.target.value)} fullWidth />
+                <TextField label={t('project_no')} value={form.project_no} onChange={(e) => set('project_no', e.target.value)} fullWidth />
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <TextField label="车间" value={form.workshop} onChange={(e) => set('workshop', e.target.value)} fullWidth />
+                <TextField label={t('workshop')} value={form.workshop} onChange={(e) => set('workshop', e.target.value)} fullWidth />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField label="项目名称（必填）" value={form.project_name} onChange={(e) => set('project_name', e.target.value)} fullWidth required />
+                <TextField label={`${t('project_name')}（必填）`} value={form.project_name} onChange={(e) => set('project_name', e.target.value)} fullWidth required />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField label="项目负责人（必填）" value={form.project_owner} onChange={(e) => set('project_owner', e.target.value)} fullWidth required />
+                <TextField label={`${t('project_owner')}（必填）`} value={form.project_owner} onChange={(e) => set('project_owner', e.target.value)} fullWidth required />
               </Grid>
               <Grid item xs={12}>
-                <TextField label="项目备注" value={form.project_remark} onChange={(e) => set('project_remark', e.target.value)} fullWidth multiline minRows={2} />
+                <TextField label={t('project_remark')} value={form.project_remark} onChange={(e) => set('project_remark', e.target.value)} fullWidth multiline minRows={2} />
               </Grid>
               {customFields.map((field) => (
                 <Grid item xs={12} sm={6} key={field.id}>

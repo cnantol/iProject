@@ -22,9 +22,11 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { PAYMENT_TERMS } from '../utils/constants';
 import { fmtMoney, authUrl } from '../utils/helpers';
+import { useFieldLabels } from '../utils/fieldLabels';
 import StepWrapper from './StepWrapper';
 
 export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
+  const { t } = useFieldLabels();
   const [salesOrder, setSalesOrder] = useState(order.sales_order || '');
   const [paymentTerms, setPaymentTerms] = useState(order.payment_terms || '');
   const [pos, setPos] = useState(order.pos || []);
@@ -180,7 +182,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
         </Grid>
         <Grid item xs={12} sm={6}>
           <TextField
-            label="销售机会总金额（自动带出，锁定）"
+            label={`${t('amount')}（自动带出，锁定）`}
             value={fmtMoney(order.total_amount)}
             fullWidth
             disabled

@@ -71,8 +71,8 @@ export default function MaterialList() {
   }, [load]);
 
   const tabDef = {
-    end_customer: { url: 'end-customers', fields: ['customer_name', 'contact_person', 'phone', 'email', 'remark'], labels: { customer_name: '客户名称', contact_person: '联系人', phone: '电话', email: '邮箱', remark: '备注' } },
-    contract_customer: { url: 'contract-customers', fields: ['customer_name', 'contact_person', 'phone', 'email', 'remark'], labels: { customer_name: '客户名称', contact_person: '联系人', phone: '电话', email: '邮箱', remark: '备注' } },
+    end_customer: { url: 'end-customers', fields: ['customer_name', 'short_name', 'contact_person', 'phone', 'email', 'remark'], labels: { customer_name: '客户名称', short_name: '客户简称', contact_person: '联系人', phone: '电话', email: '邮箱', remark: '备注' } },
+    contract_customer: { url: 'contract-customers', fields: ['customer_name', 'short_name', 'contact_person', 'phone', 'email', 'remark'], labels: { customer_name: '客户名称', short_name: '客户简称', contact_person: '联系人', phone: '电话', email: '邮箱', remark: '备注' } },
     material: {
       url: 'materials',
       fields: ['end_customer_id', 'material_no', 'description', 'unit_price_ex_vat', 'unit', 'agreement_no', 'valid_from', 'valid_to', 'remark'],
