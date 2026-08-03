@@ -76,7 +76,7 @@ export function notFound(res, message = '资源不存在') {
   return res.status(404).json({ error: message });
 }
 
-export function conflict(res, message = '订单状态已变更，请刷新') {
+export function conflict(res, message = '销售机会状态已变更，请刷新') {
   return res.status(409).json({ error: message });
 }
 

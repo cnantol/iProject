@@ -148,7 +148,7 @@ export default function Dashboard() {
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/orders/new')}>
-          新建订单
+          新建销售机会
         </Button>
       </Stack>
 
@@ -278,7 +278,7 @@ export default function Dashboard() {
               <Typography variant="h6">最近项目</Typography>
             </Stack>
             <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/orders')}>
-              全部订单
+              全部销售机会
             </Button>
           </Stack>
           {(data.recentOrders || []).length === 0 ? (
@@ -289,7 +289,7 @@ export default function Dashboard() {
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                  <TableCell>订单号</TableCell>
+                  <TableCell>销售机会编号</TableCell>
                   <TableCell>项目名称</TableCell>
                   <TableCell>最终客户</TableCell>
                   <TableCell>状态</TableCell>

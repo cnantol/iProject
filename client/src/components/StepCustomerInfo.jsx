@@ -185,7 +185,7 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance
         </Grid>
         <Grid item xs={12} md={6}>
           <FormControl disabled={readOnly}>
-            <FormLabel>订单类型</FormLabel>
+            <FormLabel>销售机会类型</FormLabel>
             <RadioGroup row value={form.order_type} onChange={(e) => set('order_type', e.target.value)}>
               {ORDER_TYPES.map((type) => (
                 <FormControlLabel key={type} value={type} control={<Radio />} label={type} />

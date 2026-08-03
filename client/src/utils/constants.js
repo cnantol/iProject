@@ -49,7 +49,7 @@ export const IMPORT_TARGET_LABELS = {
   contract_customer: '合同客户导入',
   material: '框架协议价格导入',
   guide_price: '指导价导入',
-  history: '历史订单导入'
+  history: '历史销售机会导入'
 };
 
 export const ORDER_TYPES = ['A', 'B', 'C'];

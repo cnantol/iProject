@@ -12,18 +12,18 @@ export default function StepClose({ order }) {
   const lostClosed = order.status === 'lost_closed';
   const notClosed = !closed && !lostClosed;
   const subtitle = closed
-    ? '中标订单已闭环，全步骤只读'
+    ? '中标销售机会已闭环，全步骤只读'
     : lostClosed
-      ? '未中标订单已关闭，全步骤只读'
-      : `订单尚未闭环（当前阶段：${STATUS_LABELS[order.status] || order.status}）`;
+      ? '未中标销售机会已关闭，全步骤只读'
+      : `销售机会尚未闭环（当前阶段：${STATUS_LABELS[order.status] || order.status}）`;
   return (
     <StepWrapper title="项目闭环" subtitle={subtitle}>
       <Alert severity={closed ? 'success' : lostClosed ? 'warning' : 'info'} sx={{ mb: 2 }}>
         {closed
-          ? '该订单已完成佣金结算并闭环，数据仅供查阅。'
+          ? '该销售机会已完成佣金结算并闭环，数据仅供查阅。'
           : lostClosed
-            ? '该订单已标记未中标并关闭。'
-            : '该订单尚未闭环，佣金匹配完成后将自动进入闭环。'}
+            ? '该销售机会已标记未中标并关闭。'
+            : '该销售机会尚未闭环，佣金匹配完成后将自动进入闭环。'}
       </Alert>
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>
@@ -35,7 +35,7 @@ export default function StepClose({ order }) {
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Typography variant="body2" color="text.secondary">订单总金额</Typography>
+          <Typography variant="body2" color="text.secondary">销售机会总金额</Typography>
           <Typography variant="h6">¥ {fmtMoney(order.total_amount)}</Typography>
         </Grid>
         <Grid item xs={12} sm={6} md={3}>

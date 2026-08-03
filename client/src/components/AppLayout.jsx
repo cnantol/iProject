@@ -34,7 +34,7 @@ import { useThemeMode } from '../context/ThemeContext';
 const NAV_ITEMS = [
   { path: '/', label: '首页看板', icon: <DashboardIcon /> },
   { path: '/todos', label: '待办事项', icon: <CheckCircleIcon /> },
-  { path: '/orders', label: '订单列表', icon: <ListAltIcon /> },
+  { path: '/orders', label: '销售机会', icon: <ListAltIcon /> },
   { path: '/sales-history', label: '历史销售', icon: <HistoryIcon /> },
   { path: '/commission', label: '佣金结算', icon: <PaymentsIcon /> },
   { path: '/materials', label: '基础数据', icon: <StorageIcon /> },
@@ -63,7 +63,7 @@ export default function AppLayout() {
             Atlas Copco
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            订单管理系统
+            销售机会管理系统
           </Typography>
         </Box>
       </Box>

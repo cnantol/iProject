@@ -90,7 +90,7 @@ if (isDirectRun) {
   const port = Number(process.env.PORT) || 3001;
   const app = createApp();
   const server = app.listen(port, () => {
-    console.log(`Atlas Copco 订单管理系统已启动：http://localhost:${port}`);
+    console.log(`Atlas Copco 销售机会管理系统已启动：http://localhost:${port}`);
   });
   const shutdown = () => {
     server.close(() => {

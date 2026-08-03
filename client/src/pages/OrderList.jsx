@@ -59,14 +59,14 @@ export default function OrderList() {
   }, [load]);
 
   const removeOrder = async (order) => {
-    if (!window.confirm(`确认删除订单「${order.order_id}」？删除后不可恢复。`)) return;
+    if (!window.confirm(`确认删除销售机会「${order.order_id}」？删除后不可恢复。`)) return;
     setDeletingId(order.id);
     setError('');
     try {
       await api.delete(`/orders/${order.id}`);
       load();
     } catch (err) {
-      setError(errorMessage(err, '删除订单失败'));
+      setError(errorMessage(err, '删除销售机会失败'));
     } finally {
       setDeletingId(null);
     }
@@ -82,20 +82,20 @@ export default function OrderList() {
         sx={{ flexWrap: 'wrap', rowGap: 1 }}
       >
         <Box>
-          <Typography variant="h5">订单列表</Typography>
+          <Typography variant="h5">销售机会</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-            查看与管理全部销售订单，点击行进入详情
+            查看与管理全部销售机会，点击行进入详情
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/orders/new')}>
-          新建订单
+          新建销售机会
         </Button>
       </Stack>
       <Card sx={{ px: 2.25, py: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', md: 'center' }}>
           <TextField
             size="small"
-            label="搜索订单号/项目/SO"
+            label="搜索销售机会编号/项目/SO"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -141,7 +141,7 @@ export default function OrderList() {
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                  <TableCell>订单号</TableCell>
+                  <TableCell>销售机会编号</TableCell>
                   <TableCell>项目名称</TableCell>
                   <TableCell>最终客户</TableCell>
                   <TableCell>合同客户</TableCell>
@@ -157,8 +157,8 @@ export default function OrderList() {
                     <TableCell colSpan={8} align="center" sx={{ py: 8, color: 'text.secondary' }}>
                       <Stack spacing={1} alignItems="center">
                         <InboxIcon sx={{ fontSize: 56, color: 'text.disabled' }} />
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>暂无符合条件的订单</Typography>
-                        <Typography variant="caption" color="text.secondary">可调整搜索条件或点击右上角“新建订单”</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>暂无符合条件的销售机会</Typography>
+                        <Typography variant="caption" color="text.secondary">可调整搜索条件或点击右上角“新建销售机会”</Typography>
                       </Stack>
                     </TableCell>
                   </TableRow>
@@ -183,7 +183,7 @@ export default function OrderList() {
                       <IconButton
                         size="small"
                         color="error"
-                        title="删除订单"
+                        title="删除销售机会"
                         disabled={deletingId === order.id}
                         onClick={() => removeOrder(order)}
                       >

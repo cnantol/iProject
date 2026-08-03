@@ -54,7 +54,7 @@ import { fmtDateTime, authUrl } from '../utils/helpers';
 const ENTITY_CARDS = [
   { key: 'end_customer', label: '客户信息（最终/合同客户）' },
   { key: 'contract_customer', label: '客户信息（合同客户）' },
-  { key: 'order', label: '订单信息' },
+  { key: 'order', label: '销售机会信息' },
   { key: 'guide_price', label: '指导价' },
   { key: 'material', label: '框架协议价' }
 ];
@@ -67,15 +67,15 @@ const FIELD_TYPES = [
 ];
 
 const BUILTIN_STEP_FIELDS = {
-  customer_info: ['年份', '月份', '合同客户', '最终客户', '订单类型', '项目编号', '车间', '项目名称', '项目负责人', '项目备注', '框架协议标记', '技术要求文件'],
+  customer_info: ['年份', '月份', '合同客户', '最终客户', '销售机会类型', '项目编号', '车间', '项目名称', '项目负责人', '项目备注', '框架协议标记', '技术要求文件'],
   proposal: ['版本标签', '方案文件', '版本备注', '物料号', '物料描述', '物料类型', '数量', '单位', '排序号', '选型备注'],
   quotation: ['报价轮次', '轮次状态', '物料号', '物料描述', '物料类型', '价格来源', '协议/指导未税单价', '实付比例(%)', '最终未税单价', '数量', '行金额', '单位', '明细备注'],
   approval_pending: ['报价轮次', 'Sales Force 审批', 'OA 合同审批', '审批状态', '审批备注'],
-  bid_decision: ['方案版本预览', '最新报价轮次', '选中报价轮次', '中标结果', '订单总金额'],
+  bid_decision: ['方案版本预览', '最新报价轮次', '选中报价轮次', '中标结果', '销售机会总金额'],
   finance: ['Sales Order', 'Customer PO', 'PO 号', 'PO 金额', '总金额', '付款条款', '客户盖章合同'],
   shipping_invoicing: ['发货状态', '发货日期', '发货批次', '批次百分比', '开票状态', '开票日期', '发票号', '发票金额', '发票附件'],
   commission: ['佣金 Excel', '佣金匹配', '佣金金额', '佣金日期', '人工补录记录'],
-  closed: ['闭环时间', '订单只读状态'],
+  closed: ['闭环时间', '销售机会只读状态'],
   lost_closed: ['闭环时间', '未中标关闭状态']
 };
 
@@ -563,7 +563,7 @@ const IMPORT_TARGET_META = {
   contract_customer: { color: '#009688', desc: '导入合同客户基础档案' },
   material: { color: '#2E7D32', desc: '导入框架协议价格与有效期' },
   guide_price: { color: '#F57C00', desc: '导入系统指导价格' },
-  history: { color: '#7B1FA2', desc: '导入历史订单与闭环数据' }
+  history: { color: '#7B1FA2', desc: '导入历史销售机会与闭环数据' }
 };
 
 function ImportManager({ onError }) {
@@ -606,7 +606,7 @@ function ImportManager({ onError }) {
           <Typography variant="h6">数据导入</Typography>
         </Stack>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2, ml: 0.5 }}>
-          按标准模板批量导入基础数据与历史订单
+          按标准模板批量导入基础数据与历史销售机会
         </Typography>
         <Stack spacing={1.5} sx={{ mb: 2.5 }}>
           {IMPORT_TARGETS.map((target) => (
@@ -763,7 +763,7 @@ const QUOTE_STYLE_DEFAULTS = {
     quote_title: '报价单',
     quote_date: '报价日期',
     quote_no: '报价单编号',
-    order_no: '订单号',
+    order_no: '销售机会编号',
     project_name: '项目名称',
     end_customer: '最终客户',
     contract_customer: '合同客户',
@@ -800,7 +800,7 @@ const QUOTE_STYLE_DEFAULTS = {
 const QUOTE_META_FIELDS = [
   { key: 'quote_no', label: '报价单编号', switchKey: 'quote_no' },
   { key: 'quote_date', label: '报价日期', switchKey: 'quote_date' },
-  { key: 'order_no', label: '订单号', switchKey: 'order_no' },
+  { key: 'order_no', label: '销售机会编号', switchKey: 'order_no' },
   { key: 'project_name', label: '项目名称', switchKey: 'project_name' },
   { key: 'end_customer', label: '最终客户', switchKey: 'end_customer' },
   { key: 'contract_customer', label: '合同客户', switchKey: 'contract_customer' },
@@ -1693,7 +1693,7 @@ function SystemManager({ onError }) {
                 getOptionLabel={(option) => `${option.order_id}（${option.project_name || ''}）`}
                 value={selectedOrder}
                 onChange={(_, value) => setSelectedOrder(value)}
-                renderInput={(params) => <TextField {...params} label="选择订单" />}
+                renderInput={(params) => <TextField {...params} label="选择销售机会" />}
               />
               <FormControl fullWidth>
                 <InputLabel>发货状态</InputLabel>
@@ -1724,7 +1724,7 @@ function SystemManager({ onError }) {
                 </Select>
               </FormControl>
               <Typography variant="caption" color="text.secondary">
-                将 delivered/invoiced 改为 0 且订单已到 commission/closed 时必须指定回退目标状态；所有修正写入审计日志。
+                将 delivered/invoiced 改为 0 且销售机会已到 commission/closed 时必须指定回退目标状态；所有修正写入审计日志。
               </Typography>
             </Stack>
           </DialogContent>

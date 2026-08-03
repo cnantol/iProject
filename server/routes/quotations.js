@@ -224,7 +224,7 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
   doc.moveDown(0.5);
   doc.fontSize(10).fillColor('#444444');
   if (show('quote_no')) doc.text(`${labels.quote_no || '报价单编号'}：Q-${todayLocal().replace(/-/g, '')}-R${round.round_no}`, { align: infoAlign });
-  if (show('order_no')) doc.text(`${labels.order_no || '订单号'}：${order.order_id || ''}`, { align: infoAlign });
+  if (show('order_no')) doc.text(`${labels.order_no || '销售机会编号'}：${order.order_id || ''}`, { align: infoAlign });
   if (show('project_name')) doc.text(`${labels.project_name || '项目名称'}：${order.project_name || ''}`, { align: infoAlign });
   if (show('end_customer')) doc.text(`${labels.end_customer || '最终客户'}：${customerNames.end || ''}`, { align: infoAlign });
   if (show('contract_customer')) doc.text(`${labels.contract_customer || '合同客户'}：${customerNames.contract || ''}`, { align: infoAlign });

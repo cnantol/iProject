@@ -102,7 +102,7 @@ export default function StepBidResult({ order, readOnly, onChanged }) {
         )}
         {order.status === 'lost_closed' && (
           <Alert severity="warning">
-            该订单已标记未中标并关闭。如需恢复，请在系统设置「数据修正」中回退至中标结果。
+            该销售机会已标记未中标并关闭。如需恢复，请在系统设置「数据修正」中回退至中标结果。
           </Alert>
         )}
         {order.status === 'finance' && order.bid_result === 'won' && <Chip size="small" color="success" label="已确认中标" />}
@@ -111,7 +111,7 @@ export default function StepBidResult({ order, readOnly, onChanged }) {
       <Dialog open={lostOpen} onClose={() => setLostOpen(false)}>
         <DialogTitle>确认未中标</DialogTitle>
         <DialogContent>
-          <DialogContentText>未中标后订单将进入 lost_closed 只读终点，不可在流程中恢复。是否确认？</DialogContentText>
+          <DialogContentText>未中标后销售机会将进入 lost_closed 只读终点，不可在流程中恢复。是否确认？</DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setLostOpen(false)}>取消</Button>

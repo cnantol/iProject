@@ -358,8 +358,8 @@ export default function TodoList() {
             </FormControl>
             <TextField size="small" label="截止日期" type="date" value={quick.due_date} onChange={(e) => setQuick((prev) => ({ ...prev, due_date: e.target.value }))} InputLabelProps={{ shrink: true }} />
             <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel>关联订单</InputLabel>
-              <Select value={quick.order_ref} label="关联订单" onChange={(e) => setQuick((prev) => ({ ...prev, order_ref: e.target.value }))}>
+              <InputLabel>关联销售机会</InputLabel>
+              <Select value={quick.order_ref} label="关联销售机会" onChange={(e) => setQuick((prev) => ({ ...prev, order_ref: e.target.value }))}>
                 <MenuItem value="">不关联</MenuItem>
                 {orders.map((order) => (
                   <MenuItem key={order.id} value={order.id}>

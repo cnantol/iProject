@@ -162,9 +162,9 @@ const IMPORT_TARGETS = {
     required: ['物料号', '指导价']
   },
   history: {
-    label: '历史订单导入',
-    headers: ['订单号', '年份', '月份', '最终客户', '合同客户', '项目名称', '项目负责人', '订单类型', '状态', 'Sales Order', '总金额', '是否发货', '发货日期', '是否开票', '开票日期', '佣金是否匹配', '佣金金额', '付款条款', '项目编号', '车间', '项目备注'],
-    required: ['订单号', '年份', '月份']
+    label: '历史销售机会导入',
+    headers: ['销售机会编号', '年份', '月份', '最终客户', '合同客户', '项目名称', '项目负责人', '销售机会类型', '状态', 'Sales Order', '总金额', '是否发货', '发货日期', '是否开票', '开票日期', '佣金是否匹配', '佣金金额', '付款条款', '项目编号', '车间', '项目备注'],
+    required: ['销售机会编号', '年份', '月份']
   }
 };
 
@@ -324,10 +324,10 @@ function importRow(db, target, headers, row) {
 
 function importHistoryRow(db, headers, row) {
   const value = (name) => cell(row, headerIndex(headers, name));
-  const orderId = value('订单号');
+  const orderId = value('销售机会编号');
   const year = value('年份');
   const month = value('月份');
-  if (orderId === null || String(orderId).trim() === '') return '订单号必填';
+  if (orderId === null || String(orderId).trim() === '') return '销售机会编号必填';
   if (year === null || String(year).trim() === '') return '年份必填';
   if (month === null || String(month).trim() === '') return '月份必填';
   const status = value('状态') ? String(value('状态')) : 'customer_info';
@@ -348,7 +348,7 @@ function importHistoryRow(db, headers, row) {
     contractCustomerId = cc.id;
   }
   const salesOrder = value('Sales Order') != null ? normalizeSo(value('Sales Order')) : null;
-  if (salesOrder && !checkSalesOrderUnique(db, salesOrder, null)) return '该 SO 号已被其他订单使用';
+  if (salesOrder && !checkSalesOrderUnique(db, salesOrder, null)) return '该 SO 号已被其他销售机会使用';
   const totalAmountRaw = value('总金额');
   let totalAmount = null;
   if (totalAmountRaw !== null && totalAmountRaw !== '') {
@@ -367,14 +367,14 @@ function importHistoryRow(db, headers, row) {
   const deliveredDate = value('发货日期') != null && value('发货日期') !== '' ? String(value('发货日期')) : null;
   const invoicedDate = value('开票日期') != null && value('开票日期') !== '' ? String(value('开票日期')) : null;
   if (delivered === 1 && !deliveredDate) return 'delivered=1 必须同时提供发货日期';
-  if (commissionMatched === 1 && !isMoney(commissionAmount)) return '已闭环订单缺少佣金金额';
+  if (commissionMatched === 1 && !isMoney(commissionAmount)) return '已闭环销售机会缺少佣金金额';
   if (status === 'closed' && (delivered !== 1 || invoiced !== 1 || !isMoney(commissionAmount))) {
-    return 'closed 订单必须 delivered=1 且 invoiced=1 且有佣金金额';
+    return 'closed 销售机会必须 delivered=1 且 invoiced=1 且有佣金金额';
   }
   if (deliveredDate && !isValidDate(deliveredDate)) return '发货日期格式必须为 YYYY-MM-DD';
   if (invoicedDate && !isValidDate(invoicedDate)) return '开票日期格式必须为 YYYY-MM-DD';
-  const orderType = value('订单类型') ? String(value('订单类型')) : null;
-  if (orderType && !['A', 'B', 'C'].includes(orderType)) return '订单类型无效';
+  const orderType = value('销售机会类型') ? String(value('销售机会类型')) : null;
+  if (orderType && !['A', 'B', 'C'].includes(orderType)) return '销售机会类型无效';
   const ts = nowUtc();
   try {
     db.prepare(
@@ -414,7 +414,7 @@ function importHistoryRow(db, headers, row) {
     );
     return null;
   } catch (err) {
-    if (String(err.message).includes('UNIQUE')) return '订单号或 SO 号已存在';
+    if (String(err.message).includes('UNIQUE')) return '销售机会编号或 SO 号已存在';
     throw err;
   }
 }
@@ -537,7 +537,7 @@ function defaultQuoteStyle() {
       quote_title: '报价单',
       quote_date: '报价日期',
       quote_no: '报价单编号',
-      order_no: '订单号',
+      order_no: '销售机会编号',
       project_name: '项目名称',
       end_customer: '最终客户',
       contract_customer: '合同客户',
@@ -793,7 +793,7 @@ router.put('/correct-order-data', (req, res) => {
   const target = targetStatus ? String(targetStatus) : null;
   const validTargets = ['shipping_invoicing', 'finance', 'commission', 'bid_decision', 'quotation'];
   if (target && !validTargets.includes(target)) return badRequest(res, '回退目标状态无效');
-  if (target && target === 'commission' && !['closed'].includes(order.status)) return badRequest(res, '仅 closed 订单可回退至 commission');
+  if (target && target === 'commission' && !['closed'].includes(order.status)) return badRequest(res, '仅 closed 销售机会可回退至 commission');
   if (target && target !== 'commission' && !['closed', 'lost_closed', 'commission'].includes(order.status)) {
     return badRequest(res, '当前状态不支持回退');
   }
@@ -830,7 +830,7 @@ router.put('/correct-order-data', (req, res) => {
   }
   if (changes.sales_order !== undefined) {
     const so = changes.sales_order ? normalizeSo(changes.sales_order) : null;
-    if (so && !checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他订单使用');
+    if (so && !checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他销售机会使用');
     next.sales_order = so;
   }
   if (changes.payment_terms !== undefined) next.payment_terms = changes.payment_terms || null;

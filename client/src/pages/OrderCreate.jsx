@@ -113,7 +113,7 @@ export default function OrderCreate() {
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/orders')}>
           返回
         </Button>
-        <Typography variant="h5">新建订单</Typography>
+        <Typography variant="h5">新建销售机会</Typography>
       </Stack>
       {error && <Alert severity="error">{error}</Alert>}
       <form onSubmit={submit}>
@@ -176,7 +176,7 @@ export default function OrderCreate() {
               </Grid>
               <Grid item xs={12} md={6}>
                 <FormControl>
-                  <FormLabel>订单类型</FormLabel>
+                  <FormLabel>销售机会类型</FormLabel>
                   <RadioGroup row value={form.order_type} onChange={(e) => set('order_type', e.target.value)}>
                     {ORDER_TYPES.map((type) => (
                       <FormControlLabel key={type} value={type} control={<Radio />} label={type} />
@@ -215,7 +215,7 @@ export default function OrderCreate() {
             </Grid>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
               <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={saving}>
-                {saving ? <CircularProgress size={20} color="inherit" /> : '创建订单'}
+                {saving ? <CircularProgress size={20} color="inherit" /> : '创建销售机会'}
               </Button>
             </Box>
           </CardContent>

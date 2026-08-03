@@ -79,7 +79,7 @@ try {
   assert.strictEqual(Number(lookup.unit_price_ex_vat), 140);
   ok('基础数据与价格决策表');
 
-  // 创建订单
+  // 创建销售机会
   const created = must(
     await call('POST', '/api/orders', {
       token,
@@ -94,12 +94,12 @@ try {
       }
     }),
     201,
-    '创建订单'
+    '创建销售机会'
   );
   const orderId = created.order.id;
-  assert.match(created.order.order_id, /^ORD-\d{8}-\d{4}$/);
+  assert.match(created.order.order_id, /^OPP-\d{8}-\d{4}$/);
   assert.strictEqual(created.order.status, 'customer_info');
-  ok('订单创建与订单号生成');
+  ok('销售机会创建与销售机会编号生成');
 
   must(await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'advance' } }), 200, '客户信息→方案');
   must(await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'advance', skip: 1 } }), 200, '方案跳过→报价');
@@ -151,7 +151,7 @@ try {
   ok('双线审批通过自动推进');
 
   must(await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'bid', result: 'won' } }), 200, '中标');
-  let detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '订单详情');
+  let detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情');
   assert.strictEqual(Number(detail.order.total_amount), 729.5);
   ok('中标自动写入总金额');
 
@@ -177,7 +177,7 @@ try {
     '超开确认'
   );
   assert.ok(over.item.id > 0);
-  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '订单详情2');
+  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情2');
   assert.strictEqual(detail.order.status, 'commission');
   assert.strictEqual(Number(detail.order.invoiced), 1);
   ok('开票自动标记、超开审计与并行推进');
@@ -190,7 +190,7 @@ try {
   const commission = must(await call('POST', '/api/commission/upload', { token, form }), 200, '佣金匹配');
   assert.strictEqual(commission.matched, 1);
   assert.strictEqual(commission.duplicate_so_count, 1);
-  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '订单详情3');
+  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情3');
   assert.strictEqual(detail.order.status, 'closed');
   assert.strictEqual(Number(detail.order.commission_amount), 500);
   ok('佣金匹配闭环（含重复 SO 计数）');
@@ -209,11 +209,11 @@ try {
       body: { end_customer_id: ec.id, contract_customer_id: cc.id, order_type: 'B', project_name: '测试项目2', project_owner: '王工' }
     }),
     201,
-    '创建订单2'
+    '创建销售机会2'
   ).order;
   await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'advance' } });
   await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'advance', skip: 1 } });
-  const rounds2 = must(await call('GET', `/api/orders/${order2.id}/quotations`, { token }), 200, '订单2报价');
+  const rounds2 = must(await call('GET', `/api/orders/${order2.id}/quotations`, { token }), 200, '销售机会2报价');
   const round2 = rounds2.items[0].id;
   await call('POST', `/api/orders/${order2.id}/quotations/${round2}/items`, {
     token,
@@ -254,18 +254,18 @@ try {
   assert.strictEqual(corrected2.order.bid_result, null);
   must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'bid', result: 'won' } }), 200, '重新中标');
   await call('PATCH', `/api/orders/${order2.id}`, { token, body: { sales_order: 'SO-002' } });
-  const pos2 = must(await call('GET', `/api/orders/${order2.id}/customer-pos`, { token }), 200, '订单2 PO');
+  const pos2 = must(await call('GET', `/api/orders/${order2.id}/customer-pos`, { token }), 200, '销售机会2 PO');
   if (pos2.items.length === 0) {
     await call('POST', `/api/orders/${order2.id}/customer-pos`, { token, body: { po_number: 'PO-002', po_amount: 10 } });
   }
-  must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'advance' } }), 200, '订单2 进入发货开票');
-  must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'toggle-delivered', delivered: 1 } }), 200, '订单2 发货（无批次）');
-  const pos2b = must(await call('GET', `/api/orders/${order2.id}/customer-pos`, { token }), 200, '订单2 PO 2');
+  must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'advance' } }), 200, '销售机会2 进入发货开票');
+  must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'toggle-delivered', delivered: 1 } }), 200, '销售机会2 发货（无批次）');
+  const pos2b = must(await call('GET', `/api/orders/${order2.id}/customer-pos`, { token }), 200, '销售机会2 PO 2');
   await call('POST', `/api/orders/${order2.id}/invoices`, { token, body: { po_id: pos2b.items[0].id, invoice_no: 'INV-003', amount: 10 } });
-  detail = must(await call('GET', `/api/orders/${order2.id}`, { token }), 200, '订单2 自动开票');
+  detail = must(await call('GET', `/api/orders/${order2.id}`, { token }), 200, '销售机会2 自动开票');
   assert.strictEqual(detail.order.status, 'commission');
   must(await call('POST', '/api/commission/manual', { token, body: { order_id: order2.id, amount: 88, remark: 'Excel 遗漏' } }), 201, '人工补录');
-  detail = must(await call('GET', `/api/orders/${order2.id}`, { token }), 200, '订单2 详情');
+  detail = must(await call('GET', `/api/orders/${order2.id}`, { token }), 200, '销售机会2 详情');
   assert.strictEqual(detail.order.status, 'closed');
   assert.strictEqual(Number(detail.order.commission_amount), 88);
   ok('人工补录佣金闭环');
@@ -284,7 +284,7 @@ try {
   assert.strictEqual(fixed.order.commission_amount, null);
   await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'toggle-delivered', delivered: 1 } });
   await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'toggle-invoiced', invoiced: 1 } });
-  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '订单详情4');
+  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情4');
   assert.strictEqual(detail.order.status, 'commission');
   ok('数据修正回退清空佣金');
 

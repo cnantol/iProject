@@ -224,7 +224,7 @@ export default function CommissionPage() {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>订单号</TableCell>
+                  <TableCell>销售机会编号</TableCell>
                   <TableCell>项目名称</TableCell>
                   <TableCell>Sales Order</TableCell>
                   <TableCell>最终客户</TableCell>
@@ -235,7 +235,7 @@ export default function CommissionPage() {
                 {waiting.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} align="center" sx={{ color: 'text.secondary' }}>
-                      暂无等待匹配的订单
+                      暂无等待匹配的销售机会
                     </TableCell>
                   </TableRow>
                 )}
@@ -300,7 +300,7 @@ export default function CommissionPage() {
         <DialogTitle>人工补录佣金</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1, minWidth: 360 }}>
-            <TextField label="订单号" value={manualTarget?.order_id || ''} disabled />
+            <TextField label="销售机会编号" value={manualTarget?.order_id || ''} disabled />
             <TextField label="佣金金额（必填，>0）" type="number" value={manualAmount} onChange={(e) => setManualAmount(e.target.value)} fullWidth />
             <TextField label="补录备注" multiline minRows={2} value={manualRemark} onChange={(e) => setManualRemark(e.target.value)} fullWidth />
           </Stack>

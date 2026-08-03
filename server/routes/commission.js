@@ -85,7 +85,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
       if (amountMap.has(key)) {
         const amount = amountMap.get(key);
         const info = updateOrder.run(amount, ts, ts, ts, order.id);
-        if (info.changes === 0) throw new Error('订单状态已变更');
+        if (info.changes === 0) throw new Error('销售机会状态已变更');
         matchedCount += 1;
         matchedSoSet.add(key);
       } else {
@@ -171,7 +171,7 @@ router.post('/manual', (req, res) => {
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(Number(orderId));
   if (!order) return notFound(res);
   if (order.status !== 'commission' || Number(order.commission_matched) === 1) {
-    return badRequest(res, '仅佣金阶段且未匹配的订单可人工补录');
+    return badRequest(res, '仅佣金阶段且未匹配的销售机会可人工补录');
   }
   if (!isMoney(amount)) return badRequest(res, '补录金额必须大于 0');
   const ts = nowUtc();
@@ -185,7 +185,7 @@ router.post('/manual', (req, res) => {
          WHERE id = ? AND status = 'commission' AND commission_matched = 0`
       )
       .run(Number(amount), ts, ts, ts, order.id);
-    if (info.changes === 0) throw new Error('订单状态已变更');
+    if (info.changes === 0) throw new Error('销售机会状态已变更');
     writeAudit(db, {
       userId: req.user.id,
       action: 'commission_manual',

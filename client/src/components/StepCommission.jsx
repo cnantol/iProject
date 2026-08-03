@@ -54,7 +54,7 @@ export default function StepCommission({ order, readOnly, onChanged }) {
         </Stack>
       ) : (
         <Alert severity="info" sx={{ mb: 2 }}>
-          该订单尚未匹配佣金，保持等待下次佣金 Excel 匹配；特殊情况可由管理员人工补录。
+          该销售机会尚未匹配佣金，保持等待下次佣金 Excel 匹配；特殊情况可由管理员人工补录。
         </Alert>
       )}
       {canManual && (

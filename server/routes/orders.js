@@ -149,7 +149,7 @@ function upsertCustomValues(db, orderId, customValues) {
 }
 
 function generateOrderId(db, tryInsert) {
-  const prefix = `ORD-${todayLocal().replace(/-/g, '')}-`;
+  const prefix = `OPP-${todayLocal().replace(/-/g, '')}-`;
   for (let attempt = 0; attempt < 3; attempt++) {
     const last = db.prepare('SELECT order_id FROM orders WHERE order_id LIKE ? ORDER BY order_id DESC LIMIT 1').get(`${prefix}%`);
     let seq = 1;
@@ -166,7 +166,7 @@ function generateOrderId(db, tryInsert) {
       throw err;
     }
   }
-  throw new Error('订单号生成冲突，请重试');
+  throw new Error('销售机会编号生成冲突，请重试');
 }
 
 router.get('/', (req, res) => {
@@ -227,7 +227,7 @@ router.post('/', (req, res) => {
   const data = pick(body, STEP1_FIELDS);
   if (!data.end_customer_id) return badRequest(res, '最终客户必选');
   if (!data.contract_customer_id) return badRequest(res, '合同客户必选');
-  if (!data.order_type || !['A', 'B', 'C'].includes(String(data.order_type))) return badRequest(res, '请选择有效的订单类型');
+  if (!data.order_type || !['A', 'B', 'C'].includes(String(data.order_type))) return badRequest(res, '请选择有效的销售机会类型');
   if (!data.project_name || !String(data.project_name).trim()) return badRequest(res, '项目名称必填');
   if (!data.project_owner || !String(data.project_owner).trim()) return badRequest(res, '项目负责人必填');
 
@@ -277,7 +277,7 @@ router.patch('/:id', (req, res) => {
       data.has_framework = hasFrameworkForCustomer(Number(data.end_customer_id)) ? 1 : 0;
     }
     if (data.order_type !== undefined && !['A', 'B', 'C'].includes(String(data.order_type))) {
-      return badRequest(res, '请选择有效的订单类型');
+      return badRequest(res, '请选择有效的销售机会类型');
     }
     db.prepare(
       `UPDATE orders SET year=?, month=?, end_customer_id=?, contract_customer_id=?, order_type=?, project_no=?, workshop=?,
@@ -302,7 +302,7 @@ router.patch('/:id', (req, res) => {
     if (data.sales_order !== undefined) {
       const so = String(data.sales_order).trim();
       if (!so) return badRequest(res, 'Sales Order 必填');
-      if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他订单使用');
+      if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他销售机会使用');
       data.sales_order = so;
     }
     db.prepare('UPDATE orders SET sales_order=?, payment_terms=?, updated_at=? WHERE id=?').run(
@@ -312,7 +312,7 @@ router.patch('/:id', (req, res) => {
       order.id
     );
   } else {
-    return badRequest(res, '当前订单状态不允许修改这些字段');
+    return badRequest(res, '当前销售机会状态不允许修改这些字段');
   }
 
   upsertCustomValues(db, order.id, body.customValues);
@@ -325,7 +325,7 @@ router.delete('/:id', (req, res) => {
   if (!detail) return notFound(res);
   const { order } = detail;
   if (!['customer_info', 'proposal', 'quotation'].includes(order.status)) {
-    return badRequest(res, '仅客户信息/方案/报价阶段的订单允许删除');
+    return badRequest(res, '仅客户信息/方案/报价阶段的销售机会允许删除');
   }
   if (detail.approvals.length > 0) return badRequest(res, '存在审批记录，禁止删除');
   if (detail.shippingBatches.length > 0) return badRequest(res, '存在发货批次记录，禁止删除');
@@ -350,7 +350,7 @@ router.delete('/:id', (req, res) => {
     entityId: order.id,
     detail: { order_id: order.order_id }
   });
-  return res.json({ message: '订单已删除' });
+  return res.json({ message: '销售机会已删除' });
 });
 
 function maybeAutoAdvance(db, orderId) {
@@ -396,9 +396,9 @@ router.patch('/:id/status', (req, res) => {
     if (order.status === 'finance') {
       const so = order.sales_order ? String(order.sales_order).trim() : '';
       if (!so) return badRequest(res, 'Sales Order 必填');
-      if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他订单使用');
+      if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他销售机会使用');
       if (order.total_amount === null || order.total_amount === undefined || !isMoney(order.total_amount)) {
-        return badRequest(res, '订单总金额无效，无法进入下一步');
+        return badRequest(res, '销售机会总金额无效，无法进入下一步');
       }
       const pos = db.prepare('SELECT * FROM customer_pos WHERE order_id = ?').all(order.id);
       if (pos.length === 0) return badRequest(res, '至少录入一行 Customer PO');

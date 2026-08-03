@@ -180,7 +180,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
         </Grid>
         <Grid item xs={12} sm={6}>
           <TextField
-            label="订单总金额（自动带出，锁定）"
+            label="销售机会总金额（自动带出，锁定）"
             value={fmtMoney(order.total_amount)}
             fullWidth
             disabled

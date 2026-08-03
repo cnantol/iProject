@@ -118,7 +118,7 @@ export default function Login() {
           <Box sx={{ textAlign: 'center' }}>
             <Box component="img" src="/logo.svg" alt="Atlas Copco" sx={{ height: 64, width: 'auto', mb: 1.5 }} />
             <Typography variant="h6" sx={{ fontWeight: 800, color: (theme) => (theme.palette.mode === 'dark' ? '#8FB6E3' : 'primary.main') }}>
-              Atlas Copco 订单管理系统
+              Atlas Copco 销售机会管理系统
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               销售项目全生命周期管理

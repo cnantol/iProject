@@ -202,7 +202,7 @@ export default function OrderDetail() {
           </Grid>
           <Grid item xs={12} sm={6} lg={3}>
             <InfoTile
-              label="订单总金额"
+              label="销售机会总金额"
               value={order.total_amount == null ? '-' : `¥ ${fmtMoney(order.total_amount)}`}
               color="#B8860B"
               darkColor="#E5BE63"
@@ -241,9 +241,9 @@ export default function OrderDetail() {
       {renderStep()}
 
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
-        <DialogTitle>删除订单</DialogTitle>
+        <DialogTitle>删除销售机会</DialogTitle>
         <DialogContent>
-          <DialogContentText>仅早期状态订单可删除，删除后不可恢复。确认删除 {order.order_id}？</DialogContentText>
+          <DialogContentText>仅早期状态销售机会可删除，删除后不可恢复。确认删除 {order.order_id}？</DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteOpen(false)}>取消</Button>
