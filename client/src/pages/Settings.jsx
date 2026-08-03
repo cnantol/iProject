@@ -38,6 +38,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
 import HistoryIcon from '@mui/icons-material/History';
+import ImageIcon from '@mui/icons-material/Image';
 import LinkIcon from '@mui/icons-material/Link';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import PersonIcon from '@mui/icons-material/Person';
@@ -48,6 +49,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { useAppLogo } from '../context/AppLogoContext';
 import { FIELD_LABEL_DEFAULTS } from '../utils/fieldLabels';
 import { IMPORT_TARGET_LABELS } from '../utils/constants';
 import { fmtDateTime, authUrl } from '../utils/helpers';
@@ -1317,6 +1319,7 @@ function QuoteStyle({ onError }) {
 
 function SystemManager({ onError }) {
   const { updateUser } = useAuth();
+  const { setLogo, resetLogo } = useAppLogo();
   const [orderOptions, setOrderOptions] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [correction, setCorrection] = useState({ delivered: '', invoiced: '', total_amount: '', target_status: '' });
@@ -1332,6 +1335,8 @@ function SystemManager({ onError }) {
   const [accountSaving, setAccountSaving] = useState(false);
   const [fieldLabels, setFieldLabels] = useState({ ...FIELD_LABEL_DEFAULTS });
   const [fieldSaving, setFieldSaving] = useState(false);
+  const [appLogo, setAppLogo] = useState(null);
+  const [appLogoSaving, setAppLogoSaving] = useState(false);
 
   const loadOrders = async () => {
     try {
@@ -1370,11 +1375,21 @@ function SystemManager({ onError }) {
     }
   };
 
+  const loadAppLogo = async () => {
+    try {
+      const { data } = await api.get('/settings/app-logo');
+      setAppLogo(data.logo || null);
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
   useEffect(() => {
     loadOrders();
     loadAudit();
     loadSchedule();
     loadFieldLabels();
+    loadAppLogo();
   }, [auditPage]);
 
   const backup = async () => {
@@ -1490,6 +1505,54 @@ function SystemManager({ onError }) {
       onError(errorMessage(err));
     } finally {
       setFieldSaving(false);
+    }
+  };
+
+  const handleLogoUpload = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      onError('仅支持 PNG / JPG 图片');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      onError('Logo 图片不能超过 2MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setAppLogo(String(reader.result));
+    reader.onerror = () => onError('Logo 图片读取失败');
+    reader.readAsDataURL(file);
+  };
+
+  const saveAppLogo = async () => {
+    setAppLogoSaving(true);
+    onError('');
+    try {
+      const { data } = await api.put('/settings/app-logo', { logo: appLogo });
+      setAppLogo(data.logo || null);
+      setLogo(data.logo || null);
+      window.alert('Logo 已更新，登录页与首页将同步生效');
+    } catch (err) {
+      onError(errorMessage(err));
+    } finally {
+      setAppLogoSaving(false);
+    }
+  };
+
+  const resetAppLogo = async () => {
+    setAppLogoSaving(true);
+    onError('');
+    try {
+      await api.put('/settings/app-logo', { logo: null });
+      setAppLogo(null);
+      resetLogo();
+      window.alert('已恢复默认 Logo');
+    } catch (err) {
+      onError(errorMessage(err));
+    } finally {
+      setAppLogoSaving(false);
     }
   };
 
@@ -1656,6 +1719,38 @@ function SystemManager({ onError }) {
           </Box>
           </Grid>
           </Grid>
+
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'background.paper', mb: 3 }}>
+            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
+              <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ImageIcon fontSize="small" />
+              </Box>
+              <Typography variant="h6">Logo 设置</Typography>
+              <Typography variant="caption" color="text.secondary">上传后登录页与首页 Logo 同步替换</Typography>
+            </Stack>
+            <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+              {appLogo ? (
+                <img src={appLogo} alt="Logo" style={{ maxWidth: 180, maxHeight: 64, width: 'auto', objectFit: 'contain' }} />
+              ) : (
+                <Box sx={{ width: 180, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed', borderColor: 'text.disabled', borderRadius: 1.5, overflow: 'hidden' }}>
+                  <img src="/logo.svg" alt="默认 Logo" style={{ maxWidth: 170, maxHeight: 56, width: 'auto', objectFit: 'contain' }} />
+                </Box>
+              )}
+              <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />}>
+                上传 Logo
+                <input type="file" hidden accept="image/png,image/jpeg" onChange={handleLogoUpload} />
+              </Button>
+              <Button size="small" color="error" variant="outlined" startIcon={<RestoreIcon />} onClick={resetAppLogo} disabled={!appLogo || appLogoSaving}>
+                恢复默认
+              </Button>
+              <Button variant="contained" startIcon={<SaveIcon />} onClick={saveAppLogo} disabled={!appLogo || appLogoSaving}>
+                {appLogoSaving ? <CircularProgress size={18} color="inherit" /> : '保存 Logo'}
+              </Button>
+            </Stack>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+              支持 PNG / JPG，不超过 2MB
+            </Typography>
+          </Box>
 
           <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'background.paper', mb: 3 }}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>

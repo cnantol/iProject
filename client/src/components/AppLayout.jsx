@@ -30,6 +30,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import MenuOpenIcon from '@mui/icons-material/MenuOpen';
 import { useAuth } from '../context/AuthContext';
 import { useThemeMode } from '../context/ThemeContext';
+import { useAppLogo } from '../context/AppLogoContext';
 
 const NAV_ITEMS = [
   { path: '/', label: '首页看板', icon: <DashboardIcon /> },
@@ -48,6 +49,9 @@ export default function AppLayout() {
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const navigate = useNavigate();
   const location = useLocation();
+  const { src } = useAppLogo();
+  const [logoFailed, setLogoFailed] = useState(false);
+  const logo = logoFailed ? '/logo.svg' : src;
   const { user, logout } = useAuth();
   const { mode, preference, setPreference } = useThemeMode();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -57,7 +61,7 @@ export default function AppLayout() {
   const drawerContent = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2.25, py: 2 }}>
-        <Box component="img" src="/logo.svg" alt="Atlas Copco" sx={{ height: 42, width: 'auto' }} />
+        <Box component="img" src={logo} alt="Atlas Copco" onError={() => setLogoFailed(true)} sx={{ height: 42, maxWidth: 150, width: 'auto', objectFit: 'contain' }} />
         <Box sx={{ lineHeight: 1.15 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 900, color: 'primary.main', fontSize: 17, letterSpacing: 0 }}>
             i-Project

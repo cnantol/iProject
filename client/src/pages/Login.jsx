@@ -22,10 +22,14 @@ import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { useAuth } from '../context/AuthContext';
 import { useThemeMode } from '../context/ThemeContext';
 import { errorMessage } from '../api';
+import { useAppLogo } from '../context/AppLogoContext';
 
 export default function Login() {
   const { login } = useAuth();
   const { preference, setPreference } = useThemeMode();
+  const { src } = useAppLogo();
+  const [logoFailed, setLogoFailed] = useState(false);
+  const logo = logoFailed ? '/logo.svg' : src;
   const navigate = useNavigate();
   const location = useLocation();
   const [themeMenu, setThemeMenu] = useState(null);
@@ -116,7 +120,7 @@ export default function Login() {
       <Card sx={{ position: 'relative', overflow: 'hidden', width: '100%', maxWidth: 440, p: { xs: 3, md: 4 }, boxShadow: (theme) => (theme.palette.mode === 'dark' ? '0 18px 48px rgba(0,0,0,0.45)' : '0 18px 48px rgba(20,50,85,0.10)') }}>
         <Stack spacing={3}>
           <Box sx={{ textAlign: 'center' }}>
-            <Box component="img" src="/logo.svg" alt="Atlas Copco" sx={{ height: 64, width: 'auto', mb: 1.5 }} />
+            <Box component="img" src={logo} alt="Atlas Copco" onError={() => setLogoFailed(true)} sx={{ height: 64, maxWidth: '100%', width: 'auto', objectFit: 'contain', mb: 1.5 }} />
             <Typography variant="h5" sx={{ fontWeight: 900, color: (theme) => (theme.palette.mode === 'dark' ? '#8FB6E3' : 'primary.main') }}>
               i-Project
             </Typography>

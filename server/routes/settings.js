@@ -451,6 +451,7 @@ function createBackup() {
   if (fs.existsSync(dbPath)) zip.addFile('database.sqlite', fs.readFileSync(dbPath));
   if (fs.existsSync(quoteStyleFile())) zip.addFile('quote-style.json', fs.readFileSync(quoteStyleFile()));
   if (fs.existsSync(fieldDisplayFile())) zip.addFile('field-display-names.json', fs.readFileSync(fieldDisplayFile()));
+  if (fs.existsSync(appLogoFile())) zip.addFile('app-logo.json', fs.readFileSync(appLogoFile()));
   const uploads = getUploadDir();
   if (fs.existsSync(uploads)) {
     for (const file of fs.readdirSync(uploads)) {
@@ -754,6 +755,34 @@ router.put('/field-display-names', (req, res) => {
   return res.json(labels);
 });
 
+// ---------- 应用 Logo ----------
+function appLogoFile() {
+  return path.join(getDataDir(), 'app-logo.json');
+}
+
+function readAppLogo() {
+  try {
+    const data = JSON.parse(fs.readFileSync(appLogoFile(), 'utf8'));
+    return { logo: data && typeof data.logo === 'string' ? data.logo : null };
+  } catch {
+    return { logo: null };
+  }
+}
+
+router.get('/app-logo', (req, res) => {
+  return res.json(readAppLogo());
+});
+
+router.put('/app-logo', (req, res) => {
+  const { logo } = req.body || {};
+  let next = null;
+  if (logo && typeof logo === 'string' && /^data:image\/(png|jpeg|jpg);base64,/i.test(logo) && logo.length <= 2_400_000) {
+    next = logo;
+  }
+  fs.writeFileSync(appLogoFile(), JSON.stringify({ logo: next }, null, 2));
+  return res.json({ logo: next });
+});
+
 // ---------- 定时自动备份 ----------
 function backupScheduleFile() {
   return path.join(getDataDir(), 'backup-schedule.json');
@@ -836,6 +865,8 @@ router.post('/restore', upload.single('file'), (req, res) => {
     if (fs.existsSync(styleZip)) fs.copyFileSync(styleZip, quoteStyleFile());
     const fieldZip = path.join(tmpDir, 'field-display-names.json');
     if (fs.existsSync(fieldZip)) fs.copyFileSync(fieldZip, fieldDisplayFile());
+    const logoZip = path.join(tmpDir, 'app-logo.json');
+    if (fs.existsSync(logoZip)) fs.copyFileSync(logoZip, appLogoFile());
     initDb(dataDir);
     writeAudit(getDb(), { userId: req.user.id, action: 'other', entityType: 'settings', detail: { event: 'restore', filename: req.file.originalname } });
     return res.json({ message: '还原成功' });

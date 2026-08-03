@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { initDb, closeDb } from './db/init.js';
+import { initDb, closeDb, getDataDir } from './db/init.js';
 import { authenticate } from './middleware/auth.js';
 
 import authRoutes from './routes/auth.js';
@@ -33,6 +33,15 @@ export function createApp() {
   app.use(express.json({ limit: '10mb' }));
 
   app.use('/api/auth', authRoutes);
+  app.get('/api/app-logo', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(getDataDir(), 'app-logo.json'), 'utf8'));
+      return res.json({ logo: data && typeof data.logo === 'string' ? data.logo : null });
+    } catch {
+      return res.json({ logo: null });
+    }
+  });
   app.use('/api/end-customers', authenticate, endCustomerRoutes);
   app.use('/api/contract-customers', authenticate, contractCustomerRoutes);
   app.use('/api/materials', authenticate, materialRoutes);
