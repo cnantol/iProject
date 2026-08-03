@@ -113,15 +113,15 @@ export default function Login() {
           跟随系统
         </MenuItem>
       </Menu>
-      <Card sx={{ width: '100%', maxWidth: 420, p: { xs: 3, md: 4 }, boxShadow: (theme) => (theme.palette.mode === 'dark' ? '0 18px 48px rgba(0,0,0,0.45)' : '0 18px 48px rgba(20,50,85,0.10)') }}>
+      <Card sx={{ position: 'relative', overflow: 'hidden', width: '100%', maxWidth: 440, p: { xs: 3, md: 4 }, boxShadow: (theme) => (theme.palette.mode === 'dark' ? '0 18px 48px rgba(0,0,0,0.45)' : '0 18px 48px rgba(20,50,85,0.10)') }}>
         <Stack spacing={3}>
           <Box sx={{ textAlign: 'center' }}>
             <Box component="img" src="/logo.svg" alt="Atlas Copco" sx={{ height: 64, width: 'auto', mb: 1.5 }} />
-            <Typography variant="h6" sx={{ fontWeight: 800, color: (theme) => (theme.palette.mode === 'dark' ? '#8FB6E3' : 'primary.main') }}>
-              Atlas Copco 销售机会管理系统
+            <Typography variant="h5" sx={{ fontWeight: 900, color: (theme) => (theme.palette.mode === 'dark' ? '#8FB6E3' : 'primary.main') }}>
+              i-Project
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              销售项目全生命周期管理
+              项目全生命周期管理
             </Typography>
           </Box>
           {error && <Alert severity="error">{error}</Alert>}

@@ -59,11 +59,8 @@ export default function AppLayout() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2.25, py: 2 }}>
         <Box component="img" src="/logo.svg" alt="Atlas Copco" sx={{ height: 42, width: 'auto' }} />
         <Box sx={{ lineHeight: 1.15 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'primary.main' }}>
-            Atlas Copco
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            销售机会管理系统
+          <Typography variant="subtitle1" sx={{ fontWeight: 900, color: 'primary.main', fontSize: 17, letterSpacing: 0 }}>
+            i-Project
           </Typography>
         </Box>
       </Box>

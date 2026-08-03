@@ -17,6 +17,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
+import PaymentsIcon from '@mui/icons-material/Payments';
 import SaveIcon from '@mui/icons-material/Save';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
@@ -28,9 +29,9 @@ import StepWrapper from './StepWrapper';
 export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
   const { t } = useFieldLabels();
   const [salesOrder, setSalesOrder] = useState(order.sales_order || '');
-  const [paymentTerms, setPaymentTerms] = useState(order.payment_terms || '');
+  const [paymentTerms, setPaymentTerms] = useState(order.payment_terms || 'COD');
   const [pos, setPos] = useState(order.pos || []);
-  const [poForm, setPoForm] = useState({ po_number: '', po_amount: '' });
+  const [poForm, setPoForm] = useState({ po_number: '', po_amount: '', remark: '' });
   const [editingPoId, setEditingPoId] = useState(null);
   const [soDirty, setSoDirty] = useState(false);
   const [attachments, setAttachments] = useState([]);
@@ -50,7 +51,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
 
   useEffect(() => {
     if (!soDirty) setSalesOrder(order.sales_order || '');
-    setPaymentTerms(order.payment_terms || '');
+    setPaymentTerms(order.payment_terms || 'COD');
     setPos(order.pos || []);
     setAttachments((order.attachments || []).filter((item) => item.stage === 'finance'));
   }, [order, soDirty]);
@@ -89,7 +90,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
       } else {
         await api.post(`/orders/${order.id}/customer-pos`, poForm);
       }
-      setPoForm({ po_number: '', po_amount: '' });
+      setPoForm({ po_number: '', po_amount: '', remark: '' });
       setEditingPoId(null);
       onChanged();
     } catch (err) {
@@ -174,42 +175,55 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
         </Grid>
         <Grid item xs={12} sm={6}>
           <TextField
-            select
-            label="付款条款"
-            value={isCustomPayment ? 'Other' : paymentTerms}
-            onChange={(e) => {
-              const value = e.target.value;
-              setPaymentTerms(value === 'Other' ? '' : value);
-            }}
-            fullWidth
-            disabled={!editable}
-          >
-            {PAYMENT_TERMS.map((term) => (
-              <MenuItem key={term} value={term}>
-                {term}
-              </MenuItem>
-            ))}
-          </TextField>
-          {isCustomPayment && (
-            <TextField
-              label="自定义付款条款"
-              placeholder="请输入付款方式"
-              value={paymentTerms}
-              onChange={(e) => setPaymentTerms(e.target.value)}
-              fullWidth
-              disabled={!editable}
-              sx={{ mt: 1.5 }}
-            />
-          )}
-        </Grid>
-        <Grid item xs={12} sm={6}>
-          <TextField
             label={`${t('amount')}（自动带出，锁定）`}
             value={fmtMoney(order.total_amount)}
             fullWidth
             disabled
             helperText="由中标报价轮次自动写入，仅可通过数据修正调整"
           />
+        </Grid>
+        <Grid item xs={12}>
+          <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, borderColor: 'rgba(0,78,154,0.22)', bgcolor: 'rgba(0,78,154,0.04)', boxShadow: 1 }}>
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
+              <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <PaymentsIcon fontSize="small" />
+              </Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>付款条款</Typography>
+              <Chip size="small" label={isCustomPayment ? 'Other' : paymentTerms} variant="outlined" sx={{ fontWeight: 700 }} />
+            </Stack>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1.5 }}>
+              默认 COD；选择 Other 后可在右侧输入自定义付款条款
+            </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="flex-start">
+              <TextField
+                select
+                label="选择付款方式"
+                value={isCustomPayment ? 'Other' : paymentTerms}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setPaymentTerms(value === 'Other' ? '' : value);
+                }}
+                disabled={!editable}
+                sx={{ flex: 1, minWidth: 180 }}
+              >
+                {PAYMENT_TERMS.map((term) => (
+                  <MenuItem key={term} value={term}>
+                    {term}
+                  </MenuItem>
+                ))}
+              </TextField>
+              {isCustomPayment ? (
+                <TextField
+                  label="自定义付款条款"
+                  placeholder="请输入付款方式"
+                  value={paymentTerms}
+                  onChange={(e) => setPaymentTerms(e.target.value)}
+                  disabled={!editable}
+                  sx={{ flex: 1, minWidth: 220 }}
+                />
+              ) : null}
+            </Stack>
+          </Box>
         </Grid>
       </Grid>
 
@@ -239,7 +253,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
                       color="primary"
                       onClick={() => {
                         setEditingPoId(row.id);
-                        setPoForm({ po_number: row.po_number, po_amount: String(row.po_amount) });
+                        setPoForm({ po_number: row.po_number, po_amount: String(row.po_amount), remark: row.remark || '' });
                       }}
                       title="编辑"
                     >
@@ -272,7 +286,14 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
             value={poForm.po_amount}
             onChange={(e) => setPoForm((prev) => ({ ...prev, po_amount: e.target.value }))}
           />
-          <Button size="small" variant="outlined" startIcon={<SaveIcon />} onClick={addPo}>
+          <TextField
+            size="small"
+            label="备注"
+            value={poForm.remark}
+            onChange={(e) => setPoForm((prev) => ({ ...prev, remark: e.target.value }))}
+            sx={{ minWidth: 220 }}
+          />
+          <Button size="small" variant="outlined" startIcon={<SaveIcon />} onClick={addPo} sx={{ borderRadius: 2 }}>
             {editingPoId ? '保存修改' : '添加 PO'}
           </Button>
           {editingPoId && (
@@ -280,7 +301,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
               size="small"
               onClick={() => {
                 setEditingPoId(null);
-                setPoForm({ po_number: '', po_amount: '' });
+                setPoForm({ po_number: '', po_amount: '', remark: '' });
               }}
             >
               取消
@@ -297,7 +318,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
           <Chip key={item.id} label={item.file_name} component="a" href={authUrl(`/api/orders/${order.id}/attachments/${item.id}/download`)} clickable />
         ))}
         {!posLocked && (
-          <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />}>
+          <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} sx={{ borderRadius: 2 }}>
             上传合同
             <input type="file" hidden accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={uploadAttachment} />
           </Button>
@@ -308,9 +329,12 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
         <Stack direction="row" spacing={1.5} sx={{ mt: 3, justifyContent: 'flex-end', flexWrap: 'wrap', rowGap: 1 }}>
           <Button
             variant="contained"
+            size="large"
+            startIcon={<SaveIcon />}
             onClick={advance}
             disabled={saving || !financeReady}
             title={financeReady ? undefined : '请先保存 Sales Order 与 Customer PO'}
+            sx={{ minWidth: 180, borderRadius: 2 }}
           >
             {saving ? <CircularProgress size={18} color="inherit" /> : '保存并进入下一步'}
           </Button>
