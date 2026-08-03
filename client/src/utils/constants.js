@@ -36,7 +36,7 @@ export const STEP_ORDER = [
   { key: 'closed', label: '项目闭环' }
 ];
 
-export const PAYMENT_TERMS = ['预付款+发货款+验收款', '预付+发货前付清', '货到验收合格后月结30天', '预付+发货款+验收款+质保金'];
+export const PAYMENT_TERMS = ['COD', 'TT60', 'TT90', '3-6-1', 'Other'];
 
 export const PRIORITY_LABELS = { low: '低', medium: '中', high: '高', urgent: '紧急' };
 export const PRIORITY_COLORS = { low: '#78909C', medium: '#1976D2', high: '#F57C00', urgent: '#D32F2F' };

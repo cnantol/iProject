@@ -37,6 +37,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const editable = !readOnly && order.status === 'finance';
+  const isCustomPayment = !PAYMENT_TERMS.includes(paymentTerms);
   const posLocked = !editable;
   const soSaved = Boolean(order.sales_order) && !soDirty;
   const poSaved = (pos || []).length > 0;
@@ -172,13 +173,34 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
           />
         </Grid>
         <Grid item xs={12} sm={6}>
-          <TextField select label="付款条款" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} fullWidth disabled={!editable}>
+          <TextField
+            select
+            label="付款条款"
+            value={isCustomPayment ? 'Other' : paymentTerms}
+            onChange={(e) => {
+              const value = e.target.value;
+              setPaymentTerms(value === 'Other' ? '' : value);
+            }}
+            fullWidth
+            disabled={!editable}
+          >
             {PAYMENT_TERMS.map((term) => (
               <MenuItem key={term} value={term}>
                 {term}
               </MenuItem>
             ))}
           </TextField>
+          {isCustomPayment && (
+            <TextField
+              label="自定义付款条款"
+              placeholder="请输入付款方式"
+              value={paymentTerms}
+              onChange={(e) => setPaymentTerms(e.target.value)}
+              fullWidth
+              disabled={!editable}
+              sx={{ mt: 1.5 }}
+            />
+          )}
         </Grid>
         <Grid item xs={12} sm={6}>
           <TextField
