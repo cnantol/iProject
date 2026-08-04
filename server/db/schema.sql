@@ -11,7 +11,7 @@
 -- ============================================================
 PRAGMA foreign_keys = ON;
 
--- 1. users — 用户（单管理员：仅 admin/admin123）
+-- 1. users — 用户（单管理员：仅 admin/password）
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,

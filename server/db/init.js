@@ -90,7 +90,7 @@ export function initDb(dir) {
 
   const admin = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
   if (!admin) {
-    const hash = bcrypt.hashSync('admin123', 10);
+    const hash = bcrypt.hashSync('password', 10);
     const ts = nowUtc();
     db.prepare('INSERT INTO users (username, password, created_at, updated_at) VALUES (?,?,?,?)').run(
       'admin',

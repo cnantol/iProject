@@ -1,0 +1,17 @@
+.git
+.gitignore
+**/node_modules
+**/dist
+server/db/data
+server/db/*.sqlite
+server/db/*.sqlite-*
+server/db/restore-tmp
+docs
+deploy
+.DS_Store
+*.log
+*.zip
+*.tar
+*.tar.gz
+.codex
+.agents

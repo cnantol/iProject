@@ -34,7 +34,7 @@ pnpm --filter atlas-copco-server start   # 后端 http://localhost:3001
 pnpm --filter atlas-copco-client dev     # 前端 http://localhost:5173
 ```
 
-默认账号：`admin / admin123`（登录后请立即在「系统设置」修改密码）。
+默认账号：`admin / password`（登录后请立即在「系统设置」修改密码）。
 
 数据库文件与上传附件位于 `server/db/data/`，首次启动自动按 `server/db/schema.sql` 建库并种子 admin 账户。
 
@@ -48,7 +48,7 @@ cd server && node scripts/smoke-test.mjs
 
 ## 部署
 
-部署说明见 [deploy/README.md](deploy/README.md)，含 Docker、Nginx、PM2、SSL 与每日备份配置。
+部署说明见 [deploy/README.md](deploy/README.md)，含 Docker、Nginx、PM2、SSL 与每日备份配置；群晖 DSM6 部署见 [deploy/README-DSM6.md](deploy/README-DSM6.md)；阿里云/腾讯云部署见 [deploy/README-CN-CLOUD.md](deploy/README-CN-CLOUD.md)。
 
 ## 目录结构
 

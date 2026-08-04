@@ -1,6 +1,7 @@
 {
   "name": "atlas-copco-oms",
   "version": "1.0.0",
+  "packageManager": "pnpm@11.9.0",
   "private": true,
   "description": "Atlas Copco 销售项目全生命周期管理系统",
   "scripts": {

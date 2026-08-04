@@ -44,4 +44,12 @@ crontab -e
 
 ## 首次使用
 
-访问 `https://your-domain.com`，使用默认账号 `admin / admin123` 登录后立即修改密码。
+访问 `https://your-domain.com`，使用默认账号 `admin / password` 登录后立即修改密码。
+
+## 群晖 NAS（DSM6）
+
+家里的群晖 DSM6 Docker 部署步骤见 [README-DSM6.md](README-DSM6.md)。
+
+## 国内公有云（阿里云 / 腾讯云）
+
+阿里云 ECS、腾讯云 CVM 的完整部署教程（含国内镜像加速、安全组、HTTPS、备份更新）见 [README-CN-CLOUD.md](README-CN-CLOUD.md)。

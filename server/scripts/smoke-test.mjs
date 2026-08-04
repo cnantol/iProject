@@ -60,7 +60,7 @@ try {
   // 认证
   const badLogin = await call('POST', '/api/auth/login', { body: { username: 'admin', password: 'wrong' } });
   assert.strictEqual(badLogin.status, 401);
-  const login = must(await call('POST', '/api/auth/login', { body: { username: 'admin', password: 'admin123' } }), 200, '登录');
+  const login = must(await call('POST', '/api/auth/login', { body: { username: 'admin', password: 'password' } }), 200, '登录');
   const token = login.token;
   ok('登录成功');
 
@@ -304,16 +304,16 @@ try {
   ok('看板/历史销售/待办/审计日志');
 
   // 软重置
-  must(await call('POST', '/api/settings/reset-business', { token, body: { password: 'admin123' } }), 200, '软重置');
+  must(await call('POST', '/api/settings/reset-business', { token, body: { password: 'password' } }), 200, '软重置');
   assert.strictEqual(getDb().prepare('SELECT COUNT(*) AS c FROM orders').get().c, 0);
   assert.strictEqual(getDb().prepare("SELECT COUNT(*) AS c FROM users WHERE username='admin'").get().c, 1);
   ok('软重置保留用户与工作流');
 
   // 硬重置：JWT 失效 + uploads 清空 + audit 保留
-  await call('POST', '/api/settings/reset-factory', { token, body: { password: 'admin123' } });
+  await call('POST', '/api/settings/reset-factory', { token, body: { password: 'password' } });
   const oldToken = await call('GET', '/api/dashboard', { token });
   assert.strictEqual(oldToken.status, 401);
-  const relogin = must(await call('POST', '/api/auth/login', { body: { username: 'admin', password: 'admin123' } }), 200, '硬重置后登录');
+  const relogin = must(await call('POST', '/api/auth/login', { body: { username: 'admin', password: 'password' } }), 200, '硬重置后登录');
   const auditAfter = must(await call('GET', '/api/audit-logs', { token: relogin.token }), 200, '硬重置后审计');
   assert.ok(auditAfter.items.some((row) => row.action === 'reset_factory'));
   const uploads = path.join(dataDir, 'uploads');

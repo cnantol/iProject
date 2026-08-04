@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - `server/db/schema.sql` must be byte-for-byte the provided file; never modify it.
-- Single admin account `admin/admin123` seeded by `db/init.js`; no roles, no registration.
+- Single admin account `admin/password` seeded by `db/init.js`; no roles, no registration.
 - Status enum: `customer_info | proposal | quotation | approval_pending | bid_decision | finance | shipping_invoicing | commission | closed | lost_closed`; all transitions use conditional `UPDATE ... WHERE status=?`, zero rows -> HTTP 409.
 - Amounts: `ROUND(x,2)` everywhere (unit prices `ROUND(x,4)`); timestamps stored UTC (`datetime('now')`), returned ISO; date fields `YYYY-MM-DD` (local).
 - Sensitive actions (approval submit/approve/reject, data correction, resets, invoice override, delete order, commission manual) write `audit_logs` with `user_id`, before/after JSON detail.
