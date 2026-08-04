@@ -60,13 +60,8 @@ export default function AppLayout() {
 
   const drawerContent = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2.25, py: 2 }}>
-        <Box component="img" src={logo} alt="Atlas Copco" onError={() => setLogoFailed(true)} sx={{ height: 42, maxWidth: 150, width: 'auto', objectFit: 'contain' }} />
-        <Box sx={{ lineHeight: 1.15 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 900, color: 'primary.main', fontSize: 17, letterSpacing: 0 }}>
-            i-Project
-          </Typography>
-        </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', px: 2.25, py: 2 }}>
+        <Box component="img" src={logo} alt="Atlas Copco" onError={() => setLogoFailed(true)} sx={{ height: 56, maxWidth: 180, width: 'auto', objectFit: 'contain' }} />
       </Box>
       <Divider />
       <List sx={{ flex: 1, px: 1, pt: 1 }}>

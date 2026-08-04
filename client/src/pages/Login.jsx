@@ -120,10 +120,7 @@ export default function Login() {
       <Card sx={{ position: 'relative', overflow: 'hidden', width: '100%', maxWidth: 440, p: { xs: 3, md: 4 }, boxShadow: (theme) => (theme.palette.mode === 'dark' ? '0 18px 48px rgba(0,0,0,0.45)' : '0 18px 48px rgba(20,50,85,0.10)') }}>
         <Stack spacing={3}>
           <Box sx={{ textAlign: 'center' }}>
-            <Box component="img" src={logo} alt="Atlas Copco" onError={() => setLogoFailed(true)} sx={{ height: 64, maxWidth: '100%', width: 'auto', objectFit: 'contain', mb: 1.5 }} />
-            <Typography variant="h5" sx={{ fontWeight: 900, color: (theme) => (theme.palette.mode === 'dark' ? '#8FB6E3' : 'primary.main') }}>
-              i-Project
-            </Typography>
+            <Box component="img" src={logo} alt="Atlas Copco" onError={() => setLogoFailed(true)} sx={{ height: 76, maxWidth: '100%', width: 'auto', objectFit: 'contain', mb: 1.5 }} />
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               项目全生命周期管理
             </Typography>
