@@ -1,5 +1,5 @@
 # iProject 全链路项目管理专家 - 多阶段构建镜像
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ COPY server server
 COPY client client
 RUN pnpm --filter iproject-client build
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
