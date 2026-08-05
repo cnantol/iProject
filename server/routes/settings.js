@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import xlsx from 'xlsx';
 import { getDb, getDataDir, getUploadDir, closeDb, initDb, seedWorkflow, rotateJwtSecret } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
-import { nowUtc, todayLocal, badRequest, notFound, conflict, isMoney, isBool, isValidDate, normalizeSo, writeAudit } from '../utils.js';
+import { nowUtc, badRequest, notFound, isMoney, isBool, isValidDate, normalizeSo, writeAudit } from '../utils.js';
 import { loadOrderDetail, checkSalesOrderUnique } from './orders.js';
 import { buildQuotationPdf } from './quotations.js';
 
@@ -202,9 +202,15 @@ router.post('/import/:target', upload.single('file'), (req, res) => {
     fs.unlinkSync(req.file.path);
     return notFound(res);
   }
-  const workbook = xlsx.readFile(req.file.path);
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  let rows;
+  try {
+    const workbook = xlsx.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  } catch {
+    fs.unlinkSync(req.file.path);
+    return badRequest(res, 'Excel 解析失败');
+  }
   fs.unlinkSync(req.file.path);
   if (!rows || rows.length < 2) return badRequest(res, 'Excel 无有效数据');
 
@@ -445,8 +451,8 @@ function createBackup() {
   const dbPath = path.join(dataDir, 'database.sqlite');
   const backupDir = path.join(dataDir, 'backups');
   fs.mkdirSync(backupDir, { recursive: true });
-  const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-  const filename = `atlas-backup-${ts}.zip`;
+  const ts = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace(/[-:T]/g, '').slice(0, 14);
+  const filename = `iproject-backup-${ts}.zip`;
   const zip = new AdmZip();
   if (fs.existsSync(dbPath)) zip.addFile('database.sqlite', fs.readFileSync(dbPath));
   if (fs.existsSync(quoteStyleFile())) zip.addFile('quote-style.json', fs.readFileSync(quoteStyleFile()));
@@ -509,7 +515,7 @@ const QUOTE_STYLE_VISIBILITY_KEYS = [
 
 function defaultQuoteStyle() {
   return {
-    company_name: 'Atlas Copco',
+    company_name: 'iProject',
     primary_color: '#004E9A',
     secondary_color: '#DCE8F5',
     company_address: '',
@@ -835,7 +841,7 @@ export function startBackupScheduler() {
 
 router.get('/backup/:filename/download', (req, res) => {
   const filename = String(req.params.filename);
-  if (!/^atlas-backup-[\d]{14}\.zip$/.test(filename)) return badRequest(res, '备份文件名无效');
+  if (!/^iproject-backup-[\d]{14}\.zip$/.test(filename)) return badRequest(res, '备份文件名无效');
   const filePath = path.join(getDataDir(), 'backups', filename);
   if (!fs.existsSync(filePath)) return notFound(res, '备份文件不存在');
   return res.download(filePath, filename);
@@ -849,12 +855,20 @@ router.post('/restore', upload.single('file'), (req, res) => {
   fs.mkdirSync(tmpDir, { recursive: true });
   try {
     const zip = new AdmZip(req.file.path);
+    for (const entry of zip.getEntries()) {
+      const name = String(entry.entryName || '');
+      if (name.startsWith('/') || name.split(/[\\/]/).some((part) => part === '..')) {
+        return badRequest(res, '备份文件包含非法路径');
+      }
+    }
     zip.extractAllTo(tmpDir, true);
     const dbFile = path.join(tmpDir, 'database.sqlite');
     if (!fs.existsSync(dbFile)) return badRequest(res, '备份文件缺少 database.sqlite');
     const uploadsZip = path.join(tmpDir, 'uploads');
+    const stagedDb = path.join(dataDir, 'database.sqlite.restore');
+    fs.copyFileSync(dbFile, stagedDb);
     closeDb();
-    fs.copyFileSync(dbFile, path.join(dataDir, 'database.sqlite'));
+    fs.renameSync(stagedDb, path.join(dataDir, 'database.sqlite'));
     fs.rmSync(path.join(dataDir, 'database.sqlite-wal'), { force: true });
     fs.rmSync(path.join(dataDir, 'database.sqlite-shm'), { force: true });
     if (fs.existsSync(uploadsZip)) {
@@ -1053,8 +1067,6 @@ function deleteBusinessData(db) {
     'todos',
     'orders',
     'import_logs',
-    'workflow_step_fields',
-    'custom_fields',
     'guide_prices',
     'materials',
     'end_customers',
@@ -1067,6 +1079,8 @@ function deleteBusinessData(db) {
     for (const table of tables) {
       db.prepare(`DELETE FROM ${table}`).run();
     }
+    db.prepare('DELETE FROM workflow_step_fields WHERE field_id IN (SELECT id FROM custom_fields WHERE is_system = 0)').run();
+    db.prepare('DELETE FROM custom_fields WHERE is_system = 0').run();
   });
   tx();
   fs.rmSync(getUploadDir(), { recursive: true, force: true });

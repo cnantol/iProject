@@ -4,10 +4,10 @@ import api from '../api';
 const AuthContext = createContext({ user: null, token: null, login: async () => {}, logout: () => {} });
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('atlas_token') || null);
+  const [token, setToken] = useState(() => localStorage.getItem('iproject_token') || null);
   const [user, setUser] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('atlas_user') || 'null');
+      return JSON.parse(localStorage.getItem('iproject_user') || 'null');
     } catch {
       return null;
     }
@@ -15,23 +15,23 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (username, password) => {
     const { data } = await api.post('/auth/login', { username, password });
-    localStorage.setItem('atlas_token', data.token);
-    localStorage.setItem('atlas_user', JSON.stringify(data.user));
+    localStorage.setItem('iproject_token', data.token);
+    localStorage.setItem('iproject_user', JSON.stringify(data.user));
     setToken(data.token);
     setUser(data.user);
     return data;
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('atlas_token');
-    localStorage.removeItem('atlas_user');
+    localStorage.removeItem('iproject_token');
+    localStorage.removeItem('iproject_user');
     setToken(null);
     setUser(null);
   }, []);
 
   const updateUser = useCallback((nextUser) => {
     setUser(nextUser);
-    localStorage.setItem('atlas_user', JSON.stringify(nextUser));
+    localStorage.setItem('iproject_user', JSON.stringify(nextUser));
   }, []);
 
   const value = useMemo(() => ({ user, token, login, logout, updateUser, isAuthenticated: Boolean(token) }), [user, token, login, logout, updateUser]);

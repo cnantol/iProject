@@ -10,9 +10,6 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import InputAdornment from '@mui/material/InputAdornment';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import KeyIcon from '@mui/icons-material/Key';
 import LoginIcon from '@mui/icons-material/Login';
@@ -26,13 +23,13 @@ import { useAppLogo } from '../context/AppLogoContext';
 
 export default function Login() {
   const { login } = useAuth();
-  const { preference, setPreference } = useThemeMode();
+  const { mode, preference, setPreference } = useThemeMode();
   const { src } = useAppLogo();
   const [logoFailed, setLogoFailed] = useState(false);
-  const logo = logoFailed ? '/logo.svg' : src;
+  const themeLogo = mode === 'dark' ? '/logo-dark.svg' : '/logo.svg';
+  const logo = logoFailed || src === '/logo.svg' ? themeLogo : src;
   const navigate = useNavigate();
   const location = useLocation();
-  const [themeMenu, setThemeMenu] = useState(null);
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -68,8 +65,9 @@ export default function Login() {
       }}
     >
       <IconButton
-        onClick={(event) => setThemeMenu(event.currentTarget)}
-        aria-label="主题模式"
+        onClick={() => setPreference(preference === 'system' ? 'light' : preference === 'light' ? 'dark' : 'system')}
+        aria-label="切换主题模式"
+        title="切换主题模式"
         sx={{
           position: 'absolute',
           top: 16,
@@ -77,52 +75,14 @@ export default function Login() {
           color: 'text.secondary'
         }}
       >
-        {preference === 'dark' ? <DarkModeIcon /> : preference === 'light' ? <LightModeIcon /> : <BrightnessAutoIcon />}
+        {preference === 'system' ? <BrightnessAutoIcon /> : preference === 'dark' ? <DarkModeIcon /> : <LightModeIcon />}
       </IconButton>
-      <Menu anchorEl={themeMenu} open={Boolean(themeMenu)} onClose={() => setThemeMenu(null)}>
-        <MenuItem
-          selected={preference === 'light'}
-          onClick={() => {
-            setPreference('light');
-            setThemeMenu(null);
-          }}
-        >
-          <ListItemIcon>
-            <LightModeIcon fontSize="small" />
-          </ListItemIcon>
-          亮色模式
-        </MenuItem>
-        <MenuItem
-          selected={preference === 'dark'}
-          onClick={() => {
-            setPreference('dark');
-            setThemeMenu(null);
-          }}
-        >
-          <ListItemIcon>
-            <DarkModeIcon fontSize="small" />
-          </ListItemIcon>
-          暗色模式
-        </MenuItem>
-        <MenuItem
-          selected={preference === 'system'}
-          onClick={() => {
-            setPreference('system');
-            setThemeMenu(null);
-          }}
-        >
-          <ListItemIcon>
-            <BrightnessAutoIcon fontSize="small" />
-          </ListItemIcon>
-          跟随系统
-        </MenuItem>
-      </Menu>
       <Card sx={{ position: 'relative', overflow: 'hidden', width: '100%', maxWidth: 440, p: { xs: 3, md: 4 }, boxShadow: (theme) => (theme.palette.mode === 'dark' ? '0 18px 48px rgba(0,0,0,0.45)' : '0 18px 48px rgba(20,50,85,0.10)') }}>
         <Stack spacing={3}>
           <Box sx={{ textAlign: 'center' }}>
-            <Box component="img" src={logo} alt="Atlas Copco" onError={() => setLogoFailed(true)} sx={{ height: 76, maxWidth: '100%', width: 'auto', objectFit: 'contain', mb: 1.5 }} />
+            <Box component="img" src={logo} alt="iProject" onError={() => setLogoFailed(true)} sx={{ height: 76, maxWidth: '100%', width: 'auto', objectFit: 'contain', mb: 1.5 }} />
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              项目全生命周期管理
+              全链路项目管理专家
             </Typography>
           </Box>
           {error && <Alert severity="error">{error}</Alert>}

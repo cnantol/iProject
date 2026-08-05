@@ -24,11 +24,17 @@ export default function SalesHistory() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/sales-history', { params: search.trim() ? { search: search.trim() } : {} });
+      const { data } = await api.get('/sales-history', { params: debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {} });
       setItems(data.items || []);
       setError('');
     } catch (err) {
@@ -36,7 +42,7 @@ export default function SalesHistory() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     load();

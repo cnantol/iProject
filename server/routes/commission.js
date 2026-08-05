@@ -28,7 +28,13 @@ router.post('/upload', upload.single('file'), (req, res) => {
   if (!amountColumn) return badRequest(res, '请选择佣金金额列');
   if (!soColumn) return badRequest(res, '请选择 SO 号列');
 
-  const rows = readWorkbook(req.file.path);
+  let rows;
+  try {
+    rows = readWorkbook(req.file.path);
+  } catch {
+    fs.unlinkSync(req.file.path);
+    return badRequest(res, 'Excel 解析失败');
+  }
   fs.unlinkSync(req.file.path);
   if (!rows || rows.length < 2) return badRequest(res, 'Excel 无有效数据');
 

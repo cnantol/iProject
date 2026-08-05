@@ -31,7 +31,8 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import api, { errorMessage } from '../api';
 import { PRICE_SOURCE_LABELS } from '../utils/constants';
-import { fmtMoney, round2, round4, authUrl } from '../utils/helpers';
+import { fmtMoney, round2, round4 } from '../utils/helpers';
+import { downloadUrl } from '../utils/download';
 import StepWrapper from './StepWrapper';
 
 const EMPTY_ITEM = {
@@ -109,7 +110,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
       );
       setDirty(true);
     } catch {
-      // 忽略查询失败
+      setError(`未找到物料「${materialNo}」的描述或价格，请手工填写`);
     }
   };
 
@@ -281,7 +282,8 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
   const exportPdf = async () => {
     try {
       const { data } = await api.post(`/orders/${order.id}/quotations/${activeRound.id}/pdf`, {});
-      window.open(authUrl(data.url), '_blank');
+      const url = await downloadUrl(data.url);
+      window.open(url, '_blank');
     } catch (err) {
       setError(errorMessage(err, 'PDF 生成失败'));
     }

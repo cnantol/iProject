@@ -17,7 +17,7 @@ router.get('/', (req, res) => {
     .prepare(
       `SELECT o.id, o.order_id, o.project_name, o.status, o.total_amount, ec.customer_name AS end_customer_name
        FROM orders o LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
-       ORDER BY o.id DESC LIMIT 15`
+       ORDER BY o.id DESC LIMIT 10`
     )
     .all();
   const recentTodos = db

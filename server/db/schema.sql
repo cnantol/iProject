@@ -1,17 +1,6 @@
--- ============================================================
--- Atlas Copco 订单管理系统 · schema.sql（V3.4.10 最终版）
--- 与《AtlasCopco_完整最终方案_V3.4_大模型提示词版.md》逐条一致
---   · 23 张表（2.1–2.23）
---   · 18 处 CHECK（金额>0 ×9、qty>0 ×2、pay_percent、batch_percent、布尔0/1 ×5）
---   · 6 个触发器（orders 状态 ×2、approval 状态 ×2、materials 日期 ×2）
---   · 4 个唯一索引 + 1 个辅助索引
---   · 全部外键默认 RESTRICT（禁止级联删除）
--- 时间字段由后端统一写入 UTC（datetime('now')），本文件不设默认值
--- 仅支持 SQLite 3.x；禁止修改本文件（后端 db/init.js 原样执行）
--- ============================================================
+-- iProject
 PRAGMA foreign_keys = ON;
 
--- 1. users — 用户（单管理员：仅 admin/password）
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
@@ -20,7 +9,6 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TEXT
 );
 
--- 2. end_customers — 最终客户
 CREATE TABLE IF NOT EXISTS end_customers (
   id INTEGER PRIMARY KEY,
   customer_name TEXT NOT NULL UNIQUE,
@@ -33,7 +21,6 @@ CREATE TABLE IF NOT EXISTS end_customers (
   updated_at TEXT
 );
 
--- 3. contract_customers — 合同客户
 CREATE TABLE IF NOT EXISTS contract_customers (
   id INTEGER PRIMARY KEY,
   customer_name TEXT NOT NULL UNIQUE,
@@ -46,7 +33,6 @@ CREATE TABLE IF NOT EXISTS contract_customers (
   updated_at TEXT
 );
 
--- 4. materials — 框架协议物料价格
 CREATE TABLE IF NOT EXISTS materials (
   id INTEGER PRIMARY KEY,
   end_customer_id INTEGER NOT NULL REFERENCES end_customers(id),
@@ -62,7 +48,6 @@ CREATE TABLE IF NOT EXISTS materials (
   updated_at TEXT
 );
 
--- 5. guide_prices — 系统指导价
 CREATE TABLE IF NOT EXISTS guide_prices (
   id INTEGER PRIMARY KEY,
   material_no TEXT NOT NULL UNIQUE,
@@ -74,7 +59,6 @@ CREATE TABLE IF NOT EXISTS guide_prices (
   updated_at TEXT
 );
 
--- 6. orders — 订单主表（核心表，29 字段）
 CREATE TABLE IF NOT EXISTS orders (
   id INTEGER PRIMARY KEY,
   order_id TEXT NOT NULL UNIQUE,
@@ -108,7 +92,6 @@ CREATE TABLE IF NOT EXISTS orders (
   updated_at TEXT
 );
 
--- 7. proposal_versions — 方案版本
 CREATE TABLE IF NOT EXISTS proposal_versions (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),
@@ -118,7 +101,6 @@ CREATE TABLE IF NOT EXISTS proposal_versions (
   created_at TEXT
 );
 
--- 8. proposal_selections — 方案选型明细
 CREATE TABLE IF NOT EXISTS proposal_selections (
   id INTEGER PRIMARY KEY,
   proposal_version_id INTEGER REFERENCES proposal_versions(id),
@@ -131,7 +113,6 @@ CREATE TABLE IF NOT EXISTS proposal_selections (
   remark TEXT
 );
 
--- 9. quotations — 报价轮次
 CREATE TABLE IF NOT EXISTS quotations (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),
@@ -144,7 +125,6 @@ CREATE TABLE IF NOT EXISTS quotations (
   updated_at TEXT
 );
 
--- 10. quotation_items — 报价明细
 CREATE TABLE IF NOT EXISTS quotation_items (
   id INTEGER PRIMARY KEY,
   quotation_id INTEGER REFERENCES quotations(id),
@@ -161,7 +141,6 @@ CREATE TABLE IF NOT EXISTS quotation_items (
   remark TEXT
 );
 
--- 11. customer_pos — 客户 PO 明细
 CREATE TABLE IF NOT EXISTS customer_pos (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),
@@ -171,7 +150,6 @@ CREATE TABLE IF NOT EXISTS customer_pos (
   created_at TEXT
 );
 
--- 12. approval_records — 审批记录
 CREATE TABLE IF NOT EXISTS approval_records (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),
@@ -184,7 +162,6 @@ CREATE TABLE IF NOT EXISTS approval_records (
   remark TEXT
 );
 
--- 13. order_attachments — 订单附件（统一文件存储）
 CREATE TABLE IF NOT EXISTS order_attachments (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),
@@ -197,7 +174,6 @@ CREATE TABLE IF NOT EXISTS order_attachments (
   uploaded_at TEXT
 );
 
--- 14. shipping_batches — 发货批次
 CREATE TABLE IF NOT EXISTS shipping_batches (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),
@@ -209,7 +185,6 @@ CREATE TABLE IF NOT EXISTS shipping_batches (
   created_at TEXT
 );
 
--- 15. invoice_records — 开票记录（超开由应用层确认放行 + 审计，数据库不拦截）
 CREATE TABLE IF NOT EXISTS invoice_records (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),
@@ -221,7 +196,6 @@ CREATE TABLE IF NOT EXISTS invoice_records (
   created_at TEXT
 );
 
--- 16. import_logs — 导入日志
 CREATE TABLE IF NOT EXISTS import_logs (
   id INTEGER PRIMARY KEY,
   target_type TEXT,
@@ -232,7 +206,6 @@ CREATE TABLE IF NOT EXISTS import_logs (
   created_at TEXT
 );
 
--- 17. commission_manual_records — 佣金人工补录记录
 CREATE TABLE IF NOT EXISTS commission_manual_records (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),
@@ -242,7 +215,6 @@ CREATE TABLE IF NOT EXISTS commission_manual_records (
   created_at TEXT
 );
 
--- 18. custom_fields — 自定义字段
 CREATE TABLE IF NOT EXISTS custom_fields (
   id INTEGER PRIMARY KEY,
   entity_type TEXT,
@@ -254,7 +226,6 @@ CREATE TABLE IF NOT EXISTS custom_fields (
   created_at TEXT
 );
 
--- 19. workflow_steps — 工作流步骤（展示层配置，非状态机定义）
 CREATE TABLE IF NOT EXISTS workflow_steps (
   id INTEGER PRIMARY KEY,
   step_key TEXT NOT NULL UNIQUE,
@@ -263,7 +234,6 @@ CREATE TABLE IF NOT EXISTS workflow_steps (
   is_active INTEGER DEFAULT 1
 );
 
--- 20. workflow_transitions — 工作流转规则（参考展示，非执行逻辑）
 CREATE TABLE IF NOT EXISTS workflow_transitions (
   id INTEGER PRIMARY KEY,
   from_step TEXT,
@@ -272,7 +242,6 @@ CREATE TABLE IF NOT EXISTS workflow_transitions (
   condition_field TEXT
 );
 
--- 21. order_custom_fields — 订单自定义字段值
 CREATE TABLE IF NOT EXISTS order_custom_fields (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),
@@ -280,7 +249,6 @@ CREATE TABLE IF NOT EXISTS order_custom_fields (
   field_value TEXT
 );
 
--- 22. todos — 待办事项
 CREATE TABLE IF NOT EXISTS todos (
   id INTEGER PRIMARY KEY,
   title TEXT NOT NULL,
@@ -294,7 +262,6 @@ CREATE TABLE IF NOT EXISTS todos (
   updated_at TEXT
 );
 
--- 23. audit_logs — 审计日志
 CREATE TABLE IF NOT EXISTS audit_logs (
   id INTEGER PRIMARY KEY,
   user_id INTEGER REFERENCES users(id),
@@ -305,20 +272,13 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TEXT
 );
 
--- ============================================================
--- 唯一索引（4 个）
--- ============================================================
 CREATE UNIQUE INDEX IF NOT EXISTS idx_materials_uniq ON materials(end_customer_id, material_no, valid_from);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_round ON quotations(order_id, round_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_po ON customer_pos(order_id, po_number);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_no ON invoice_records(order_id, invoice_no);
 
--- 辅助索引（1 个）：佣金人工补录按订单查询
 CREATE INDEX IF NOT EXISTS idx_commission_manual_order ON commission_manual_records(order_id);
 
--- ============================================================
--- 触发器（6 个）：orders 状态 ×2、approval 状态 ×2、materials 日期 ×2
--- ============================================================
 CREATE TRIGGER IF NOT EXISTS trg_orders_check BEFORE INSERT ON orders
 BEGIN
   SELECT CASE WHEN NEW.status NOT IN ('customer_info','proposal','quotation','approval_pending','bid_decision','finance','shipping_invoicing','commission','closed','lost_closed') THEN RAISE(ABORT,'invalid status') END;
@@ -345,3 +305,19 @@ CREATE TRIGGER IF NOT EXISTS trg_materials_valid_upd BEFORE UPDATE OF valid_from
 BEGIN
   SELECT CASE WHEN NEW.valid_to IS NOT NULL AND NEW.valid_to < NEW.valid_from THEN RAISE(ABORT,'valid_to < valid_from') END;
 END;
+
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_customer_pos_order ON customer_pos(order_id);
+CREATE INDEX IF NOT EXISTS idx_proposal_versions_order ON proposal_versions(order_id);
+CREATE INDEX IF NOT EXISTS idx_proposal_selections_version ON proposal_selections(proposal_version_id);
+CREATE INDEX IF NOT EXISTS idx_quotation_items_quotation ON quotation_items(quotation_id);
+CREATE INDEX IF NOT EXISTS idx_approval_records_order ON approval_records(order_id);
+CREATE INDEX IF NOT EXISTS idx_approval_records_quotation ON approval_records(quotation_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_records_order ON invoice_records(order_id);
+CREATE INDEX IF NOT EXISTS idx_shipping_batches_order ON shipping_batches(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_attachments_order ON order_attachments(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_custom_fields_order ON order_custom_fields(order_id);
+CREATE INDEX IF NOT EXISTS idx_todos_due ON todos(due_date);
+CREATE INDEX IF NOT EXISTS idx_todos_order_ref ON todos(order_ref);
+CREATE INDEX IF NOT EXISTS idx_custom_fields_entity ON custom_fields(entity_type);
+CREATE INDEX IF NOT EXISTS idx_import_logs_target ON import_logs(target_type);

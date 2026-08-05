@@ -18,13 +18,13 @@ router.get('/', (req, res) => {
     .prepare(
       `SELECT o.id AS order_db_id, o.order_id, o.total_amount AS order_total, ec.customer_name AS end_customer_name,
         cc.customer_name AS contract_customer_name, o.sales_order, qi.material_no, qi.description, qi.qty,
-        qi.final_unit_price, qi.line_amount, cp.po_number
+        qi.final_unit_price, qi.line_amount,
+        (SELECT GROUP_CONCAT(cp.po_number, '、') FROM customer_pos cp WHERE cp.order_id = o.id) AS po_numbers
        FROM quotation_items qi
        JOIN quotations q ON q.id = qi.quotation_id
        JOIN orders o ON o.id = q.order_id
        LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
        LEFT JOIN contract_customers cc ON cc.id = o.contract_customer_id
-       LEFT JOIN customer_pos cp ON cp.order_id = o.id
        WHERE ${where.join(' AND ')}
        ORDER BY o.id DESC, qi.id`
     )
@@ -35,16 +35,16 @@ router.get('/', (req, res) => {
     if (!byOrder.has(row.order_db_id)) byOrder.set(row.order_db_id, { items: [], poSet: new Set() });
     const entry = byOrder.get(row.order_db_id);
     entry.items.push(row);
-    if (row.po_number) entry.poSet.add(row.po_number);
+    if (row.po_numbers) entry.poSet.add(row.po_numbers);
   }
   const items = [];
   for (const [orderId, entry] of byOrder) {
     const itemSum = round2(entry.items.reduce((sum, row) => sum + Number(row.line_amount || 0), 0));
     const orderTotal = entry.items[0].order_total == null ? null : Number(entry.items[0].order_total);
     const diff = orderTotal === null ? null : round2(orderTotal - itemSum);
-    for (const row of entry.items) {
+    for (const [index, row] of entry.items.entries()) {
       items.push({
-        id: `${orderId}-${row.material_no}-${row.line_amount}`,
+        id: `${orderId}-${row.material_no}-${row.line_amount}-${index}`,
         order_id: row.order_id,
         end_customer_name: row.end_customer_name,
         contract_customer_name: row.contract_customer_name,

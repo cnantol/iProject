@@ -3,7 +3,7 @@ import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { buildTheme } from '../theme/md3Theme';
 
-const STORAGE_KEY = 'atlas_theme_preference';
+const STORAGE_KEY = 'iproject_theme_preference';
 const ThemeContext = createContext({ mode: 'light', preference: 'system', setPreference: () => {} });
 
 export function ThemeContextProvider({ children }) {

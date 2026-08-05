@@ -49,14 +49,8 @@ router.get('/:orderId/attachments/:attachmentId/download', (req, res) => {
   if (!row) return notFound(res);
   const filePath = path.join(getUploadDir(), row.file_path);
   if (!fs.existsSync(filePath)) return notFound(res, '附件文件不存在');
-  res.download(filePath, row.file_name);
-});
-
-router.get('/download/:attachmentId', (req, res) => {
-  const row = getDb().prepare('SELECT * FROM order_attachments WHERE id = ?').get(Number(req.params.attachmentId));
-  if (!row) return notFound(res);
-  const filePath = path.join(getUploadDir(), row.file_path);
-  if (!fs.existsSync(filePath)) return notFound(res, '附件文件不存在');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
   res.download(filePath, row.file_name);
 });
 

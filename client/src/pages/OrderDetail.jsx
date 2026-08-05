@@ -35,7 +35,7 @@ import StepInvoicing from '../components/StepInvoicing';
 import StepCommission from '../components/StepCommission';
 import StepClose from '../components/StepClose';
 
-function InfoTile({ label, value, color, darkColor }) {
+function InfoTile({ label, value, color, darkColor, children }) {
   return (
     <Box
       sx={(theme) => {
@@ -54,9 +54,13 @@ function InfoTile({ label, value, color, darkColor }) {
       <Typography variant="overline" sx={{ fontWeight: 700, color: (theme) => (theme.palette.mode === 'dark' ? darkColor : color) }}>
         {label}
       </Typography>
-      <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.3, wordBreak: 'break-word' }}>
-        {value}
-      </Typography>
+      {children !== undefined ? (
+        children
+      ) : (
+        <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.3, wordBreak: 'break-word' }}>
+          {value}
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -196,11 +200,19 @@ export default function OrderDetail() {
           </Grid>
           <Grid item xs={12} sm={6} lg={3}>
             <InfoTile
-              label={`${t('end_customer')} / ${t('contract_customer')}`}
-              value={`${order.end_customer_name || '-'} / ${order.contract_customer_name || '-'}`}
+              label={`${t('end_customer')}/${t('contract_customer')}`}
               color="#0093BE"
               darkColor="#56C4E4"
-            />
+            >
+              <Box sx={{ mt: 0.4, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, wordBreak: 'break-word' }}>
+                  {order.end_customer_name || '-'}
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, wordBreak: 'break-word' }}>
+                  {order.contract_customer_name || '-'}
+                </Typography>
+              </Box>
+            </InfoTile>
           </Grid>
           <Grid item xs={12} sm={6} lg={3}>
             <InfoTile

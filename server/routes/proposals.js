@@ -112,9 +112,15 @@ router.post('/:orderId/versions/:versionId/selections/import', upload.single('fi
     fs.unlinkSync(req.file.path);
     return badRequest(res, '仅方案阶段可导入选型明细');
   }
-  const workbook = xlsx.readFile(req.file.path);
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  let rows;
+  try {
+    const workbook = xlsx.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  } catch {
+    fs.unlinkSync(req.file.path);
+    return badRequest(res, 'Excel 解析失败');
+  }
   fs.unlinkSync(req.file.path);
   if (!rows || rows.length < 2) return badRequest(res, 'Excel 无有效数据');
 

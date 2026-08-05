@@ -31,7 +31,7 @@ import SkipNextIcon from '@mui/icons-material/SkipNext';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import api, { errorMessage } from '../api';
-import { authUrl } from '../utils/helpers';
+import { downloadUrl } from '../utils/download';
 import StepWrapper from './StepWrapper';
 
 const EMPTY_SELECTION = { material_no: '', description: '', material_type: 'standard', qty: '', unit: 'pcs', remark: '' };
@@ -99,7 +99,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
       });
       setRows((prev) => prev.map((row, i) => (i === index ? { ...row, description: data.description || row.description } : row)));
     } catch {
-      // 描述留空由用户手工填写
+      setError(`未找到物料「${materialNo}」的描述，请手工填写`);
     }
   };
 
@@ -260,6 +260,15 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
     }
   };
 
+  const openDownload = async (path) => {
+    try {
+      const url = await downloadUrl(path);
+      window.open(url, '_blank');
+    } catch {
+      setError('下载失败，请重试');
+    }
+  };
+
   return (
     <StepWrapper
       title="方案阶段"
@@ -326,9 +335,8 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
                     size="small"
                     icon={<DownloadIcon />}
                     label={file.file_name}
-                    component="a"
-                    href={authUrl(`/api/orders/${order.id}/attachments/${file.id}/download`)}
                     clickable
+                    onClick={() => openDownload(`/api/orders/${order.id}/attachments/${file.id}/download`)}
                     sx={{ ml: 1 }}
                   />
                 ))}

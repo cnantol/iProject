@@ -1,5 +1,7 @@
 import { Router } from 'express';
-import { getDb } from '../db/init.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { getDb, getUploadDir } from '../db/init.js';
 import {
   nowUtc,
   todayLocal,
@@ -55,30 +57,54 @@ function loadOrderDetail(db, orderId) {
     .get(Number(orderId));
   if (!order) return null;
 
-  const versions = db
-    .prepare('SELECT * FROM proposal_versions WHERE order_id = ? ORDER BY sort_order, id')
-    .all(order.id)
-    .map((version) => {
-      const selections = db
-        .prepare('SELECT * FROM proposal_selections WHERE proposal_version_id = ? ORDER BY sort_order, id')
-        .all(version.id);
-      const versionAttachments = db
+  const versions = db.prepare('SELECT * FROM proposal_versions WHERE order_id = ? ORDER BY sort_order, id').all(order.id);
+  const versionIds = versions.map((version) => version.id);
+  const selectionRows = versionIds.length
+    ? db
         .prepare(
-          `SELECT * FROM order_attachments WHERE order_id = ? AND reference_type = 'proposal_version' AND reference_id = ? ORDER BY uploaded_at`
+          `SELECT * FROM proposal_selections WHERE proposal_version_id IN (${versionIds.map(() => '?').join(',')}) ORDER BY proposal_version_id, sort_order, id`
         )
-        .all(order.id, version.id);
-      return { ...version, selections, attachments: versionAttachments };
-    });
+        .all(...versionIds)
+    : [];
+  const versionAttachmentRows = versionIds.length
+    ? db
+        .prepare(
+          `SELECT * FROM order_attachments WHERE order_id = ? AND reference_type = 'proposal_version' AND reference_id IN (${versionIds.map(() => '?').join(',')}) ORDER BY reference_id, uploaded_at`
+        )
+        .all(order.id, ...versionIds)
+    : [];
+  const selectionsByVersion = new Map();
+  for (const row of selectionRows) {
+    const list = selectionsByVersion.get(row.proposal_version_id) || [];
+    list.push(row);
+    selectionsByVersion.set(row.proposal_version_id, list);
+  }
+  const attachmentsByVersion = new Map();
+  for (const row of versionAttachmentRows) {
+    const list = attachmentsByVersion.get(row.reference_id) || [];
+    list.push(row);
+    attachmentsByVersion.set(row.reference_id, list);
+  }
+  const versionsWithDetails = versions.map((version) => ({
+    ...version,
+    selections: selectionsByVersion.get(version.id) || [],
+    attachments: attachmentsByVersion.get(version.id) || []
+  }));
 
-  const quotations = db
-    .prepare('SELECT * FROM quotations WHERE order_id = ? ORDER BY round_no')
-    .all(order.id)
-    .map((quotation) => {
-      const items = db
-        .prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id')
-        .all(quotation.id);
-      return { ...quotation, items };
-    });
+  const quotations = db.prepare('SELECT * FROM quotations WHERE order_id = ? ORDER BY round_no').all(order.id);
+  const quotationIds = quotations.map((quotation) => quotation.id);
+  const itemRows = quotationIds.length
+    ? db
+        .prepare(`SELECT * FROM quotation_items WHERE quotation_id IN (${quotationIds.map(() => '?').join(',')}) ORDER BY quotation_id, id`)
+        .all(...quotationIds)
+    : [];
+  const itemsByQuotation = new Map();
+  for (const row of itemRows) {
+    const list = itemsByQuotation.get(row.quotation_id) || [];
+    list.push(row);
+    itemsByQuotation.set(row.quotation_id, list);
+  }
+  const quotationsWithItems = quotations.map((quotation) => ({ ...quotation, items: itemsByQuotation.get(quotation.id) || [] }));
 
   const approvals = db
     .prepare(
@@ -117,8 +143,8 @@ function loadOrderDetail(db, orderId) {
 
   return {
     order,
-    versions,
-    quotations,
+    versions: versionsWithDetails,
+    quotations: quotationsWithItems,
     approvals,
     pos,
     shippingBatches,
@@ -172,48 +198,62 @@ function generateOrderId(db, tryInsert, shortName = null) {
 
 router.get('/', (req, res) => {
   const db = getDb();
-  const { search, status, end_customer_id, contract_customer_id, year, month } = req.query;
+  const { search, status, end_customer_id, contract_customer_id, year, month, scope } = req.query;
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
-  const where = [];
-  const params = [];
+  const base = [];
+  const baseParams = [];
   if (search) {
     const like = `%${String(search).trim()}%`;
-    where.push('(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ?)');
-    params.push(like, like, like, like);
-  }
-  if (status) {
-    where.push('o.status = ?');
-    params.push(String(status));
+    base.push('(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ?)');
+    baseParams.push(like, like, like, like);
   }
   if (end_customer_id) {
-    where.push('o.end_customer_id = ?');
-    params.push(Number(end_customer_id));
+    base.push('o.end_customer_id = ?');
+    baseParams.push(Number(end_customer_id));
   }
   if (contract_customer_id) {
-    where.push('o.contract_customer_id = ?');
-    params.push(Number(contract_customer_id));
+    base.push('o.contract_customer_id = ?');
+    baseParams.push(Number(contract_customer_id));
   }
   if (year) {
-    where.push('o.year = ?');
-    params.push(String(year));
+    base.push('o.year = ?');
+    baseParams.push(String(year));
   }
   if (month) {
-    where.push('o.month = ?');
-    params.push(String(month));
+    base.push('o.month = ?');
+    baseParams.push(String(month));
   }
-  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const baseWhere = base.join(' AND ');
+  const filter = [];
+  const params = [...baseParams];
+  if (status) {
+    filter.push('o.status = ?');
+    params.push(String(status));
+  }
+  if (scope === 'active') filter.push("o.status NOT IN ('closed','lost_closed')");
+  if (scope === 'archived') filter.push("o.status IN ('closed','lost_closed')");
+  const allWhere = [baseWhere, ...filter].filter(Boolean).join(' AND ');
+  const whereSql = allWhere ? `WHERE ${allWhere}` : '';
+  const countWith = (cond) => {
+    const parts = [baseWhere, ...(status ? ['o.status = ?'] : []), cond].filter(Boolean).join(' AND ');
+    const sql = parts ? `WHERE ${parts}` : '';
+    return db.prepare(`SELECT COUNT(*) AS c FROM orders o ${sql}`).get(...(status ? [...baseParams, String(status)] : baseParams)).c;
+  };
+  const activeCount = countWith("o.status NOT IN ('closed','lost_closed')");
+  const archivedCount = countWith("o.status IN ('closed','lost_closed')");
   const total = db.prepare(`SELECT COUNT(*) AS c FROM orders o ${whereSql}`).get(...params).c;
   const items = db
     .prepare(
-      `SELECT o.*, ec.customer_name AS end_customer_name, cc.customer_name AS contract_customer_name
+      `SELECT o.*, ec.customer_name AS end_customer_name, cc.customer_name AS contract_customer_name,
+       (SELECT GROUP_CONCAT(cp.po_number, '、') FROM customer_pos cp WHERE cp.order_id = o.id) AS po_numbers
        FROM orders o
        LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
        LEFT JOIN contract_customers cc ON cc.id = o.contract_customer_id
        ${whereSql} ORDER BY o.id DESC LIMIT ? OFFSET ?`
     )
     .all(...params, limit, (page - 1) * limit);
-  return res.json({ items, total, page, limit });
+  return res.json({ items, total, page, limit, activeCount, archivedCount });
 });
 
 router.get('/:id', (req, res) => {
@@ -337,7 +377,14 @@ router.delete('/:id', (req, res) => {
 
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM order_custom_fields WHERE order_id = ?').run(order.id);
+    const files = db.prepare('SELECT file_path FROM order_attachments WHERE order_id = ?').all(order.id);
     db.prepare('DELETE FROM order_attachments WHERE order_id = ?').run(order.id);
+    for (const row of files) {
+      if (row.file_path) {
+        const filePath = path.join(getUploadDir(), row.file_path);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
+    }
     db.prepare('DELETE FROM customer_pos WHERE order_id = ?').run(order.id);
     db.prepare('DELETE FROM quotation_items WHERE quotation_id IN (SELECT id FROM quotations WHERE order_id = ?)').run(order.id);
     db.prepare('DELETE FROM quotations WHERE order_id = ?').run(order.id);

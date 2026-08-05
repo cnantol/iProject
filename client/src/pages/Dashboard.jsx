@@ -141,20 +141,23 @@ export default function Dashboard() {
   const statusMap = new Map((data.statusDistribution || []).map((row) => [row.status, row.count]));
 
   return (
-    <Stack spacing={3}>
+    <Stack spacing={3} useFlexGap>
       <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1.5} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-        <Box>
-          <Typography variant="h5">首页看板</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-            {new Intl.DateTimeFormat('zh-CN', { dateStyle: 'full' }).format(new Date())}
-          </Typography>
-        </Box>
+        <Stack direction="row" spacing={1.25} alignItems="center">
+          <Box sx={{ width: 4, height: 28, borderRadius: 2, bgcolor: 'primary.main' }} />
+          <Box>
+            <Typography variant="h5">首页看板</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+              {new Intl.DateTimeFormat('zh-CN', { dateStyle: 'full' }).format(new Date())}
+            </Typography>
+          </Box>
+        </Stack>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/orders/new')}>
           新建销售机会
         </Button>
       </Stack>
 
-      <Grid container spacing={2}>
+      <Grid container spacing={2} sx={{ mx: -2 }}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard label="总项目数" value={data.totalOrders ?? 0} accent="#1976D2" icon={<AssignmentIcon />} />
         </Grid>
@@ -169,7 +172,7 @@ export default function Dashboard() {
         </Grid>
       </Grid>
 
-      <Grid container spacing={2}>
+      <Grid container spacing={2} sx={{ mx: -2 }}>
         <Grid item xs={12} md={6}>
           <Card sx={{ height: '100%' }}>
             <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
@@ -271,13 +274,15 @@ export default function Dashboard() {
           </Card>
         </Grid>
       </Grid>
-      <Card>
-        <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
-        <CardContent>
+      <Grid container spacing={2} sx={{ mx: -2 }}>
+        <Grid item xs={12}>
+          <Card>
+            <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
+            <CardContent>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
             <Stack direction="row" spacing={1} alignItems="center">
               <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
-              <Typography variant="h6">最近项目</Typography>
+              <Typography variant="h6">最新机会</Typography>
             </Stack>
             <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/orders')}>
               全部销售机会
@@ -323,8 +328,10 @@ export default function Dashboard() {
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
     </Stack>
   );
 }

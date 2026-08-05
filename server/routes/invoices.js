@@ -23,7 +23,12 @@ function syncInvoicedFlag(db, orderId) {
   if (!order || order.status !== 'shipping_invoicing') return;
   const { poTotal, invoiceTotal } = totals(db, orderId);
   if (poTotal > 0 && invoiceTotal >= poTotal && Number(order.invoiced) !== 1) {
-    db.prepare('UPDATE orders SET invoiced = 1, invoiced_date = COALESCE(invoiced_date, ?), updated_at = ? WHERE id = ?').run(
+    db.prepare(
+      `UPDATE orders SET invoiced = 1,
+       invoiced_date = COALESCE(invoiced_date, (SELECT MAX(invoice_date) FROM invoice_records WHERE order_id = ?), ?),
+       updated_at = ? WHERE id = ?`
+    ).run(
+      orderId,
       todayLocal(),
       nowUtc(),
       orderId
@@ -114,8 +119,14 @@ router.delete('/:orderId/invoices/:invoiceId', (req, res) => {
   db.prepare('DELETE FROM order_attachments WHERE reference_type = ? AND reference_id = ?').run('invoice_record', row.id);
   db.prepare('DELETE FROM invoice_records WHERE id = ?').run(row.id);
   syncInvoicedFlag(db, order.id);
+  writeAudit(db, {
+    userId: req.user.id,
+    action: 'other',
+    entityType: 'order',
+    entityId: order.id,
+    detail: { event: 'delete_invoice', invoice_id: row.id, invoice_no: row.invoice_no }
+  });
   return res.json({ message: '发票记录已删除' });
 });
 
 export default router;
-export { syncInvoicedFlag };

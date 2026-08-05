@@ -33,18 +33,30 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import BackupIcon from '@mui/icons-material/Backup';
+import CancelIcon from '@mui/icons-material/Cancel';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DescriptionIcon from '@mui/icons-material/Description';
 import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 import HistoryIcon from '@mui/icons-material/History';
 import ImageIcon from '@mui/icons-material/Image';
 import LinkIcon from '@mui/icons-material/Link';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import LockIcon from '@mui/icons-material/Lock';
+import PaidIcon from '@mui/icons-material/Paid';
 import PersonIcon from '@mui/icons-material/Person';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import RestoreIcon from '@mui/icons-material/Restore';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SaveIcon from '@mui/icons-material/Save';
+import SettingsIcon from '@mui/icons-material/Settings';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import api, { errorMessage } from '../api';
@@ -52,7 +64,9 @@ import { useAuth } from '../context/AuthContext';
 import { useAppLogo } from '../context/AppLogoContext';
 import { FIELD_LABEL_DEFAULTS } from '../utils/fieldLabels';
 import { IMPORT_TARGET_LABELS } from '../utils/constants';
-import { fmtDateTime, authUrl } from '../utils/helpers';
+import { fmtDateTime } from '../utils/helpers';
+import { downloadUrl } from '../utils/download';
+import { QUOTE_STYLE_DEFAULTS } from '../utils/quoteStyleDefaults';
 
 const ENTITY_CARDS = [
   { key: 'end_customer', label: '客户信息（最终/合同客户）' },
@@ -82,8 +96,23 @@ const BUILTIN_STEP_FIELDS = {
   lost_closed: ['闭环时间', '未中标关闭状态']
 };
 
+const STEP_ICONS = {
+  customer_info: <PersonIcon />,
+  proposal: <DescriptionIcon />,
+  quotation: <RequestQuoteIcon />,
+  approval_pending: <FactCheckIcon />,
+  bid_decision: <EmojiEventsIcon />,
+  finance: <AccountBalanceIcon />,
+  shipping_invoicing: <LocalShippingIcon />,
+  commission: <PaidIcon />,
+  closed: <LockIcon />,
+  lost_closed: <CancelIcon />
+};
+
+const CUSTOM_FIELD_STEP_KEYS = ['customer_info'];
+
 export default function Settings() {
-  const [tab, setTab] = useState('flow');
+  const [tab, setTab] = useState('system');
   const [error, setError] = useState('');
 
   return (
@@ -97,11 +126,21 @@ export default function Settings() {
       {error && <Alert severity="error">{error}</Alert>}
       <Card>
         <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
-        <Tabs value={tab} onChange={(_, value) => setTab(value)} variant="scrollable" scrollButtons="auto" sx={{ px: 1.5 }}>
-          <Tab value="flow" label="流程与字段" />
-          <Tab value="import" label="数据导入" />
-          <Tab value="quote" label="报价单式样" />
-          <Tab value="system" label="系统管理" />
+        <Tabs
+          value={tab}
+          onChange={(_, value) => setTab(value)}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            px: 1.5,
+            '& .MuiTab-root': { minHeight: 54, fontWeight: 700, textTransform: 'none', px: 2 },
+            '& .MuiTabs-indicator': { height: 3, borderRadius: 2 }
+          }}
+        >
+          <Tab value="system" label="系统管理" icon={<SettingsIcon />} iconPosition="start" />
+          <Tab value="import" label="数据导入" icon={<UploadFileIcon />} iconPosition="start" />
+          <Tab value="quote" label="报价单式样" icon={<DescriptionIcon />} iconPosition="start" />
+          <Tab value="flow" label="流程与字段" icon={<AccountTreeIcon />} iconPosition="start" />
         </Tabs>
       </Card>
       {tab === 'flow' && <FlowFieldManager onError={setError} />}
@@ -163,6 +202,7 @@ function FlowFieldManager({ onError }) {
   const boundIdSet = new Set(Object.values(bindings).flat());
   const unboundFields = allFields.filter((field) => !boundIdSet.has(field.id));
   const builtinFields = selected ? BUILTIN_STEP_FIELDS[selected.step_key] || [] : [];
+  const canAddCustomField = CUSTOM_FIELD_STEP_KEYS.includes(selectedStep);
 
   const save = async () => {
     setSavingConfig(true);
@@ -276,15 +316,16 @@ function FlowFieldManager({ onError }) {
             <CircularProgress />
           </Box>
         ) : (
-          <Grid container spacing={2}>
+          <Grid container spacing={3}>
             <Grid item xs={12} md={4}>
-              <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 2.5, overflow: 'hidden', bgcolor: 'background.paper' }}>
+              <Box sx={{ borderRadius: 2.5, overflow: 'hidden', bgcolor: 'background.paper' }}>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5, py: 1.25, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
                   <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>流程步骤</Typography>
                   <Chip size="small" label={`${steps.length} 步`} />
                 </Stack>
-                {steps.map((step, index) => {
+                <Box sx={{ p: 1 }}>
+                {steps.map((step) => {
                   const isSelected = step.step_key === selectedStep;
                   const count = (bindings[step.step_key] || []).length;
                   const builtinCount = (BUILTIN_STEP_FIELDS[step.step_key] || []).length;
@@ -298,33 +339,43 @@ function FlowFieldManager({ onError }) {
                         gap: 1.5,
                         px: 1.5,
                         py: 1.25,
+                        mb: 0.75,
                         cursor: 'pointer',
-                        borderBottom: index < steps.length - 1 ? '1px solid' : 'none',
-                        borderColor: 'divider',
-                        bgcolor: isSelected ? 'primary.main' : 'transparent',
+                        borderRadius: 2,
+                        border: 1,
+                        borderColor: isSelected ? 'primary.main' : 'divider',
+                        bgcolor: isSelected ? 'primary.main' : 'background.paper',
                         color: isSelected ? 'primary.contrastText' : 'inherit',
-                        '&:hover': { bgcolor: isSelected ? 'primary.main' : 'action.hover' }
+                        transition: 'background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease',
+                        '&:hover': { bgcolor: isSelected ? 'primary.main' : 'action.hover', transform: 'translateY(-1px)', boxShadow: 1 }
                       }}
                     >
-                      <Chip
-                        size="small"
-                        label={step.sort_order}
+                      <Box
                         sx={{
-                          height: 22,
-                          minWidth: 26,
-                          fontWeight: 800,
+                          width: 36,
+                          height: 36,
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
                           bgcolor: isSelected ? 'rgba(255,255,255,0.18)' : 'action.selected',
-                          color: isSelected ? '#fff' : 'text.secondary'
+                          color: isSelected ? '#fff' : 'primary.main'
                         }}
-                      />
+                      >
+                        {STEP_ICONS[step.step_key] || <PersonIcon />}
+                      </Box>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="body2" sx={{ fontWeight: 700, color: isSelected ? '#fff' : 'text.primary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {step.step_name}
                         </Typography>
                         <Typography variant="caption" sx={{ color: isSelected ? 'rgba(255,255,255,0.82)' : 'text.secondary' }}>
-                          {step.step_key}
+                          {CUSTOM_FIELD_STEP_KEYS.includes(step.step_key) ? '可新增/绑定自定义字段' : '仅内置字段展示'}
                         </Typography>
                       </Box>
+                      {!CUSTOM_FIELD_STEP_KEYS.includes(step.step_key) && (
+                        <LockIcon sx={{ fontSize: 16, color: isSelected ? 'rgba(255,255,255,0.75)' : 'text.disabled' }} />
+                      )}
                       <Chip
                         size="small"
                         label={`${builtinCount + count} 字段`}
@@ -334,6 +385,7 @@ function FlowFieldManager({ onError }) {
                     </Box>
                   );
                 })}
+                </Box>
               </Box>
             </Grid>
             <Grid item xs={12} md={8}>
@@ -341,6 +393,21 @@ function FlowFieldManager({ onError }) {
                 <>
                   <Stack direction="row" alignItems="center" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
                     <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+                    <Box
+                      sx={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 2,
+                        bgcolor: 'primary.main',
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}
+                    >
+                      {STEP_ICONS[selected.step_key] || <PersonIcon />}
+                    </Box>
                     <Typography variant="h6">{selected.step_name}</Typography>
                     <Chip size="small" label={selected.step_key} variant="outlined" />
                     <Box sx={{ flex: 1 }} />
@@ -358,14 +425,36 @@ function FlowFieldManager({ onError }) {
                       <TextField size="small" label="排序" type="number" value={selected.sort_order} onChange={(e) => updateStep('sort_order', Number(e.target.value))} sx={{ width: 110 }} />
                       <FormControlLabel control={<Switch checked={Number(selected.is_active) === 1} onChange={(e) => updateStep('is_active', e.target.checked ? 1 : 0)} />} label="进度条展示" />
                     </Stack>
-                    <Stack direction="row" spacing={1.5}>
-                      <Button variant="contained" startIcon={<AddIcon />} onClick={() => setEditor({ field_name: '', field_type: 'text', field_options: '', entity_type: 'order', sort_order: selectedFields.length + 1 })}>
-                        新增字段
-                      </Button>
-                      <Button variant="outlined" startIcon={<LinkIcon />} onClick={openBindDialog}>
-                        绑定已有字段
-                      </Button>
-                    </Stack>
+                    {canAddCustomField ? (
+                      <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setEditor({ field_name: '', field_type: 'text', field_options: '', entity_type: 'order', sort_order: selectedFields.length + 1 })}>
+                          新增字段
+                        </Button>
+                        <Button variant="outlined" startIcon={<LinkIcon />} onClick={openBindDialog}>
+                          绑定已有字段
+                        </Button>
+                        <Chip size="small" color="success" icon={<CheckCircleIcon />} label="该步骤支持自定义字段" />
+                      </Stack>
+                    ) : (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          px: 1.25,
+                          py: 1,
+                          borderRadius: 2,
+                          bgcolor: 'rgba(178,106,0,0.10)',
+                          border: '1px solid',
+                          borderColor: 'rgba(178,106,0,0.28)'
+                        }}
+                      >
+                        <LockIcon fontSize="small" sx={{ color: '#B26A00' }} />
+                        <Typography variant="body2" sx={{ color: '#B26A00', fontWeight: 600 }}>
+                          该步骤暂不支持新增/绑定自定义字段，仅「客户信息」步骤可新增字段
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
                   <Box sx={{ mb: 2, p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
@@ -379,7 +468,7 @@ function FlowFieldManager({ onError }) {
                       ))}
                     </Box>
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
-                      系统内置字段，按方案书固定展示，不可删除
+                      系统内置字段，固定展示，不可删除
                     </Typography>
                   </Box>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
@@ -409,7 +498,7 @@ function FlowFieldManager({ onError }) {
                               <Chip size="small" label="系统字段" color="default" />
                             ) : (
                               <>
-                                <IconButton size="small" title="编辑字段" onClick={() => setEditor({ ...field, field_options: field.field_options ? JSON.parse(field.field_options).join(',') : '' })}>
+                                <IconButton size="small" title="编辑字段" onClick={() => setEditor({ ...field, field_options: field.field_options ? (() => { try { const v = JSON.parse(field.field_options); return Array.isArray(v) ? v.join(',') : String(v || ''); } catch { return String(field.field_options); } })() : '' })}>
                                   <EditIcon />
                                 </IconButton>
                                 <IconButton size="small" title="从步骤移除" onClick={() => removeFromStep(field)}>
@@ -439,7 +528,7 @@ function FlowFieldManager({ onError }) {
                       <Chip size="small" label={unboundFields.length} />
                     </Stack>
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                      字段库中的字段可绑定到任意步骤
+                      字段库中的字段可绑定到支持自定义字段的步骤（当前为客户信息）
                     </Typography>
                     <Table size="small">
                       <TableHead>
@@ -461,10 +550,12 @@ function FlowFieldManager({ onError }) {
                                 <Chip size="small" label="系统字段" color="default" />
                               ) : (
                                 <>
-                                  <Button size="small" variant="outlined" startIcon={<LinkIcon />} onClick={() => quickBind(field)}>
-                                    绑定到当前步骤
-                                  </Button>
-                                  <IconButton size="small" title="编辑字段" onClick={() => setEditor({ ...field, field_options: field.field_options ? JSON.parse(field.field_options).join(',') : '' })}>
+                                  {canAddCustomField && (
+                                    <Button size="small" variant="outlined" startIcon={<LinkIcon />} onClick={() => quickBind(field)}>
+                                      绑定到当前步骤
+                                    </Button>
+                                  )}
+                                  <IconButton size="small" title="编辑字段" onClick={() => setEditor({ ...field, field_options: field.field_options ? (() => { try { const v = JSON.parse(field.field_options); return Array.isArray(v) ? v.join(',') : String(v || ''); } catch { return String(field.field_options); } })() : '' })}>
                                     <EditIcon />
                                   </IconButton>
                                   <IconButton size="small" color="error" title="删除字段" onClick={() => deleteField(field)}>
@@ -505,18 +596,6 @@ function FlowFieldManager({ onError }) {
                   ))}
                 </Select>
               </FormControl>
-              {!editor?.id && (
-                <FormControl fullWidth>
-                  <InputLabel>所属实体</InputLabel>
-                  <Select value={editor?.entity_type || 'order'} label="所属实体" onChange={(e) => setEditor((prev) => ({ ...prev, entity_type: e.target.value }))}>
-                    {ENTITY_CARDS.map((card) => (
-                      <MenuItem key={card.key} value={card.key}>
-                        {card.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
               {editor?.field_type === 'select' && (
                 <TextField label="选项（逗号分隔）" value={editor?.field_options || ''} onChange={(e) => setEditor((prev) => ({ ...prev, field_options: e.target.value }))} />
               )}
@@ -600,6 +679,15 @@ function ImportManager({ onError }) {
     }
   };
 
+  const openDownload = async (path) => {
+    try {
+      const url = await downloadUrl(path);
+      window.open(url, '_blank');
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
   return (
     <Card>
       <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
@@ -653,7 +741,7 @@ function ImportManager({ onError }) {
                 </Typography>
               </Box>
               <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
-                <Button size="small" variant="outlined" component="a" href={authUrl(`/api/settings/import/${target}/template`)} startIcon={<DownloadIcon />}>
+                <Button size="small" variant="outlined" startIcon={<DownloadIcon />} onClick={() => openDownload(`/api/settings/import/${target}/template`)}>
                   下载模板
                 </Button>
                 <Button size="small" variant="contained" component="label" startIcon={<UploadFileIcon />}>
@@ -727,78 +815,6 @@ function ImportManager({ onError }) {
     </Card>
   );
 }
-
-const QUOTE_STYLE_DEFAULTS = {
-  company_name: 'Atlas Copco',
-  primary_color: '#004E9A',
-  secondary_color: '#DCE8F5',
-  company_address: '',
-  company_phone: '',
-  company_email: '',
-  header_text: '',
-  footer_text: '',
-  font_family: 'sans',
-  title_alignment: 'center',
-  info_alignment: 'center',
-  header_alignment: 'center',
-  footer_alignment: 'center',
-  language: 'zh',
-  logo_position: 'center',
-  quote_date: '',
-  logo: null,
-  field_visibility: {
-    quote_no: 1,
-    quote_date: 1,
-    order_no: 1,
-    project_name: 1,
-    end_customer: 1,
-    contract_customer: 1,
-    contact_info: 1,
-    material_no: 1,
-    description: 1,
-    type: 1,
-    price_source: 1,
-    unit_price: 1,
-    qty: 1,
-    line_amount: 1
-  },
-  labels: {
-    quote_title: '报价单',
-    quote_date: '报价日期',
-    quote_no: '报价单编号',
-    order_no: '销售机会编号',
-    project_name: '项目名称',
-    end_customer: '最终客户',
-    contract_customer: '合同客户',
-    detail_title: '报价明细',
-    total: '合计（未税）',
-    material_no: '物料号',
-    description: '描述',
-    type: '类型',
-    price_source: '价格来源',
-    unit_price: '单价',
-    qty: '数量',
-    line_amount: '行金额'
-  },
-  labels_en: {
-    quote_title: 'Quotation',
-    quote_date: 'Quotation Date',
-    quote_no: 'Quotation No.',
-    order_no: 'Order No.',
-    project_name: 'Project Name',
-    end_customer: 'End Customer',
-    contract_customer: 'Contract Customer',
-    detail_title: 'Quotation Details',
-    total: 'Total (Excl. VAT)',
-    material_no: 'Material No.',
-    description: 'Description',
-    type: 'Type',
-    price_source: 'Price Source',
-    unit_price: 'Unit Price',
-    qty: 'Qty',
-    line_amount: 'Line Amount'
-  }
-};
 
 const QUOTE_META_FIELDS = [
   { key: 'quote_no', label: '报价单编号', switchKey: 'quote_no' },
@@ -881,7 +897,7 @@ function QuoteStyle({ onError }) {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       window.alert('测试 PDF 已生成并开始下载');
     } catch (err) {
       onError(errorMessage(err));
@@ -1385,17 +1401,29 @@ function SystemManager({ onError }) {
   };
 
   useEffect(() => {
-    loadOrders();
     loadAudit();
+  }, [auditPage]);
+
+  useEffect(() => {
+    loadOrders();
     loadSchedule();
     loadFieldLabels();
     loadAppLogo();
-  }, [auditPage]);
+  }, []);
 
   const backup = async () => {
     try {
       const { data } = await api.post('/settings/backup');
       setBackupInfo(data);
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
+  const openDownload = async (path) => {
+    try {
+      const url = await downloadUrl(path);
+      window.open(url, '_blank');
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -1421,6 +1449,7 @@ function SystemManager({ onError }) {
     try {
       await api.post('/settings/restore', formData);
       window.alert('还原成功');
+      window.location.reload();
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -1486,7 +1515,8 @@ function SystemManager({ onError }) {
       });
       if (data.user) updateUser(data.user);
       setAccount({ current_password: '', username: '', new_password: '', confirm_password: '' });
-      window.alert('账户信息已更新');
+      window.alert('账户信息已更新，请重新登录');
+      window.location.href = '/login';
     } catch (err) {
       onError(errorMessage(err));
     } finally {
@@ -1644,7 +1674,7 @@ function SystemManager({ onError }) {
             </Stack>
             {backupInfo && (
               <Typography variant="body2" sx={{ mt: 1 }}>
-                备份完成：<Chip label={backupInfo.filename} component="a" href={authUrl(backupInfo.downloadUrl)} clickable />
+                备份完成：<Chip label={backupInfo.filename} clickable onClick={() => openDownload(backupInfo.downloadUrl)} />
               </Typography>
             )}
             <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>

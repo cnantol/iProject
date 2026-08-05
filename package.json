@@ -1,9 +1,9 @@
 {
-  "name": "atlas-copco-oms",
+  "name": "iproject-oms",
   "version": "1.0.0",
   "packageManager": "pnpm@11.9.0",
   "private": true,
-  "description": "Atlas Copco 销售项目全生命周期管理系统",
+  "description": "iProject 全链路项目管理专家",
   "scripts": {
     "build": "cd client && pnpm build",
     "start": "node server/index.js",

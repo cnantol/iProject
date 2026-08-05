@@ -6,7 +6,7 @@ import xlsx from 'xlsx';
 import { initDb, closeDb, getDb } from '../db/init.js';
 import { createApp } from '../index.js';
 
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-smoke-'));
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'iproject-smoke-'));
 initDb(dataDir);
 const app = createApp();
 const server = await new Promise((resolve) => {

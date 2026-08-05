@@ -64,6 +64,10 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
       setError('开票金额必须大于 0');
       return;
     }
+    if (!form.invoice_date) {
+      setError('请填写开票日期');
+      return;
+    }
     const po = pos.find((item) => item.id === Number(form.po_id));
     const poInvoiced = invoices.filter((item) => item.po_id === Number(form.po_id)).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const wouldExceed = po && Number(poInvoiced) + Number(form.amount) > Number(po.po_amount);
@@ -91,6 +95,10 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
 
   const toggleInvoiced = async (checked) => {
     setError('');
+    if (checked && !invoicedDate) {
+      setError('请先填写开票日期');
+      return;
+    }
     if (checked && invoiceTotal < poTotal) {
       setPendingToggle(true);
       setConfirmOpen(true);
@@ -112,6 +120,10 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
     setConfirmOpen(false);
     setPendingToggle(false);
     try {
+      if (!invoicedDate) {
+        setError('请先填写开票日期');
+        return;
+      }
       await api.patch(`/orders/${order.id}/status`, {
         action: 'toggle-invoiced',
         invoiced: 1,
@@ -230,6 +242,7 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
             value={form.invoice_date}
             onChange={(e) => setForm((prev) => ({ ...prev, invoice_date: e.target.value }))}
             InputLabelProps={{ shrink: true }}
+            required
           />
           <TextField label="备注" value={form.remark} onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))} />
           <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={addInvoice}>

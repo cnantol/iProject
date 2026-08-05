@@ -22,7 +22,8 @@ import SaveIcon from '@mui/icons-material/Save';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { PAYMENT_TERMS } from '../utils/constants';
-import { fmtMoney, authUrl } from '../utils/helpers';
+import { fmtMoney } from '../utils/helpers';
+import { downloadUrl } from '../utils/download';
 import { useFieldLabels } from '../utils/fieldLabels';
 import StepWrapper from './StepWrapper';
 
@@ -136,6 +137,15 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
       setError(errorMessage(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openDownload = async (path) => {
+    try {
+      const url = await downloadUrl(path);
+      window.open(url, '_blank');
+    } catch {
+      setError('下载失败，请重试');
     }
   };
 
@@ -315,7 +325,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
       </Typography>
       <Stack direction="row" spacing={1} alignItems="center">
         {attachments.map((item) => (
-          <Chip key={item.id} label={item.file_name} component="a" href={authUrl(`/api/orders/${order.id}/attachments/${item.id}/download`)} clickable />
+          <Chip key={item.id} label={item.file_name} clickable onClick={() => openDownload(`/api/orders/${order.id}/attachments/${item.id}/download`)} />
         ))}
         {!posLocked && (
           <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} sx={{ borderRadius: 2 }}>

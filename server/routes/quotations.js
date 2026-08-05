@@ -163,13 +163,20 @@ function createRound(db, order, body) {
 
 function findCjkFont() {
   const candidates = [
+    process.env.CJK_FONT_PATH,
+    path.join(process.cwd(), 'assets', 'fonts', 'NotoSansCJK-Regular.ttc'),
+    '/app/assets/fonts/NotoSansCJK-Regular.ttc',
+    '/app/assets/fonts/NotoSansSC-Regular.ttf',
     path.join(process.cwd(), 'assets', 'fonts', 'NotoSansSC-Regular.ttf'),
     '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
     '/System/Library/Fonts/PingFang.ttc',
     '/System/Library/Fonts/Hiragino Sans GB.ttc',
     '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-    '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc'
-  ];
+    '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc',
+    '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+    '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
+    '/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc'
+  ].filter(Boolean);
   for (const file of candidates) {
     if (fs.existsSync(file)) return file;
   }
@@ -178,7 +185,7 @@ function findCjkFont() {
 
 function buildQuotationPdf(order, round, items, customerNames, styleOverride = null) {
   const doc = new PDFDocument({ size: 'A4', margin: 48 });
-  let style = { company_name: 'Atlas Copco', primary_color: '#004E9A' };
+  let style = { company_name: 'iProject', primary_color: '#004E9A' };
   try {
     style = JSON.parse(fs.readFileSync(path.join(getDataDir(), 'quote-style.json'), 'utf8'));
   } catch {
@@ -223,7 +230,7 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
       // Logo 数据损坏时跳过，不影响 PDF 生成
     }
   }
-  doc.font(font()).fontSize(16).fillColor(style.primary_color).text(`${style.company_name || 'Atlas Copco'} ${labels.quote_title || '报价单'}`, { align: titleAlign });
+  doc.font(font()).fontSize(16).fillColor(style.primary_color).text(`${style.company_name || 'iProject'} ${labels.quote_title || '报价单'}`, { align: titleAlign });
   doc.moveDown(0.5);
   doc.fontSize(10).fillColor('#444444');
   if (show('quote_no')) doc.text(`${labels.quote_no || '报价单编号'}：${quoteNo}`, { align: infoAlign });
@@ -331,9 +338,8 @@ router.get('/:orderId/quotations', (req, res) => {
   if (!order) return notFound(res);
   let rows = db.prepare('SELECT * FROM quotations WHERE order_id = ? ORDER BY round_no').all(order.id);
   if (rows.length === 0 && order.status === 'quotation') {
-    const roundId = createRound(db, order, null);
+    createRound(db, order, null);
     rows = db.prepare('SELECT * FROM quotations WHERE order_id = ? ORDER BY round_no').all(order.id);
-    void roundId;
   }
   const result = rows.map((round) => {
     const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id').all(round.id);
@@ -365,6 +371,7 @@ router.get('/:orderId/quotations/:roundId/pdf', (req, res) => {
   const doc = buildQuotationPdf(order, round, items, { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '', endShort: ec?.short_name || null, contractShort: cc?.short_name || null });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="quotation-${order.order_id}-R${round.round_no}.pdf"`);
+  res.setHeader('Cache-Control', 'no-store');
   doc.pipe(res);
 });
 
@@ -380,6 +387,7 @@ router.post('/:orderId/quotations/:roundId/pdf', (req, res) => {
   const doc = buildQuotationPdf(order, round, items, { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '', endShort: ec?.short_name || null, contractShort: cc?.short_name || null });
   const uploads = getUploadDir();
   fs.mkdirSync(uploads, { recursive: true });
+  res.setHeader('Cache-Control', 'no-store');
   const filename = `quotation-${order.order_id}-R${round.round_no}.pdf`;
   const filePath = path.join(uploads, filename);
   const stream = fs.createWriteStream(filePath);
@@ -503,6 +511,13 @@ router.delete('/:orderId/quotations/:roundId/items/:itemId', (req, res) => {
   const info = db.prepare('DELETE FROM quotation_items WHERE id = ? AND quotation_id = ?').run(Number(req.params.itemId), round.id);
   if (info.changes === 0) return notFound(res);
   const total = recomputeTotal(db, round.id);
+  writeAudit(db, {
+    userId: req.user.id,
+    action: 'other',
+    entityType: 'order',
+    entityId: order.id,
+    detail: { event: 'delete_quotation_item', quotation_id: round.id, item_id: Number(req.params.itemId) }
+  });
   return res.json({ message: '报价明细已删除', total_amount: total });
 });
 
@@ -556,6 +571,13 @@ router.delete('/:orderId/quotations/:roundId', (req, res) => {
     db.prepare('DELETE FROM quotations WHERE id = ?').run(round.id);
   });
   tx();
+  writeAudit(getDb(), {
+    userId: req.user.id,
+    action: 'other',
+    entityType: 'order',
+    entityId: order.id,
+    detail: { event: 'delete_quotation_round', round_id: round.id, round_no: round.round_no }
+  });
   return res.json({ message: '报价轮次已删除' });
 });
 
@@ -591,9 +613,15 @@ router.post('/:orderId/quotations/:roundId/items/import', upload.single('file'),
     fs.unlinkSync(req.file.path);
     return badRequest(res, '当前报价轮次已锁定，不可导入');
   }
-  const workbook = xlsx.readFile(req.file.path);
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  let rows;
+  try {
+    const workbook = xlsx.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  } catch {
+    fs.unlinkSync(req.file.path);
+    return badRequest(res, 'Excel 解析失败');
+  }
   fs.unlinkSync(req.file.path);
   if (!rows || rows.length < 2) return badRequest(res, 'Excel 无有效数据');
 

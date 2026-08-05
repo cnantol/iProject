@@ -56,10 +56,12 @@ export function todayStr() {
   return new Date(now.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
-export function authUrl(path) {
-  const token = localStorage.getItem('atlas_token') || '';
-  const sep = String(path).includes('?') ? '&' : '?';
-  return `${path}${sep}token=${encodeURIComponent(token)}`;
+export function daysSinceDate(dateStr) {
+  if (!dateStr) return null;
+  const target = String(dateStr).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) return null;
+  const diff = new Date(`${todayStr()}T00:00:00+08:00`) - new Date(`${target}T00:00:00+08:00`);
+  return Math.max(0, Math.floor(diff / 86400000));
 }
 
 export function isStepReadOnly(order, stepKey) {

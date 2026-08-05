@@ -3,7 +3,7 @@ import axios from 'axios';
 const api = axios.create({ baseURL: '/api', timeout: 60000 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('atlas_token');
+  const token = localStorage.getItem('iproject_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -13,8 +13,8 @@ api.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     if (status === 401) {
-      localStorage.removeItem('atlas_token');
-      localStorage.removeItem('atlas_user');
+      localStorage.removeItem('iproject_token');
+      localStorage.removeItem('iproject_user');
       if (!window.location.pathname.startsWith('/login')) window.location.href = '/login';
     }
     return Promise.reject(error);

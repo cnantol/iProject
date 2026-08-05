@@ -18,32 +18,48 @@ import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
+import { useTheme } from '@mui/material/styles';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
 import InboxIcon from '@mui/icons-material/Inbox';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import api, { errorMessage } from '../api';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
-import { fmtMoney } from '../utils/helpers';
+import { daysSinceDate, fmtMoney } from '../utils/helpers';
 import { useFieldLabels } from '../utils/fieldLabels';
 
 export default function OrderList() {
   const navigate = useNavigate();
+  const theme = useTheme();
   const { t } = useFieldLabels();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [scope, setScope] = useState('active');
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
   const limit = 10;
+  const isDark = theme.palette.mode === 'dark';
+  const BLOCK = {
+    closed: { bg: isDark ? 'rgba(129, 199, 132, 0.16)' : 'rgba(46, 125, 50, 0.12)', color: isDark ? '#81C784' : '#2E7D32' },
+    amber: { bg: isDark ? 'rgba(255, 213, 79, 0.16)' : 'rgba(249, 168, 37, 0.14)', color: isDark ? '#FFD54F' : '#B26A00' },
+    urgent: { bg: isDark ? 'rgba(255, 138, 128, 0.16)' : 'rgba(211, 47, 47, 0.12)', color: isDark ? '#FF8A80' : '#C62828' },
+    none: { bg: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(120, 144, 156, 0.12)', color: isDark ? '#90A4AE' : '#78909C' }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = { page, limit };
+      params.scope = scope;
       if (search.trim()) params.search = search.trim();
       if (status) params.status = status;
       const { data: result } = await api.get('/orders', { params });
@@ -54,7 +70,7 @@ export default function OrderList() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, status]);
+  }, [page, search, status, scope]);
 
   useEffect(() => {
     load();
@@ -140,62 +156,129 @@ export default function OrderList() {
           </Alert>
         ) : (
           <>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                  <TableCell>{t('order_id')}</TableCell>
-                  <TableCell>{t('project_name')}</TableCell>
-                  <TableCell>{t('end_customer')}</TableCell>
-                  <TableCell>{t('contract_customer')}</TableCell>
-                  <TableCell>{t('sales_order')}</TableCell>
-                  <TableCell>{t('status')}</TableCell>
-                  <TableCell align="right">{t('amount')}</TableCell>
-                  <TableCell align="right" sx={{ width: 80 }}>操作</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(data?.items || []).length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8} align="center" sx={{ py: 8, color: 'text.secondary' }}>
-                      <Stack spacing={1} alignItems="center">
-                        <InboxIcon sx={{ fontSize: 56, color: 'text.disabled' }} />
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>暂无符合条件的销售机会</Typography>
-                        <Typography variant="caption" color="text.secondary">可调整搜索条件或点击右上角“新建销售机会”</Typography>
-                      </Stack>
-                    </TableCell>
+            <Tabs
+              value={scope}
+              onChange={(_, value) => {
+                setScope(value);
+                setPage(1);
+              }}
+              sx={{
+                px: 2,
+                minHeight: 46,
+                borderBottom: 1,
+                borderColor: 'divider',
+                '& .MuiTab-root': { minHeight: 46, fontWeight: 700, textTransform: 'none' }
+              }}
+            >
+              <Tab label={`进行中${data ? `（${data.activeCount ?? 0}）` : ''}`} value="active" />
+              <Tab label={`存档${data ? `（${data.archivedCount ?? 0}）` : ''}`} value="archived" />
+            </Tabs>
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small" sx={{ minWidth: 1080 }}>
+                <TableHead>
+                  <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                    <TableCell sx={{ width: 56 }} />
+                    <TableCell>{t('order_id')}</TableCell>
+                    <TableCell>{t('project_name')}</TableCell>
+                    <TableCell>{t('end_customer')}</TableCell>
+                    <TableCell>{t('contract_customer')}</TableCell>
+                    <TableCell>{t('sales_order')}</TableCell>
+                    <TableCell>PO</TableCell>
+                    <TableCell>{t('status')}</TableCell>
+                    <TableCell align="right">{t('amount')}</TableCell>
+                    <TableCell align="right" sx={{ width: 80 }}>操作</TableCell>
                   </TableRow>
-                )}
-                {(data?.items || []).map((order) => (
-                  <TableRow key={order.id} hover sx={{ cursor: 'pointer', transition: 'background-color 0.15s ease' }} onClick={() => navigate(`/orders/${order.id}`)}>
-                    <TableCell sx={{ fontWeight: 700, color: 'primary.main' }}>{order.order_id}</TableCell>
-                    <TableCell>{order.project_name || '-'}</TableCell>
-                    <TableCell>{order.end_customer_name || '-'}</TableCell>
-                    <TableCell>{order.contract_customer_name || '-'}</TableCell>
-                    <TableCell>{order.sales_order || '-'}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={STATUS_LABELS[order.status] || order.status}
-                        icon={<Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: STATUS_COLORS[order.status] || '#78909C' }} />}
-                        sx={{ bgcolor: `${STATUS_COLORS[order.status] || '#78909C'}22`, color: STATUS_COLORS[order.status] || '#78909C' }}
-                      />
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600 }}>{fmtMoney(order.total_amount)}</TableCell>
-                    <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                      <IconButton
-                        size="small"
-                        color="error"
-                        title="删除销售机会"
-                        disabled={deletingId === order.id}
-                        onClick={() => removeOrder(order)}
+                </TableHead>
+                <TableBody>
+                  {(data?.items || []).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={11} align="center" sx={{ py: 8, color: 'text.secondary' }}>
+                        <Stack spacing={1} alignItems="center">
+                          <InboxIcon sx={{ fontSize: 56, color: 'text.disabled' }} />
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                            {scope === 'archived' ? '暂无存档销售机会' : '暂无进行中的销售机会'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">可调整搜索条件或点击右上角“新建销售机会”</Typography>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {(data?.items || []).map((order) => {
+                    const isClosed = ['closed', 'lost_closed'].includes(order.status);
+                    const invoicedDays = Number(order.invoiced) === 1 ? daysSinceDate(order.invoiced_date) : null;
+                    const urgent = invoicedDays !== null && invoicedDays >= 100 && !isClosed;
+                    const block = isClosed && invoicedDays !== null
+                      ? { ...BLOCK.closed, icon: <CheckCircleRoundedIcon sx={{ fontSize: 16 }} />, text: '', title: `开票日期：${String(order.invoiced_date).slice(0, 10)}` }
+                      : urgent
+                        ? { ...BLOCK.urgent, icon: <WarningAmberRoundedIcon sx={{ fontSize: 14 }} />, text: `${invoicedDays}`, title: `开票后 ${invoicedDays} 天` }
+                        : invoicedDays !== null
+                          ? { ...BLOCK.amber, icon: <ReceiptLongIcon sx={{ fontSize: 14 }} />, text: `${invoicedDays}`, title: `开票后 ${invoicedDays} 天` }
+                          : { ...BLOCK.none, icon: <ReceiptLongIcon sx={{ fontSize: 14 }} />, text: '—', title: '未开票' };
+                    return (
+                      <TableRow
+                        key={order.id}
+                        hover
+                        sx={{ cursor: 'pointer', transition: 'background-color 0.15s ease' }}
+                        onClick={() => navigate(`/orders/${order.id}`)}
                       >
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                        <TableCell sx={{ width: 56, p: 0.5, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <Box
+                            component="span"
+                            title={block.title}
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '4px',
+                              minWidth: 36,
+                              height: 24,
+                              px: block.text ? 0.75 : 0.4,
+                              borderRadius: 1,
+                              bgcolor: block.bg,
+                              color: block.color,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              lineHeight: 1,
+                              whiteSpace: 'nowrap',
+                              userSelect: 'none'
+                            }}
+                          >
+                            {block.icon}
+                            {block.text ? <Box component="span">{block.text}</Box> : null}
+                          </Box>
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{order.order_id}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.project_name || '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.end_customer_name || '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.contract_customer_name || '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.sales_order || '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.po_numbers || '-'}</TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={STATUS_LABELS[order.status] || order.status}
+                            icon={<Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: STATUS_COLORS[order.status] || '#78909C' }} />}
+                            sx={{ bgcolor: `${STATUS_COLORS[order.status] || '#78909C'}22`, color: STATUS_COLORS[order.status] || '#78909C' }}
+                          />
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtMoney(order.total_amount)}</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            title="删除销售机会"
+                            disabled={deletingId === order.id}
+                            onClick={() => removeOrder(order)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Box>
             {(data?.total || 0) > 0 && (
               <Stack direction="row" alignItems="center" justifyContent="center" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ py: 1.5, px: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
                 <Typography variant="body2" color="text.secondary">共 {data?.total || 0} 条</Typography>

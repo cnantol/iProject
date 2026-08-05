@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="iProject">
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="#004E9A"/>
+  <circle cx="32" cy="21" r="4" fill="#FFFFFF"/>
+  <rect x="29.8" y="29" width="4.4" height="25" rx="2.2" fill="#FFFFFF"/>
+</svg>

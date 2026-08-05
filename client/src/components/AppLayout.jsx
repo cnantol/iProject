@@ -49,19 +49,19 @@ export default function AppLayout() {
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const navigate = useNavigate();
   const location = useLocation();
+  const { mode, preference, setPreference } = useThemeMode();
   const { src } = useAppLogo();
   const [logoFailed, setLogoFailed] = useState(false);
-  const logo = logoFailed ? '/logo.svg' : src;
+  const themeLogo = mode === 'dark' ? '/logo-dark.svg' : '/logo.svg';
+  const logo = logoFailed || src === '/logo.svg' ? themeLogo : src;
   const { user, logout } = useAuth();
-  const { mode, preference, setPreference } = useThemeMode();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenu, setUserMenu] = useState(null);
-  const [themeMenu, setThemeMenu] = useState(null);
 
   const drawerContent = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', px: 2.25, py: 2 }}>
-        <Box component="img" src={logo} alt="Atlas Copco" onError={() => setLogoFailed(true)} sx={{ height: 56, maxWidth: 180, width: 'auto', objectFit: 'contain' }} />
+        <Box component="img" src={logo} alt="iProject" onError={() => setLogoFailed(true)} sx={{ height: 56, maxWidth: 180, width: 'auto', objectFit: 'contain' }} />
       </Box>
       <Divider />
       <List sx={{ flex: 1, px: 1, pt: 1 }}>
@@ -121,49 +121,15 @@ export default function AppLayout() {
               </IconButton>
             )}
             <Typography variant="subtitle1" sx={{ fontWeight: 700, flex: 1 }}>
-              项目全生命周期管理
+              全链路项目管理专家
             </Typography>
-            <IconButton onClick={(event) => setThemeMenu(event.currentTarget)} color="inherit" title="主题模式">
-              {preference === 'dark' ? <DarkModeIcon /> : preference === 'light' ? <LightModeIcon /> : <BrightnessAutoIcon />}
+            <IconButton
+              onClick={() => setPreference(preference === 'system' ? 'light' : preference === 'light' ? 'dark' : 'system')}
+              color="inherit"
+              title="切换主题模式"
+            >
+              {preference === 'system' ? <BrightnessAutoIcon /> : preference === 'dark' ? <DarkModeIcon /> : <LightModeIcon />}
             </IconButton>
-            <Menu anchorEl={themeMenu} open={Boolean(themeMenu)} onClose={() => setThemeMenu(null)}>
-              <MenuItem
-                selected={preference === 'light'}
-                onClick={() => {
-                  setPreference('light');
-                  setThemeMenu(null);
-                }}
-              >
-                <ListItemIcon>
-                  <LightModeIcon fontSize="small" />
-                </ListItemIcon>
-                亮色模式
-              </MenuItem>
-              <MenuItem
-                selected={preference === 'dark'}
-                onClick={() => {
-                  setPreference('dark');
-                  setThemeMenu(null);
-                }}
-              >
-                <ListItemIcon>
-                  <DarkModeIcon fontSize="small" />
-                </ListItemIcon>
-                暗色模式
-              </MenuItem>
-              <MenuItem
-                selected={preference === 'system'}
-                onClick={() => {
-                  setPreference('system');
-                  setThemeMenu(null);
-                }}
-              >
-                <ListItemIcon>
-                  <BrightnessAutoIcon fontSize="small" />
-                </ListItemIcon>
-                跟随系统
-              </MenuItem>
-            </Menu>
             <IconButton onClick={(event) => setUserMenu(event.currentTarget)} color="inherit">
               <AccountCircleIcon />
             </IconButton>

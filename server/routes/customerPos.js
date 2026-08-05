@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/init.js';
-import { nowUtc, badRequest, notFound, pick, isMoney } from '../utils.js';
+import { nowUtc, badRequest, notFound, pick, isMoney, writeAudit } from '../utils.js';
 
 const router = Router();
 const FIELDS = ['po_number', 'po_amount', 'remark'];
@@ -34,6 +34,13 @@ router.post('/:orderId/customer-pos', (req, res) => {
     const info = db
       .prepare('INSERT INTO customer_pos (order_id, po_number, po_amount, remark, created_at) VALUES (?,?,?,?,?)')
       .run(order.id, data.po_number, Number(data.po_amount), data.remark ?? null, nowUtc());
+    writeAudit(db, {
+      userId: req.user.id,
+      action: 'other',
+      entityType: 'order',
+      entityId: order.id,
+      detail: { event: 'create_po', po_id: info.lastInsertRowid, po_number: data.po_number }
+    });
     return res.status(201).json(db.prepare('SELECT * FROM customer_pos WHERE id = ?').get(info.lastInsertRowid));
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) return badRequest(res, '该销售机会下 PO 号已存在');
@@ -59,6 +66,13 @@ router.put('/:orderId/customer-pos/:poId', (req, res) => {
       merged.remark ?? null,
       row.id
     );
+    writeAudit(db, {
+      userId: req.user.id,
+      action: 'other',
+      entityType: 'order',
+      entityId: order.id,
+      detail: { event: 'update_po', po_id: row.id, po_number: String(merged.po_number).trim() }
+    });
     return res.json(db.prepare('SELECT * FROM customer_pos WHERE id = ?').get(row.id));
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) return badRequest(res, '该销售机会下 PO 号已存在');
@@ -75,6 +89,13 @@ router.delete('/:orderId/customer-pos/:poId', (req, res) => {
   if (posLocked(order)) return badRequest(res, '销售机会已进入发货/开票阶段，PO 明细锁定只读');
   try {
     db.prepare('DELETE FROM customer_pos WHERE id = ?').run(row.id);
+    writeAudit(db, {
+      userId: req.user.id,
+      action: 'other',
+      entityType: 'order',
+      entityId: order.id,
+      detail: { event: 'delete_po', po_id: row.id, po_number: row.po_number }
+    });
     return res.json({ message: 'PO 已删除' });
   } catch (err) {
     if (String(err.message).includes('FOREIGN KEY')) return badRequest(res, '该 PO 已被发票引用，无法删除');

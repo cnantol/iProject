@@ -77,6 +77,7 @@ export function initDb(dir) {
       UNIQUE(step_key, field_id)
     );
   `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_workflow_step_fields_step ON workflow_step_fields(step_key)');
 
   const ensureShortName = (table) => {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all();

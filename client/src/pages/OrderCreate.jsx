@@ -24,7 +24,8 @@ import api, { errorMessage } from '../api';
 import { ORDER_TYPES } from '../utils/constants';
 import { useFieldLabels } from '../utils/fieldLabels';
 
-const YEARS = Array.from({ length: 11 }, (_, i) => String(2020 + i));
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 15 }, (_, i) => String(CURRENT_YEAR - 5 + i));
 const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1));
 
 export default function OrderCreate() {

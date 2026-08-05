@@ -63,13 +63,13 @@ export function createApp() {
   app.use('/api/settings', authenticate, settingsRoutes);
 
   const distDir = path.resolve(__dirname, '..', 'client', 'dist');
-  if (fs.existsSync(distDir)) {
-    app.use(express.static(distDir));
-    app.use((req, res, next) => {
-      if (req.path.startsWith('/api')) return next();
-      return res.sendFile(path.join(distDir, 'index.html'));
-    });
-  }
+  app.use(express.static(distDir));
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    const indexFile = path.join(distDir, 'index.html');
+    if (fs.existsSync(indexFile)) return res.sendFile(indexFile);
+    return res.status(503).json({ error: '前端尚未构建，请先执行 pnpm --filter iproject-client build' });
+  });
 
   // 404 for unmatched API routes
   app.use('/api', (req, res) => {
@@ -96,10 +96,14 @@ if (isDirectRun) {
   const dataDir = process.env.DATA_DIR || path.join(__dirname, 'db', 'data');
   initDb(dataDir);
   startBackupScheduler();
+  const distIndex = path.join(path.resolve(__dirname, '..', 'client', 'dist'), 'index.html');
+  if (!fs.existsSync(distIndex)) {
+    console.warn('[警告] 前端构建产物不存在，请先执行 pnpm --filter iproject-client build');
+  }
   const port = Number(process.env.PORT) || 3001;
   const app = createApp();
   const server = app.listen(port, () => {
-    console.log(`Atlas Copco 销售机会管理系统已启动：http://localhost:${port}`);
+    console.log(`iProject 全链路项目管理专家已启动：http://localhost:${port}`);
   });
   const shutdown = () => {
     server.close(() => {

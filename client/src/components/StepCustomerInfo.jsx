@@ -24,11 +24,12 @@ import DownloadIcon from '@mui/icons-material/Download';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { ORDER_TYPES } from '../utils/constants';
-import { authUrl } from '../utils/helpers';
+import { downloadUrl } from '../utils/download';
 import { useFieldLabels } from '../utils/fieldLabels';
 import StepWrapper from './StepWrapper';
 
-const YEARS = Array.from({ length: 11 }, (_, i) => String(2020 + i));
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 15 }, (_, i) => String(CURRENT_YEAR - 5 + i));
 const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1));
 
 export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance }) {
@@ -125,6 +126,15 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance
       onChanged();
     } catch (err) {
       setError(errorMessage(err));
+    }
+  };
+
+  const openDownload = async (path) => {
+    try {
+      const url = await downloadUrl(path);
+      window.open(url, '_blank');
+    } catch {
+      setError('下载失败，请重试');
     }
   };
 
@@ -236,7 +246,7 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance
                 </IconButton>
               )}>
                 <ListItemText primary={item.file_name} secondary={item.uploaded_at} />
-                <IconButton component="a" href={authUrl(`/api/orders/${order.id}/attachments/${item.id}/download`)} title="下载">
+                <IconButton onClick={() => openDownload(`/api/orders/${order.id}/attachments/${item.id}/download`)} title="下载">
                   <DownloadIcon />
                 </IconButton>
               </ListItem>

@@ -47,15 +47,21 @@ export default function MaterialList() {
   const [items, setItems] = useState([]);
   const [endCustomers, setEndCustomers] = useState([]);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [editor, setEditor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const params = search.trim() ? { q: search.trim() } : undefined;
+      const params = debouncedSearch.trim() ? { q: debouncedSearch.trim() } : undefined;
       const [res, ec] = await Promise.all([api.get(`/${TABS.find((t) => t.key === tab).url}`, { params }), tab === 'material' ? api.get('/end-customers') : Promise.resolve({ data: { items: [] } })]);
       setItems(res.data.items || []);
       setEndCustomers(ec.data.items || []);
@@ -64,7 +70,7 @@ export default function MaterialList() {
     } finally {
       setLoading(false);
     }
-  }, [tab, search]);
+  }, [tab, debouncedSearch]);
 
   useEffect(() => {
     load();
