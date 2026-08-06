@@ -1,5 +1,42 @@
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+function isValidYmd(y, m, d) {
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
+export function normalizeDate(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const text = String(value).trim();
+  if (/^\d{8}$/.test(text)) {
+    const y = Number(text.slice(0, 4));
+    const m = Number(text.slice(4, 6));
+    const d = Number(text.slice(6, 8));
+    return isValidYmd(y, m, d) ? `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}` : null;
+  }
+  const flex = text.match(/^(\d{4})[年./-](\d{1,2})[月./-]?(\d{1,2})日?$/);
+  if (flex) {
+    const y = Number(flex[1]);
+    const m = Number(flex[2]);
+    const d = Number(flex[3]);
+    return isValidYmd(y, m, d) ? `${flex[1]}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` : null;
+  }
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const serial = Number(text);
+    if (Number.isFinite(serial) && serial > 20000 && serial < 80000) {
+      const ms = Math.round((serial - 25569) * 86400000);
+      const date = new Date(ms);
+      if (!Number.isNaN(date.getTime())) {
+        return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+      }
+    }
+  }
+  return null;
+}
+
 export function round2(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return 0;

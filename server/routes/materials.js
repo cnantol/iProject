@@ -33,20 +33,30 @@ function latestFramework(customerId, materialNo) {
 router.get('/', (req, res) => {
   const q = String(req.query.q || '').trim();
   const customerId = req.query.end_customer_id ? Number(req.query.end_customer_id) : null;
-  let sql = `SELECT m.*, ec.customer_name AS end_customer_name FROM materials m
-             LEFT JOIN end_customers ec ON ec.id = m.end_customer_id WHERE 1=1`;
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+  let where = ' WHERE 1=1';
   const params = [];
   if (q) {
-    sql += ' AND (m.material_no LIKE ? OR m.description LIKE ? OR m.agreement_no LIKE ?)';
+    where += ' AND (m.material_no LIKE ? OR m.description LIKE ? OR m.agreement_no LIKE ?)';
     const like = `%${q}%`;
     params.push(like, like, like);
   }
   if (customerId) {
-    sql += ' AND m.end_customer_id = ?';
+    where += ' AND m.end_customer_id = ?';
     params.push(customerId);
   }
-  sql += ' ORDER BY m.valid_from DESC, m.id DESC';
-  return res.json({ items: getDb().prepare(sql).all(...params) });
+  const total = getDb()
+    .prepare(`SELECT COUNT(*) AS c FROM materials m LEFT JOIN end_customers ec ON ec.id = m.end_customer_id${where}`)
+    .get(...params).c;
+  const items = getDb()
+    .prepare(
+      `SELECT m.*, ec.customer_name AS end_customer_name FROM materials m
+       LEFT JOIN end_customers ec ON ec.id = m.end_customer_id${where}
+       ORDER BY m.valid_from DESC, m.id DESC LIMIT ? OFFSET ?`
+    )
+    .all(...params, pageSize, (page - 1) * pageSize);
+  return res.json({ items, total });
 });
 
 router.get('/check-framework', (req, res) => {

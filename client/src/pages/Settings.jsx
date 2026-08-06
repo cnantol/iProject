@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -17,6 +17,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
+import LinearProgress from '@mui/material/LinearProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
@@ -651,6 +652,17 @@ const IMPORT_TARGET_META = {
 function ImportManager({ onError }) {
   const [result, setResult] = useState(null);
   const [logs, setLogs] = useState([]);
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [progress, setProgress] = useState(null);
+  const [resultOpen, setResultOpen] = useState(false);
+  const [importMeta, setImportMeta] = useState(null);
+  const [mappingOpen, setMappingOpen] = useState(false);
+  const [mappingParsing, setMappingParsing] = useState(false);
+  const [mappingTarget, setMappingTarget] = useState('');
+  const [mappingFile, setMappingFile] = useState(null);
+  const [mappingColumns, setMappingColumns] = useState([]);
+  const [mappingValues, setMappingValues] = useState({});
+  const pollRef = useRef(null);
 
   const loadLogs = useCallback(async () => {
     try {
@@ -661,22 +673,143 @@ function ImportManager({ onError }) {
     }
   }, [onError]);
 
-  useEffect(() => {
-    loadLogs();
-  }, [loadLogs]);
-
-  const upload = async (target, event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append('file', file);
+  const loadImportMeta = useCallback(async () => {
     try {
-      const { data } = await api.post(`/settings/import/${target}`, formData);
-      setResult({ target, ...data });
-      loadLogs();
+      const { data } = await api.get('/settings/import-meta');
+      setImportMeta(data);
     } catch (err) {
       onError(errorMessage(err));
     }
+  }, [onError]);
+
+  useEffect(() => {
+    loadLogs();
+    loadImportMeta();
+  }, [loadLogs, loadImportMeta]);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  const normalizeColumn = (value) => String(value == null ? '' : value).trim().toLowerCase().replace(/\s+/g, '');
+
+  const buildAutoMapping = (standardFields, columns) => {
+    const values = {};
+    for (const field of standardFields) {
+      const normalized = normalizeColumn(field);
+      values[field] = columns.find((column) => normalizeColumn(column) === normalized) || null;
+    }
+    return values;
+  };
+
+  const openMapping = async (target, file) => {
+    setMappingOpen(true);
+    setMappingParsing(true);
+    setMappingTarget(target);
+    setMappingFile(file);
+    setMappingColumns([]);
+    setMappingValues({});
+    try {
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const firstRow = sheet ? XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true })[0] : [];
+      const columns = (Array.isArray(firstRow) ? firstRow : [])
+        .filter((value) => value !== null && value !== undefined && String(value).trim() !== '')
+        .map((value) => String(value).trim());
+      if (columns.length === 0) {
+        onError('未识别到表头列名，请检查 Excel 文件首行');
+        setMappingOpen(false);
+        return;
+      }
+      const meta = importMeta?.items?.find((item) => item.key === target);
+      const standardFields = meta?.headers || [];
+      setMappingColumns(columns);
+      setMappingValues(buildAutoMapping(standardFields, columns));
+    } catch (err) {
+      onError('Excel 文件解析失败，请确认文件格式正确');
+      setMappingOpen(false);
+    } finally {
+      setMappingParsing(false);
+    }
+  };
+
+  const startImport = async () => {
+    const meta = importMeta?.items?.find((item) => item.key === mappingTarget);
+    const missing = (meta?.required || []).filter((field) => !mappingValues[field]);
+    if (missing.length > 0) {
+      onError(`以下必填字段尚未选择对应列：${missing.join('、')}`);
+      return;
+    }
+    setMappingOpen(false);
+    const formData = new FormData();
+    formData.append('file', mappingFile);
+    formData.append('mapping', JSON.stringify(mappingValues));
+    setResult(null);
+    setProgress({ target: mappingTarget, fileName: mappingFile?.name || '', total: 0, processed: 0, success: 0, fail: 0, status: 'processing', error: '' });
+    setProgressOpen(true);
+    try {
+      const { data } = await api.post(`/settings/import/${mappingTarget}`, formData, { timeout: 0 });
+      const poll = async () => {
+        try {
+          const { data: p } = await api.get(`/settings/import-progress/${data.task_id}`);
+          setProgress({
+            target: data.target || mappingTarget,
+            fileName: data.file_name || mappingFile?.name || '',
+            total: p.total_rows || 0,
+            processed: p.processed_rows || 0,
+            success: p.success_rows || 0,
+            fail: p.fail_rows || 0,
+            status: p.status,
+            error: p.error || ''
+          });
+          if (p.status === 'done' || p.status === 'error') {
+            if (pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+            setProgressOpen(false);
+            setResult({
+              target: data.target || mappingTarget,
+              file_name: data.file_name || mappingFile?.name || '',
+              total_rows: p.total_rows || 0,
+              success_rows: p.success_rows || 0,
+              fail_rows: p.fail_rows || 0,
+              failures: p.failures || [],
+              error: p.error || ''
+            });
+            setResultOpen(true);
+            loadLogs();
+          }
+        } catch (err) {
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+          setProgressOpen(false);
+          onError(errorMessage(err));
+        }
+      };
+      pollRef.current = setInterval(poll, 800);
+      poll();
+    } catch (err) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      setProgressOpen(false);
+      onError(errorMessage(err));
+    }
+  };
+
+  const upload = (target, event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+    openMapping(target, file);
   };
 
   const openDownload = async (path) => {
@@ -752,27 +885,208 @@ function ImportManager({ onError }) {
             </Box>
           ))}
         </Stack>
-        {result && (
-          <Alert severity={result.fail_rows === 0 ? 'success' : 'warning'} sx={{ mb: 2, borderRadius: 2.5 }}>
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-              <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                {IMPORT_TARGET_LABELS[result.target]} 导入完成
+        <Dialog open={mappingOpen} maxWidth="md" fullWidth onClose={() => setMappingOpen(false)}>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: 2,
+                bgcolor: 'info.main',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <UploadFileIcon fontSize="small" />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                列名映射
               </Typography>
-              <Chip size="small" variant="outlined" label={`成功 ${result.success_rows} 行`} color="success" />
-              <Chip size="small" variant="outlined" label={`失败 ${result.fail_rows} 行`} color={result.fail_rows === 0 ? 'default' : 'error'} />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {mappingTarget ? IMPORT_TARGET_LABELS[mappingTarget] : ''} · {mappingFile?.name || ''}
+              </Typography>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Stack spacing={2}>
+              <Alert severity="info" sx={{ borderRadius: 2 }}>
+                请为每个字段选择 Excel 中对应的列名，带 <strong>*</strong> 的字段必须映射
+              </Alert>
+              {mappingParsing ? (
+                <Stack spacing={1}>
+                  <LinearProgress />
+                  <Typography variant="body2" color="text.secondary">
+                    正在解析 Excel 表头...
+                  </Typography>
+                </Stack>
+              ) : (
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+                  {(importMeta?.items?.find((item) => item.key === mappingTarget)?.headers || []).map((field) => {
+                    const requiredFields = importMeta?.items?.find((item) => item.key === mappingTarget)?.required || [];
+                    const isRequired = requiredFields.includes(field);
+                    return (
+                      <Box
+                        key={field}
+                        sx={{
+                          p: 1.25,
+                          borderRadius: 2,
+                          border: 1,
+                          borderColor: isRequired && !mappingValues[field] ? 'warning.main' : 'divider',
+                          bgcolor: 'background.paper'
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.75 }}>
+                          {field}
+                          {isRequired && <Box component="span" sx={{ color: 'error.main' }}> *</Box>}
+                        </Typography>
+                        <Select
+                          size="small"
+                          fullWidth
+                          value={mappingValues[field] || ''}
+                          onChange={(e) =>
+                            setMappingValues((prev) => ({
+                              ...prev,
+                              [field]: e.target.value || null
+                            }))
+                          }
+                        >
+                          <MenuItem value="">
+                            <em>不导入</em>
+                          </MenuItem>
+                          {mappingColumns.map((column, index) => (
+                            <MenuItem key={`${column}-${index}`} value={column}>
+                              {column}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
             </Stack>
-            {result.failures?.length > 0 && (
-              <Box component="ul" sx={{ mt: 1.5, mb: 0, pl: 0, listStyle: 'none', maxHeight: 190, overflow: 'auto', borderRadius: 1.5, bgcolor: 'action.hover', p: 1 }}>
-                {result.failures.slice(0, 10).map((failure, index) => (
-                  <li key={index} style={{ padding: '4px 8px', fontSize: 13, lineHeight: 1.5 }}>
-                    <strong>第 {failure.row} 行：</strong>
-                    {failure.reason}
-                  </li>
-                ))}
-              </Box>
-            )}
-          </Alert>
-        )}
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={() => setMappingOpen(false)}>取消</Button>
+            <Button variant="contained" startIcon={<UploadFileIcon />} disabled={mappingParsing} onClick={startImport}>
+              开始导入
+            </Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog open={progressOpen} maxWidth="sm" fullWidth>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: 2,
+                bgcolor: 'primary.main',
+                color: 'primary.contrastText',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <UploadFileIcon fontSize="small" />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                正在导入{progress?.target ? IMPORT_TARGET_LABELS[progress.target] : ''}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {progress?.fileName || ''}
+              </Typography>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ pt: 0.5 }}>
+              <LinearProgress
+                variant={progress?.total ? 'determinate' : 'indeterminate'}
+                value={progress?.total ? Math.min(100, Math.round((progress.processed / progress.total) * 100)) : 0}
+                sx={{ height: 8, borderRadius: 4 }}
+              />
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Chip size="small" variant="outlined" label={`已处理 ${progress?.processed || 0} / ${progress?.total || '...'} 行`} />
+                <Chip size="small" variant="outlined" label={`成功 ${progress?.success || 0}`} color="success" />
+                <Chip size="small" variant="outlined" label={`失败 ${progress?.fail || 0}`} color={progress?.fail ? 'error' : 'default'} />
+              </Stack>
+              <Typography variant="body2" color="text.secondary">
+                正在解析并写入数据，导入完成后将自动弹出结果，请勿关闭页面
+              </Typography>
+            </Stack>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={resultOpen} maxWidth="sm" fullWidth onClose={() => setResultOpen(false)}>
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: 2,
+                bgcolor: result?.error ? 'error.main' : result?.fail_rows > 0 ? 'warning.main' : 'success.main',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              {result?.error || result?.fail_rows > 0 ? <WarningAmberIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
+            </Box>
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                {result?.target ? IMPORT_TARGET_LABELS[result.target] : '数据导入'} 完成
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 360 }}>
+                {result?.file_name || ''}
+              </Typography>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Stack spacing={2}>
+              {result?.error ? (
+                <Alert severity="error" sx={{ borderRadius: 2 }}>
+                  导入过程中发生错误：{result.error}
+                </Alert>
+              ) : (
+                <Alert severity={result?.fail_rows > 0 ? 'warning' : 'success'} sx={{ borderRadius: 2 }}>
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      共 {result?.total_rows || 0} 行
+                    </Typography>
+                    <Chip size="small" variant="outlined" label={`成功 ${result?.success_rows || 0} 行`} color="success" />
+                    <Chip size="small" variant="outlined" label={`失败 ${result?.fail_rows || 0} 行`} color={result?.fail_rows > 0 ? 'error' : 'default'} />
+                  </Stack>
+                </Alert>
+              )}
+              {result?.failures?.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                    失败明细
+                  </Typography>
+                  <Box sx={{ maxHeight: 240, overflow: 'auto', borderRadius: 2, bgcolor: 'action.hover', p: 1 }}>
+                    {result.failures.map((failure, index) => (
+                      <Typography key={index} variant="body2" sx={{ py: 0.5, px: 1, lineHeight: 1.6 }}>
+                        <strong>第 {failure.row} 行：</strong>
+                        {failure.reason}
+                      </Typography>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button variant="contained" onClick={() => setResultOpen(false)}>
+              我知道了
+            </Button>
+          </DialogActions>
+        </Dialog>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 3, mb: 1 }}>
           <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>导入历史</Typography>

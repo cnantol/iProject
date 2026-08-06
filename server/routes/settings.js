@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import xlsx from 'xlsx';
 import { getDb, getDataDir, getUploadDir, closeDb, initDb, seedWorkflow, rotateJwtSecret } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
-import { nowUtc, badRequest, notFound, isMoney, isBool, isValidDate, normalizeSo, writeAudit } from '../utils.js';
+import { nowUtc, badRequest, notFound, isMoney, isBool, isValidDate, normalizeDate, normalizeSo, writeAudit } from '../utils.js';
 import { loadOrderDetail, checkSalesOrderUnique } from './orders.js';
 import { buildQuotationPdf } from './quotations.js';
 
@@ -183,6 +183,16 @@ function cell(row, idx) {
   return value === undefined ? null : value;
 }
 
+router.get('/import-meta', (req, res) => {
+  const items = Object.entries(IMPORT_TARGETS).map(([key, value]) => ({
+    key,
+    label: value.label,
+    headers: value.headers,
+    required: value.required
+  }));
+  return res.json({ items });
+});
+
 router.get('/import/:target/template', (req, res) => {
   const target = IMPORT_TARGETS[req.params.target];
   if (!target) return notFound(res);
@@ -194,6 +204,74 @@ router.get('/import/:target/template', (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${req.params.target}-template.xlsx"`);
   return res.send(buffer);
 });
+
+const importTasks = new Map();
+const IMPORT_TASK_TTL_MS = 30 * 60 * 1000;
+
+function pruneImportTasks() {
+  const now = Date.now();
+  for (const [taskId, task] of importTasks) {
+    if (task.doneAt && now - task.doneAt > IMPORT_TASK_TTL_MS) importTasks.delete(taskId);
+  }
+}
+
+function yieldEventLoop() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+async function runImportTask(task, rows, headers) {
+  const db = getDb();
+  const batchSize = 50;
+  try {
+    for (let i = 1; i < rows.length; i += batchSize) {
+      const batchRows = [];
+      for (let j = i; j < rows.length && j < i + batchSize; j++) {
+        task.processed += 1;
+        const row = rows[j];
+        if (row.every((value) => value === null || value === undefined || value === '')) continue;
+        batchRows.push({ row, rowNumber: j + 1 });
+      }
+      if (batchRows.length > 0) {
+        const snapshot = { processed: task.processed, success: task.success, failures: task.failures.length };
+        const runBatch = db.transaction((items) => {
+          for (const item of items) {
+            const error = importRow(db, IMPORT_TARGETS[task.target], headers, item.row);
+            if (error) task.failures.push({ row: item.rowNumber, reason: error });
+            else task.success += 1;
+          }
+        });
+        try {
+          runBatch(batchRows);
+        } catch (err) {
+          task.processed = snapshot.processed;
+          task.success = snapshot.success;
+          task.failures = task.failures.slice(0, snapshot.failures);
+          task.status = 'error';
+          task.error = err.message || '数据写入失败';
+          task.doneAt = Date.now();
+          return;
+        }
+      }
+      await yieldEventLoop();
+    }
+    const info = db
+      .prepare('INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, created_at) VALUES (?,?,?,?,?,?)')
+      .run(task.target, task.fileName, task.total, task.success, task.failures.length, nowUtc());
+    writeAudit(db, {
+      userId: task.userId,
+      action: 'other',
+      entityType: 'settings',
+      entityId: info.lastInsertRowid,
+      detail: { event: 'import', target: task.target, total_rows: task.total, success_rows: task.success, fail_rows: task.failures.length }
+    });
+    task.status = 'done';
+    task.doneAt = Date.now();
+  } catch (err) {
+    task.status = 'error';
+    task.error = err.message || '导入失败';
+    task.doneAt = Date.now();
+  }
+}
 
 router.post('/import/:target', upload.single('file'), (req, res) => {
   if (!req.file) return badRequest(res, '请上传 Excel 文件');
@@ -214,35 +292,71 @@ router.post('/import/:target', upload.single('file'), (req, res) => {
   fs.unlinkSync(req.file.path);
   if (!rows || rows.length < 2) return badRequest(res, 'Excel 无有效数据');
 
-  const headers = rows[0] || [];
-  const db = getDb();
-  let success = 0;
-  const failures = [];
-  const total = rows.length - 1;
-
-  const tx = db.transaction(() => {
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      const rowNumber = i + 1;
-      if (row.every((value) => value === null || value === undefined || value === '')) continue;
-      const error = importRow(db, target, headers, row);
-      if (error) failures.push({ row: rowNumber, reason: error });
-      else success += 1;
+  let headers = rows[0] || [];
+  let mapping = null;
+  if (req.body && typeof req.body.mapping === 'string' && req.body.mapping.trim()) {
+    try {
+      mapping = JSON.parse(req.body.mapping);
+    } catch {
+      mapping = null;
     }
-    const info = db
-      .prepare('INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, created_at) VALUES (?,?,?,?,?,?)')
-      .run(req.params.target, req.file.originalname, total, success, failures.length, nowUtc());
-    writeAudit(db, {
-      userId: req.user.id,
-      action: 'other',
-      entityType: 'settings',
-      entityId: info.lastInsertRowid,
-      detail: { event: 'import', target: req.params.target, total_rows: total, success_rows: success, fail_rows: failures.length }
-    });
-    return info.lastInsertRowid;
+  }
+  if (mapping && typeof mapping === 'object' && !Array.isArray(mapping)) {
+    const standardHeaders = target.headers || [];
+    rows = [
+      standardHeaders,
+      ...rows.slice(1).map((row) =>
+        standardHeaders.map((field) => {
+          const sourceName = mapping[field];
+          const idx = headerIndex(headers, sourceName);
+          return idx >= 0 ? cell(row, idx) : null;
+        })
+      )
+    ];
+    headers = standardHeaders;
+  }
+  pruneImportTasks();
+  const taskId = `imp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const task = {
+    id: taskId,
+    userId: req.user.id,
+    target: req.params.target,
+    fileName: req.file.originalname,
+    total: rows.length - 1,
+    processed: 0,
+    success: 0,
+    failures: [],
+    status: 'processing',
+    error: null,
+    createdAt: Date.now(),
+    doneAt: null
+  };
+  importTasks.set(taskId, task);
+  runImportTask(task, rows, headers).catch((err) => {
+    task.status = 'error';
+    task.error = err.message || '导入失败';
+    task.doneAt = Date.now();
   });
-  const logId = tx();
-  return res.json({ import_log_id: logId, success_rows: success, fail_rows: failures.length, failures: failures.slice(0, 100) });
+  return res.json({ task_id: taskId, target: req.params.target, file_name: req.file.originalname, total_rows: task.total, status: 'processing' });
+});
+
+router.get('/import-progress/:taskId', (req, res) => {
+  const task = importTasks.get(req.params.taskId);
+  if (!task) return notFound(res);
+  if (task.doneAt && Date.now() - task.doneAt > IMPORT_TASK_TTL_MS) {
+    importTasks.delete(task.id);
+    return notFound(res);
+  }
+  return res.json({
+    task_id: task.id,
+    status: task.status,
+    total_rows: task.total,
+    processed_rows: task.processed,
+    success_rows: task.success,
+    fail_rows: task.failures.length,
+    failures: task.failures.slice(0, 100),
+    error: task.error
+  });
 });
 
 function importRow(db, target, headers, row) {
@@ -299,16 +413,20 @@ function importRow(db, target, headers, row) {
     const customerName = value('最终客户');
     const materialNo = value('物料号');
     const price = value('协议未税单价');
-    const validFrom = value('生效日期');
+    const validFromRaw = value('生效日期');
+    const validFrom = normalizeDate(validFromRaw);
     if (customerName === null || String(customerName).trim() === '') return '最终客户必填';
     if (materialNo === null || String(materialNo).trim() === '') return '物料号必填';
     if (!isMoney(price)) return '协议未税单价必须大于 0';
-    if (!isValidDate(String(validFrom))) return '生效日期必填且格式为 YYYY-MM-DD';
+    if (!validFrom) return '生效日期必填，支持 YYYY-MM-DD、YYYY/MM/DD、YYYY.MM.DD、YYYY年M月D日或 Excel 日期';
     const customer = db.prepare('SELECT id FROM end_customers WHERE customer_name = ?').get(String(customerName).trim());
     if (!customer) return '客户名称不存在';
-    const validTo = value('失效日期');
-    if (validTo !== null && validTo !== '' && !isValidDate(String(validTo))) return '失效日期格式必须为 YYYY-MM-DD';
-    if (validTo && String(validTo) < String(validFrom)) return '失效日期不得早于生效日期';
+    const validToRaw = value('失效日期');
+    const validTo = validToRaw === null || validToRaw === undefined || validToRaw === '' ? null : normalizeDate(validToRaw);
+    if (validToRaw !== null && validToRaw !== undefined && validToRaw !== '' && !validTo) {
+      return '失效日期格式无效，支持 YYYY-MM-DD、YYYY/MM/DD、YYYY.MM.DD、YYYY年M月D日或 Excel 日期';
+    }
+    if (validTo && validTo < validFrom) return '失效日期不得早于生效日期';
     try {
       db.prepare('INSERT INTO materials (end_customer_id, material_no, description, unit_price_ex_vat, unit, agreement_no, valid_from, valid_to, remark, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(
         customer.id,
@@ -317,8 +435,8 @@ function importRow(db, target, headers, row) {
         Number(price),
         value('单位') != null ? String(value('单位')) : 'pcs',
         value('协议编号') != null ? String(value('协议编号')) : null,
-        String(validFrom),
-        validTo ? String(validTo) : null,
+        validFrom,
+        validTo,
         value('备注') != null ? String(value('备注')) : null,
         nowUtc(),
         nowUtc()
@@ -377,15 +495,21 @@ function importHistoryRow(db, headers, row) {
     if (!isMoney(commissionAmountRaw)) return '佣金金额必须大于 0';
     commissionAmount = Number(commissionAmountRaw);
   }
-  const deliveredDate = value('发货日期') != null && value('发货日期') !== '' ? String(value('发货日期')) : null;
-  const invoicedDate = value('开票日期') != null && value('开票日期') !== '' ? String(value('开票日期')) : null;
+  const deliveredDateRaw = value('发货日期');
+  const deliveredDate = deliveredDateRaw === null || deliveredDateRaw === undefined || deliveredDateRaw === '' ? null : normalizeDate(deliveredDateRaw);
+  const invoicedDateRaw = value('开票日期');
+  const invoicedDate = invoicedDateRaw === null || invoicedDateRaw === undefined || invoicedDateRaw === '' ? null : normalizeDate(invoicedDateRaw);
   if (delivered === 1 && !deliveredDate) return 'delivered=1 必须同时提供发货日期';
   if (commissionMatched === 1 && !isMoney(commissionAmount)) return '已闭环销售机会缺少佣金金额';
   if (status === 'closed' && (delivered !== 1 || invoiced !== 1 || !isMoney(commissionAmount))) {
     return 'closed 销售机会必须 delivered=1 且 invoiced=1 且有佣金金额';
   }
-  if (deliveredDate && !isValidDate(deliveredDate)) return '发货日期格式必须为 YYYY-MM-DD';
-  if (invoicedDate && !isValidDate(invoicedDate)) return '开票日期格式必须为 YYYY-MM-DD';
+  if (deliveredDateRaw !== null && deliveredDateRaw !== undefined && deliveredDateRaw !== '' && !deliveredDate) {
+    return '发货日期格式无效，支持 YYYY-MM-DD、YYYY/MM/DD、YYYY.MM.DD、YYYY年M月D日或 Excel 日期';
+  }
+  if (invoicedDateRaw !== null && invoicedDateRaw !== undefined && invoicedDateRaw !== '' && !invoicedDate) {
+    return '开票日期格式无效，支持 YYYY-MM-DD、YYYY/MM/DD、YYYY.MM.DD、YYYY年M月D日或 Excel 日期';
+  }
   const orderType = value('销售机会类型') ? String(value('销售机会类型')) : null;
   if (orderType && !['A', 'B', 'C'].includes(orderType)) return '销售机会类型无效';
   const ts = nowUtc();

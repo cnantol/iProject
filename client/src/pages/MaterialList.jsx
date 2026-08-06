@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
+import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
@@ -19,11 +20,13 @@ import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
@@ -41,40 +44,71 @@ const TABS = [
   { key: 'material', label: '框架协议价', url: 'materials', icon: <InventoryIcon /> },
   { key: 'guide_price', label: '系统指导价', url: 'guide-prices', icon: <PriceCheckIcon /> }
 ];
+const PAGED_TABS = ['material', 'guide_price'];
 
 export default function MaterialList() {
   const [tab, setTab] = useState('end_customer');
   const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
   const [endCustomers, setEndCustomers] = useState([]);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [editor, setEditor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copyCustomers, setCopyCustomers] = useState([]);
+  const [copySelected, setCopySelected] = useState([]);
+  const [copySearch, setCopySearch] = useState('');
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const load = useCallback(async () => {
+  const loadData = async (nextTab = tab, nextPage = page, nextPageSize = pageSize) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError('');
     try {
-      const params = debouncedSearch.trim() ? { q: debouncedSearch.trim() } : undefined;
-      const [res, ec] = await Promise.all([api.get(`/${TABS.find((t) => t.key === tab).url}`, { params }), tab === 'material' ? api.get('/end-customers') : Promise.resolve({ data: { items: [] } })]);
-      setItems(res.data.items || []);
-      setEndCustomers(ec.data.items || []);
+      const url = TABS.find((t) => t.key === nextTab).url;
+      if (PAGED_TABS.includes(nextTab)) {
+        const params = { page: nextPage + 1, pageSize: nextPageSize };
+        if (debouncedSearch.trim()) params.q = debouncedSearch.trim();
+        const [res, ec] =
+          nextTab === 'material'
+            ? await Promise.all([api.get('/materials', { params }), api.get('/end-customers')])
+            : [await api.get(`/${url}`, { params }), { data: { items: [] } }];
+        if (requestId !== requestIdRef.current) return;
+        setItems(res.data.items || []);
+        setTotal(res.data.total || 0);
+        setEndCustomers(ec.data.items || []);
+      } else {
+        const params = debouncedSearch.trim() ? { q: debouncedSearch.trim() } : undefined;
+        const res = await api.get(`/${url}`, { params });
+        if (requestId !== requestIdRef.current) return;
+        setItems(res.data.items || []);
+        setTotal((res.data.items || []).length);
+        setEndCustomers([]);
+      }
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(errorMessage(err, '加载失败'));
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [tab, debouncedSearch]);
+  };
 
   useEffect(() => {
-    load();
-  }, [load]);
+    setPage(0);
+    loadData(tab, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, debouncedSearch]);
 
   const tabDef = {
     end_customer: { url: 'end-customers', fields: ['customer_name', 'short_name', 'contact_person', 'phone', 'email', 'remark'], labels: { customer_name: '客户名称', short_name: '客户简称', contact_person: '联系人', phone: '电话', email: '邮箱', remark: '备注' } },
@@ -104,7 +138,7 @@ export default function MaterialList() {
         await api.post(`/${tabDef[tab].url}`, payload);
       }
       setEditor(null);
-      load();
+      loadData(tab, page);
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -114,11 +148,61 @@ export default function MaterialList() {
     if (!window.confirm(`确认删除「${row.customer_name || row.material_no || row.id}」？`)) return;
     try {
       await api.delete(`/${tabDef[tab].url}/${row.id}`);
-      load();
+      loadData(tab, page);
     } catch (err) {
       setError(errorMessage(err));
     }
   };
+
+  const openCopy = async () => {
+    setCopyOpen(true);
+    setCopyLoading(true);
+    setCopySearch('');
+    setCopySelected([]);
+    try {
+      const { data } = await api.get('/end-customers');
+      setCopyCustomers(data.items || []);
+    } catch (err) {
+      setError(errorMessage(err));
+      setCopyOpen(false);
+    } finally {
+      setCopyLoading(false);
+    }
+  };
+
+  const toggleCopy = (id) => {
+    setCopySelected((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const copyFiltered = copyCustomers.filter((customer) => {
+    const q = copySearch.trim().toLowerCase();
+    if (!q) return true;
+    return [customer.customer_name, customer.short_name, customer.contact_person, customer.phone].some((value) =>
+      String(value || '').toLowerCase().includes(q)
+    );
+  });
+  const copyAllSelected = copyFiltered.length > 0 && copyFiltered.every((customer) => copySelected.includes(customer.id));
+
+  const toggleCopyAll = () => {
+    setCopySelected(copyAllSelected ? [] : copyFiltered.map((customer) => customer.id));
+  };
+
+  const confirmCopy = async () => {
+    setError('');
+    setSuccess('');
+    try {
+      const { data } = await api.post('/contract-customers/copy-from-end', { ids: copySelected });
+      setSuccess(`已复制 ${data.copied} 个客户${data.skipped && data.skipped.length > 0 ? `，跳过 ${data.skipped.length} 个已存在客户` : ''}`);
+      setCopyOpen(false);
+      setCopySelected([]);
+      setCopySearch('');
+      loadData(tab, page);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  const displayItems = PAGED_TABS.includes(tab) ? items : items.slice(page * pageSize, page * pageSize + pageSize);
 
   const fieldValue = (row, field) => {
     if (field === 'end_customer_id') return row.end_customer_name || row.end_customer_id || '';
@@ -164,12 +248,18 @@ export default function MaterialList() {
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
               sx={{ width: { xs: '100%', md: 320 } }}
             />
-            {!loading && <Chip size="small" label={`共 ${items.length} 条`} variant="outlined" sx={{ fontWeight: 700 }} />}
+            {!loading && <Chip size="small" label={`共 ${total} 条`} variant="outlined" sx={{ fontWeight: 700 }} />}
             <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
               支持按名称 / 物料号 / 协议号搜索
             </Typography>
             <Box sx={{ flex: 1 }} />
+            {tab === 'contract_customer' && (
+              <Button size="small" variant="outlined" startIcon={<ContentCopyIcon />} onClick={openCopy}>
+                从最终客户复制
+              </Button>
+            )}
           </Box>
+          {success && <Alert severity="success" sx={{ mb: 2, borderRadius: 2, '& .MuiAlert-icon': { color: 'success.main' } }}>{success}</Alert>}
           {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2, '& .MuiAlert-icon': { color: 'error.main' } }}>{error}</Alert>}
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -188,7 +278,7 @@ export default function MaterialList() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {items.length === 0 && (
+                {displayItems.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={tabDef[tab].fields.length + 1} align="center" sx={{ py: 8, color: 'text.secondary' }}>
                       <Stack spacing={1} alignItems="center">
@@ -199,7 +289,7 @@ export default function MaterialList() {
                     </TableCell>
                   </TableRow>
                 )}
-                {items.map((row) => (
+                {displayItems.map((row) => (
                   <TableRow key={row.id} hover sx={{ transition: 'background-color 0.15s ease' }}>
                     {tabDef[tab].fields.map((field, index) => {
                       const nowrapFields = {
@@ -234,8 +324,102 @@ export default function MaterialList() {
               </TableBody>
             </Table>
           )}
+          {!loading && (
+            <TablePagination
+              component="div"
+              count={total}
+              page={page}
+              rowsPerPage={pageSize}
+              onPageChange={(_, nextPage) => {
+                setPage(nextPage);
+                loadData(tab, nextPage);
+              }}
+              onRowsPerPageChange={(e) => {
+                const nextSize = parseInt(e.target.value, 10) || 20;
+                setPageSize(nextSize);
+                setPage(0);
+                loadData(tab, 0, nextSize);
+              }}
+              rowsPerPageOptions={[10, 20, 50, 100]}
+              labelRowsPerPage="每页"
+              labelDisplayedRows={({ from, to, count }) => `${from}-${to} / ${count}`}
+              sx={{ borderTop: '1px solid', borderColor: 'divider' }}
+            />
+          )}
         </Box>
       </Card>
+
+      <Dialog open={copyOpen} onClose={() => setCopyOpen(false)} maxWidth="md" fullWidth>
+        <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
+        <DialogTitle>从最终客户复制到合同客户</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5}>
+            <TextField
+              size="small"
+              label="搜索最终客户"
+              value={copySearch}
+              onChange={(e) => setCopySearch(e.target.value)}
+              InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
+            />
+            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+              <Typography variant="caption" color="text.secondary">
+                已选 {copySelected.length} / {copyFiltered.length} 个
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" onClick={toggleCopyAll}>
+                  {copyAllSelected ? '清空选择' : '全选'}
+                </Button>
+              </Stack>
+            </Stack>
+            {copyLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+                <CircularProgress />
+              </Box>
+            ) : copyFiltered.length === 0 ? (
+              <Box sx={{ py: 5, textAlign: 'center', color: 'text.secondary' }}>
+                <InboxIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
+                <Typography variant="body2" sx={{ mt: 1 }}>暂无最终客户可复制</Typography>
+              </Box>
+            ) : (
+              <Box sx={{ maxHeight: 360, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 2 }}>
+                {copyFiltered.map((customer) => (
+                  <Box
+                    key={customer.id}
+                    onClick={() => toggleCopy(customer.id)}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      p: 1,
+                      cursor: 'pointer',
+                      borderBottom: '1px solid',
+                      borderColor: 'divider',
+                      '&:last-of-type': { borderBottom: 0 },
+                      '&:hover': { bgcolor: 'action.hover' }
+                    }}
+                  >
+                    <Checkbox checked={copySelected.includes(customer.id)} />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {customer.customer_name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {[customer.short_name, customer.contact_person, customer.phone].filter(Boolean).join(' · ') || '-'}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCopyOpen(false)}>取消</Button>
+          <Button variant="contained" startIcon={<ContentCopyIcon />} disabled={copyLoading || copySelected.length === 0} onClick={confirmCopy}>
+            复制到合同客户
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={Boolean(editor)} onClose={() => setEditor(null)} maxWidth="sm" fullWidth>
         <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />

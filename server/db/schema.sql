@@ -273,6 +273,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_materials_uniq ON materials(end_customer_id, material_no, valid_from);
+CREATE INDEX IF NOT EXISTS idx_materials_valid_from ON materials(valid_from);
+CREATE INDEX IF NOT EXISTS idx_guide_prices_material_no ON guide_prices(material_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_round ON quotations(order_id, round_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_po ON customer_pos(order_id, po_number);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_no ON invoice_records(order_id, invoice_no);

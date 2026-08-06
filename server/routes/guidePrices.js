@@ -7,16 +7,20 @@ const FIELDS = ['material_no', 'description', 'guide_unit_price_ex_vat', 'unit',
 
 router.get('/', (req, res) => {
   const q = String(req.query.q || '').trim();
-  let rows;
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+  let where = ' WHERE 1=1';
+  const params = [];
   if (q) {
     const like = `%${q}%`;
-    rows = getDb()
-      .prepare('SELECT * FROM guide_prices WHERE material_no LIKE ? OR description LIKE ? ORDER BY material_no')
-      .all(like, like);
-  } else {
-    rows = getDb().prepare('SELECT * FROM guide_prices ORDER BY material_no').all();
+    where += ' AND (material_no LIKE ? OR description LIKE ?)';
+    params.push(like, like);
   }
-  return res.json({ items: rows });
+  const total = getDb().prepare(`SELECT COUNT(*) AS c FROM guide_prices${where}`).get(...params).c;
+  const rows = getDb()
+    .prepare(`SELECT * FROM guide_prices${where} ORDER BY material_no LIMIT ? OFFSET ?`)
+    .all(...params, pageSize, (page - 1) * pageSize);
+  return res.json({ items: rows, total });
 });
 
 router.get('/:id', (req, res) => {

@@ -50,6 +50,43 @@ router.post('/', (req, res) => {
   }
 });
 
+router.post('/copy-from-end', (req, res) => {
+  const db = getDb();
+  const rawIds = Array.isArray(req.body && req.body.ids) ? req.body.ids : [];
+  const ids = rawIds.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+  if (ids.length === 0) return badRequest(res, '请选择要复制的最终客户');
+  const ts = nowUtc();
+  const tx = db.transaction(() => {
+    let copied = 0;
+    const skipped = [];
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = db.prepare(`SELECT * FROM end_customers WHERE id IN (${placeholders})`).all(...ids);
+    const exists = db.prepare('SELECT 1 FROM contract_customers WHERE customer_name = ? COLLATE NOCASE LIMIT 1');
+    const insert = db.prepare(
+      'INSERT INTO contract_customers (customer_name, short_name, contact_person, phone, email, remark, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)'
+    );
+    for (const row of rows) {
+      if (exists.get(row.customer_name)) {
+        skipped.push(row.customer_name);
+        continue;
+      }
+      try {
+        insert.run(row.customer_name, row.short_name, row.contact_person, row.phone, row.email, row.remark, ts, ts);
+        copied += 1;
+      } catch (err) {
+        if (String(err.message).includes('UNIQUE')) {
+          skipped.push(row.customer_name);
+        } else {
+          throw err;
+        }
+      }
+    }
+    return { copied, skipped };
+  });
+  const result = tx();
+  return res.json({ copied: result.copied, skipped: result.skipped });
+});
+
 router.put('/:id', (req, res) => {
   const row = getDb().prepare('SELECT * FROM contract_customers WHERE id = ?').get(req.params.id);
   if (!row) return notFound(res);

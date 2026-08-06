@@ -63,7 +63,15 @@ export function createApp() {
   app.use('/api/settings', authenticate, settingsRoutes);
 
   const distDir = path.resolve(__dirname, '..', 'client', 'dist');
-  app.use(express.static(distDir));
+  app.use(
+    express.static(distDir, {
+      setHeaders(res, filePath) {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+      }
+    })
+  );
   app.use((req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     const indexFile = path.join(distDir, 'index.html');
