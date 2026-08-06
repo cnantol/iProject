@@ -89,6 +89,14 @@ export function initDb(dir) {
   ensureShortName('end_customers');
   ensureShortName('contract_customers');
 
+  const importLogColumns = db.prepare('PRAGMA table_info(import_logs)').all();
+  if (!importLogColumns.some((col) => col.name === 'detail')) {
+    db.exec('ALTER TABLE import_logs ADD COLUMN detail TEXT');
+  }
+  if (!importLogColumns.some((col) => col.name === 'revoked')) {
+    db.exec('ALTER TABLE import_logs ADD COLUMN revoked INTEGER DEFAULT 0');
+  }
+
   const admin = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
   if (!admin) {
     const hash = bcrypt.hashSync('password', 10);

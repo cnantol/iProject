@@ -235,9 +235,13 @@ async function runImportTask(task, rows, headers) {
         const snapshot = { processed: task.processed, success: task.success, failures: task.failures.length };
         const runBatch = db.transaction((items) => {
           for (const item of items) {
-            const error = importRow(db, IMPORT_TARGETS[task.target], headers, item.row);
-            if (error) task.failures.push({ row: item.rowNumber, reason: error });
-            else task.success += 1;
+            const result = importRow(db, IMPORT_TARGETS[task.target], headers, item.row);
+            if (typeof result === 'string') {
+              task.failures.push({ row: item.rowNumber, reason: result });
+            } else {
+              task.success += 1;
+              task.successIds.push(result);
+            }
           }
         });
         try {
@@ -254,9 +258,14 @@ async function runImportTask(task, rows, headers) {
       }
       await yieldEventLoop();
     }
+    const detailByTable = {};
+    for (const item of task.successIds) {
+      if (!detailByTable[item.table]) detailByTable[item.table] = [];
+      detailByTable[item.table].push(item.id);
+    }
     const info = db
-      .prepare('INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, created_at) VALUES (?,?,?,?,?,?)')
-      .run(task.target, task.fileName, task.total, task.success, task.failures.length, nowUtc());
+      .prepare('INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, detail, revoked, created_at) VALUES (?,?,?,?,?,?,0,?)')
+      .run(task.target, task.fileName, task.total, task.success, task.failures.length, JSON.stringify(detailByTable), nowUtc());
     writeAudit(db, {
       userId: task.userId,
       action: 'other',
@@ -325,6 +334,7 @@ router.post('/import/:target', upload.single('file'), (req, res) => {
     total: rows.length - 1,
     processed: 0,
     success: 0,
+    successIds: [],
     failures: [],
     status: 'processing',
     error: null,
@@ -372,17 +382,19 @@ function importRow(db, target, headers, row) {
       if (!/^[A-Z0-9]{2,8}$/.test(shortName)) return '客户简称需为 2-8 位英文或数字';
     }
     try {
-      db.prepare(`INSERT INTO ${table} (customer_name, short_name, contact_person, phone, email, remark, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`).run(
-        String(name).trim(),
-        shortName,
-        value('联系人') != null ? String(value('联系人')) : null,
-        value('电话') != null ? String(value('电话')) : null,
-        value('邮箱') != null ? String(value('邮箱')) : null,
-        value('备注') != null ? String(value('备注')) : null,
-        nowUtc(),
-        nowUtc()
-      );
-      return null;
+      const info = db
+        .prepare(`INSERT INTO ${table} (customer_name, short_name, contact_person, phone, email, remark, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)`)
+        .run(
+          String(name).trim(),
+          shortName,
+          value('联系人') != null ? String(value('联系人')) : null,
+          value('电话') != null ? String(value('电话')) : null,
+          value('邮箱') != null ? String(value('邮箱')) : null,
+          value('备注') != null ? String(value('备注')) : null,
+          nowUtc(),
+          nowUtc()
+        );
+      return { table: target === IMPORT_TARGETS.end_customer ? 'end_customer' : 'contract_customer', id: info.lastInsertRowid };
     } catch (err) {
       if (String(err.message).includes('UNIQUE')) return '客户名称或简称已存在';
       throw err;
@@ -394,16 +406,18 @@ function importRow(db, target, headers, row) {
     if (materialNo === null || String(materialNo).trim() === '') return '物料号必填';
     if (!isMoney(price)) return '指导价必须大于 0';
     try {
-      db.prepare('INSERT INTO guide_prices (material_no, description, guide_unit_price_ex_vat, unit, remark, created_at, updated_at) VALUES (?,?,?,?,?,?,?)').run(
-        String(materialNo).trim(),
-        value('描述') != null ? String(value('描述')) : null,
-        Number(price),
-        value('单位') != null ? String(value('单位')) : 'pcs',
-        value('备注') != null ? String(value('备注')) : null,
-        nowUtc(),
-        nowUtc()
-      );
-      return null;
+      const info = db
+        .prepare('INSERT INTO guide_prices (material_no, description, guide_unit_price_ex_vat, unit, remark, created_at, updated_at) VALUES (?,?,?,?,?,?,?)')
+        .run(
+          String(materialNo).trim(),
+          value('描述') != null ? String(value('描述')) : null,
+          Number(price),
+          value('单位') != null ? String(value('单位')) : 'pcs',
+          value('备注') != null ? String(value('备注')) : null,
+          nowUtc(),
+          nowUtc()
+        );
+      return { table: 'guide_price', id: info.lastInsertRowid };
     } catch (err) {
       if (String(err.message).includes('UNIQUE')) return '该物料号指导价已存在';
       throw err;
@@ -428,20 +442,22 @@ function importRow(db, target, headers, row) {
     }
     if (validTo && validTo < validFrom) return '失效日期不得早于生效日期';
     try {
-      db.prepare('INSERT INTO materials (end_customer_id, material_no, description, unit_price_ex_vat, unit, agreement_no, valid_from, valid_to, remark, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(
-        customer.id,
-        String(materialNo).trim(),
-        value('描述') != null ? String(value('描述')) : null,
-        Number(price),
-        value('单位') != null ? String(value('单位')) : 'pcs',
-        value('协议编号') != null ? String(value('协议编号')) : null,
-        validFrom,
-        validTo,
-        value('备注') != null ? String(value('备注')) : null,
-        nowUtc(),
-        nowUtc()
-      );
-      return null;
+      const info = db
+        .prepare('INSERT INTO materials (end_customer_id, material_no, description, unit_price_ex_vat, unit, agreement_no, valid_from, valid_to, remark, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+        .run(
+          customer.id,
+          String(materialNo).trim(),
+          value('描述') != null ? String(value('描述')) : null,
+          Number(price),
+          value('单位') != null ? String(value('单位')) : 'pcs',
+          value('协议编号') != null ? String(value('协议编号')) : null,
+          validFrom,
+          validTo,
+          value('备注') != null ? String(value('备注')) : null,
+          nowUtc(),
+          nowUtc()
+        );
+      return { table: 'material', id: info.lastInsertRowid };
     } catch (err) {
       if (String(err.message).includes('UNIQUE')) return '该客户+物料号+生效日期已存在';
       throw err;
@@ -514,42 +530,44 @@ function importHistoryRow(db, headers, row) {
   if (orderType && !['A', 'B', 'C'].includes(orderType)) return '销售机会类型无效';
   const ts = nowUtc();
   try {
-    db.prepare(
-      `INSERT INTO orders (order_id, year, month, end_customer_id, contract_customer_id, order_type, project_no, workshop,
-        project_name, project_owner, project_remark, sales_order, total_amount, payment_terms, delivered, delivered_date,
-        invoiced, invoiced_date, commission_matched, commission_amount, commission_date, status, has_framework, proposal_skipped,
-        closed_at, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      String(orderId).trim(),
-      String(year).trim(),
-      String(month).trim(),
-      endCustomerId,
-      contractCustomerId,
-      orderType,
-      value('项目编号') != null ? String(value('项目编号')) : null,
-      value('车间') != null ? String(value('车间')) : null,
-      value('项目名称') != null ? String(value('项目名称')) : null,
-      value('项目负责人') != null ? String(value('项目负责人')) : null,
-      value('项目备注') != null ? String(value('项目备注')) : null,
-      salesOrder,
-      totalAmount,
-      value('付款条款') != null ? String(value('付款条款')) : null,
-      delivered,
-      deliveredDate,
-      invoiced,
-      invoicedDate,
-      commissionMatched,
-      commissionAmount,
-      commissionMatched === 1 ? ts : null,
-      status,
-      0,
-      0,
-      ['closed', 'lost_closed'].includes(status) ? ts : null,
-      ts,
-      ts
-    );
-    return null;
+    const info = db
+      .prepare(
+        `INSERT INTO orders (order_id, year, month, end_customer_id, contract_customer_id, order_type, project_no, workshop,
+          project_name, project_owner, project_remark, sales_order, total_amount, payment_terms, delivered, delivered_date,
+          invoiced, invoiced_date, commission_matched, commission_amount, commission_date, status, has_framework, proposal_skipped,
+          closed_at, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(
+        String(orderId).trim(),
+        String(year).trim(),
+        String(month).trim(),
+        endCustomerId,
+        contractCustomerId,
+        orderType,
+        value('项目编号') != null ? String(value('项目编号')) : null,
+        value('车间') != null ? String(value('车间')) : null,
+        value('项目名称') != null ? String(value('项目名称')) : null,
+        value('项目负责人') != null ? String(value('项目负责人')) : null,
+        value('项目备注') != null ? String(value('项目备注')) : null,
+        salesOrder,
+        totalAmount,
+        value('付款条款') != null ? String(value('付款条款')) : null,
+        delivered,
+        deliveredDate,
+        invoiced,
+        invoicedDate,
+        commissionMatched,
+        commissionAmount,
+        commissionMatched === 1 ? ts : null,
+        status,
+        0,
+        0,
+        ['closed', 'lost_closed'].includes(status) ? ts : null,
+        ts,
+        ts
+      );
+    return { table: 'order', id: info.lastInsertRowid };
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) return '销售机会编号或 SO 号已存在';
     throw err;
@@ -565,6 +583,88 @@ function parseBool(value) {
 router.get('/import-logs', (req, res) => {
   const items = getDb().prepare('SELECT * FROM import_logs ORDER BY id DESC LIMIT 100').all();
   return res.json({ items });
+});
+
+const IMPORT_UNDO_CHILD_TABLES = [
+  'proposal_versions',
+  'quotations',
+  'approval_records',
+  'customer_pos',
+  'order_attachments',
+  'shipping_batches',
+  'invoice_records',
+  'commission_manual_records',
+  'order_custom_fields',
+  'todos'
+];
+
+router.post('/import/:id/undo', (req, res) => {
+  const db = getDb();
+  const log = db.prepare('SELECT * FROM import_logs WHERE id = ?').get(req.params.id);
+  if (!log) return notFound(res, '导入记录不存在');
+  if (Number(log.revoked) === 1) return badRequest(res, '该导入已撤回');
+  let detail = {};
+  try {
+    detail = log.detail ? JSON.parse(log.detail) : {};
+  } catch {
+    detail = {};
+  }
+  const hasIds = Object.values(detail).some((ids) => Array.isArray(ids) && ids.length > 0);
+  if (!hasIds) return badRequest(res, '该导入记录没有可撤回的数据');
+
+  const toIds = (key) => (Array.isArray(detail[key]) ? detail[key].map(Number).filter((id) => Number.isInteger(id) && id > 0) : []);
+  const tx = db.transaction(() => {
+    const deleted = [];
+    const skipped = [];
+    if (log.target_type === 'history') {
+      const orderIds = toIds('order');
+      if (orderIds.length === 0) return { deleted, skipped };
+      for (const table of IMPORT_UNDO_CHILD_TABLES) {
+        const placeholders = orderIds.map(() => '?').join(',');
+        const count = db.prepare(`SELECT COUNT(*) AS c FROM ${table} WHERE order_id IN (${placeholders})`).get(...orderIds).c;
+        if (count > 0) throw new Error(`导入的销售机会已存在关联数据（${table}），为安全起见已阻止撤回`);
+      }
+      const info = db.prepare(`DELETE FROM orders WHERE id IN (${orderIds.map(() => '?').join(',')})`).run(...orderIds);
+      deleted.push(`${info.changes} 个销售机会`);
+    } else if (log.target_type === 'end_customer' || log.target_type === 'contract_customer') {
+      const table = log.target_type === 'end_customer' ? 'end_customers' : 'contract_customers';
+      const ids = toIds(log.target_type);
+      const stmt = db.prepare(`DELETE FROM ${table} WHERE id = ?`);
+      for (const id of ids) {
+        try {
+          const info = stmt.run(id);
+          if (info.changes > 0) deleted.push(id);
+        } catch (err) {
+          if (String(err.message).includes('FOREIGN KEY')) skipped.push(id);
+          else throw err;
+        }
+      }
+    } else if (log.target_type === 'material' || log.target_type === 'guide_price') {
+      const table = log.target_type === 'material' ? 'materials' : 'guide_prices';
+      const ids = toIds(log.target_type);
+      if (ids.length === 0) return { deleted, skipped };
+      const info = db.prepare(`DELETE FROM ${table} WHERE id IN (${ids.map(() => '?').join(',')})`).run(...ids);
+      deleted.push(`${info.changes} 条`);
+    } else {
+      throw new Error('不支持的导入类型');
+    }
+    db.prepare('UPDATE import_logs SET revoked = 1 WHERE id = ?').run(log.id);
+    writeAudit(db, {
+      userId: req.user.id,
+      action: 'other',
+      entityType: 'settings',
+      entityId: log.id,
+      detail: { event: 'undo_import', target_type: log.target_type, deleted, skipped }
+    });
+    return { deleted, skipped };
+  });
+  let result;
+  try {
+    result = tx();
+  } catch (err) {
+    return badRequest(res, err.message || '撤回失败');
+  }
+  return res.json({ message: '撤回成功', deleted: result.deleted, skipped: result.skipped });
 });
 
 // ---------- 备份与还原 ----------

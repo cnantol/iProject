@@ -203,6 +203,8 @@ CREATE TABLE IF NOT EXISTS import_logs (
   total_rows INTEGER,
   success_rows INTEGER,
   fail_rows INTEGER,
+  detail TEXT,
+  revoked INTEGER DEFAULT 0,
   created_at TEXT
 );
 

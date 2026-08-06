@@ -662,6 +662,7 @@ function ImportManager({ onError }) {
   const [mappingFile, setMappingFile] = useState(null);
   const [mappingColumns, setMappingColumns] = useState([]);
   const [mappingValues, setMappingValues] = useState({});
+  const [undoSuccess, setUndoSuccess] = useState('');
   const pollRef = useRef(null);
 
   const loadLogs = useCallback(async () => {
@@ -816,6 +817,19 @@ function ImportManager({ onError }) {
     try {
       const url = await downloadUrl(path);
       window.open(url, '_blank');
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
+  const undoImport = async (row) => {
+    if (!window.confirm(`确认撤回本次「${IMPORT_TARGET_LABELS[row.target_type] || row.target_type}」导入？撤回后将删除本次导入的 ${row.success_rows} 条数据。`)) return;
+    setUndoSuccess('');
+    try {
+      const { data } = await api.post(`/settings/import/${row.id}/undo`);
+      const skippedText = data.skipped && data.skipped.length > 0 ? `，跳过 ${data.skipped.length} 条被引用数据` : '';
+      setUndoSuccess(`撤回成功：${Array.isArray(data.deleted) ? `${data.deleted.length} 条数据` : data.deleted}${skippedText}`);
+      loadLogs();
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -1087,6 +1101,7 @@ function ImportManager({ onError }) {
             </Button>
           </DialogActions>
         </Dialog>
+        {undoSuccess && <Alert severity="success" sx={{ mt: 2, mb: 1, borderRadius: 2 }}>{undoSuccess}</Alert>}
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 3, mb: 1 }}>
           <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>导入历史</Typography>
@@ -1100,6 +1115,7 @@ function ImportManager({ onError }) {
               <TableCell>文件名</TableCell>
               <TableCell align="right">成功</TableCell>
               <TableCell align="right">失败</TableCell>
+              <TableCell align="right">操作</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -1114,11 +1130,22 @@ function ImportManager({ onError }) {
                 <TableCell align="right">
                   <Chip size="small" variant="outlined" label={row.fail_rows} color={Number(row.fail_rows) > 0 ? 'error' : 'default'} />
                 </TableCell>
+                <TableCell align="right">
+                  {Number(row.revoked) === 1 ? (
+                    <Chip size="small" variant="outlined" label="已撤回" color="default" />
+                  ) : !row.detail ? (
+                    <Chip size="small" variant="outlined" label="历史记录不可撤回" color="default" />
+                  ) : (
+                    <Button size="small" variant="outlined" color="error" startIcon={<RestoreIcon />} onClick={() => undoImport(row)}>
+                      撤回
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {logs.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ color: 'text.secondary' }}>
+                <TableCell colSpan={6} align="center" sx={{ color: 'text.secondary' }}>
                   暂无导入记录
                 </TableCell>
               </TableRow>
