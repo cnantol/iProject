@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useAuth } from './context/AuthContext';
 import AppLayout from './components/AppLayout';
+import { ConfirmProvider } from './components/ConfirmDialog';
 
 const Login = lazy(() => import('./pages/Login'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -25,28 +26,30 @@ function PrivateRoute() {
 
 export default function App() {
   return (
-    <Suspense
-      fallback={
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 12 }}>
-          <CircularProgress />
-        </Box>
-      }
-    >
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route element={<PrivateRoute />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/orders" element={<OrderList />} />
-          <Route path="/orders/new" element={<OrderCreate />} />
-          <Route path="/orders/:id" element={<OrderDetail />} />
-          <Route path="/materials" element={<MaterialList />} />
-          <Route path="/commission" element={<CommissionPage />} />
-          <Route path="/sales-history" element={<SalesHistory />} />
-          <Route path="/todos" element={<TodoList />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </Suspense>
+    <ConfirmProvider>
+      <Suspense
+        fallback={
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 12 }}>
+            <CircularProgress />
+          </Box>
+        }
+      >
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<PrivateRoute />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/orders" element={<OrderList />} />
+            <Route path="/orders/new" element={<OrderCreate />} />
+            <Route path="/orders/:id" element={<OrderDetail />} />
+            <Route path="/materials" element={<MaterialList />} />
+            <Route path="/commission" element={<CommissionPage />} />
+            <Route path="/sales-history" element={<SalesHistory />} />
+            <Route path="/todos" element={<TodoList />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </ConfirmProvider>
   );
 }

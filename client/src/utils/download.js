@@ -1,9 +1,11 @@
+import axios from 'axios';
 import api from '../api';
 
 let cachedToken = '';
 let cachedAt = 0;
+const downloadApi = axios.create({ timeout: 0 });
 
-export async function getDownloadToken() {
+async function getDownloadToken() {
   if (cachedToken && Date.now() - cachedAt < 8 * 60 * 1000) return cachedToken;
   const { data } = await api.post('/auth/download-token');
   cachedToken = data.token || '';
@@ -11,8 +13,33 @@ export async function getDownloadToken() {
   return cachedToken;
 }
 
-export async function downloadUrl(path) {
+function filenameFromDisposition(disposition) {
+  if (!disposition) return '';
+  const utf8 = String(disposition).match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8) {
+    try {
+      return decodeURIComponent(utf8[1]);
+    } catch {
+      return utf8[1];
+    }
+  }
+  const plain = String(disposition).match(/filename="?([^";]+)"?/i);
+  return plain ? plain[1] : '';
+}
+
+export async function downloadFile(path, filename) {
   const token = await getDownloadToken();
-  const sep = String(path).includes('?') ? '&' : '?';
-  return `${path}${sep}token=${encodeURIComponent(token)}`;
+  const { data, headers } = await downloadApi.get(path, {
+    responseType: 'blob',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const name = filename || filenameFromDisposition(headers?.['content-disposition']) || 'download';
+  const url = URL.createObjectURL(data);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

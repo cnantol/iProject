@@ -24,7 +24,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { ORDER_TYPES } from '../utils/constants';
-import { downloadUrl } from '../utils/download';
+import { downloadFile } from '../utils/download';
 import { useFieldLabels } from '../utils/fieldLabels';
 import StepWrapper from './StepWrapper';
 
@@ -131,8 +131,7 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance
 
   const openDownload = async (path) => {
     try {
-      const url = await downloadUrl(path);
-      window.open(url, '_blank');
+      await downloadFile(path);
     } catch {
       setError('下载失败，请重试');
     }

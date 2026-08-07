@@ -30,9 +30,10 @@ import SyncIcon from '@mui/icons-material/Sync';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import api, { errorMessage } from '../api';
-import { PRICE_SOURCE_LABELS } from '../utils/constants';
+import { useConfirm } from './ConfirmDialog';
+import { MATERIAL_TYPE_LABELS, PRICE_SOURCE_LABELS } from '../utils/constants';
 import { fmtMoney, round2, round4 } from '../utils/helpers';
-import { downloadUrl } from '../utils/download';
+import { downloadFile } from '../utils/download';
 import StepWrapper from './StepWrapper';
 
 const EMPTY_ITEM = {
@@ -48,6 +49,7 @@ const EMPTY_ITEM = {
 };
 
 export default function StepQuotation({ order, readOnly, onChanged }) {
+  const confirm = useConfirm();
   const [quotations, setQuotations] = useState([]);
   const [activeRoundId, setActiveRoundId] = useState(null);
   const [rows, setRows] = useState([]);
@@ -199,7 +201,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
   };
 
   const deleteRound = async () => {
-    if (!window.confirm(`确认删除报价轮次「${activeRound.round_label || `R${activeRound.round_no}`}」？已提交或被审批引用的轮次不可删除。`)) return;
+    if (!(await confirm(`确认删除报价轮次「${activeRound.round_label || `R${activeRound.round_no}`}」？已提交或被审批引用的轮次不可删除。`))) return;
     setError('');
     try {
       await api.delete(`/orders/${order.id}/quotations/${activeRound.id}`);
@@ -282,8 +284,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
   const exportPdf = async () => {
     try {
       const { data } = await api.post(`/orders/${order.id}/quotations/${activeRound.id}/pdf`, {});
-      const url = await downloadUrl(data.url);
-      window.open(url, '_blank');
+      await downloadFile(data.url, data.filename);
     } catch (err) {
       setError(errorMessage(err, 'PDF 生成失败'));
     }
@@ -312,9 +313,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
     return round2(final * qty);
   };
 
-  const approvableRounds = quotations.filter(
-    (round) => round.status === 'submitted' || (order.approvals || []).some((approval) => approval.quotation_id === round.id)
-  );
+  const approvableRounds = quotations.filter((round) => round.status === 'submitted');
 
   useEffect(() => {
     if (!submitRoundId && approvableRounds.length === 1) {
@@ -481,8 +480,8 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
                   disabled={!editable}
                   onChange={(e) => updateRow(index, 'material_type', e.target.value)}
                 >
-                  <MenuItem value="standard">标准</MenuItem>
-                  <MenuItem value="non_standard">非标</MenuItem>
+                  <MenuItem value="standard">{MATERIAL_TYPE_LABELS.standard}</MenuItem>
+                  <MenuItem value="non_standard">{MATERIAL_TYPE_LABELS.non_standard}</MenuItem>
                 </Select>
               </TableCell>
               <TableCell>
@@ -593,7 +592,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
             <Select value={submitRoundId} label="选择要审批的轮次" onChange={(e) => setSubmitRoundId(e.target.value)}>
               {approvableRounds.map((round) => (
                 <MenuItem key={round.id} value={round.id}>
-                  {round.round_label || `R${round.round_no}`}（{round.status === 'submitted' ? '已提交' : '驳回后重提'}）
+                  {round.round_label || `R${round.round_no}`}（已提交）
                 </MenuItem>
               ))}
             </Select>

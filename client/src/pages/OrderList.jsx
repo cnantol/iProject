@@ -31,7 +31,9 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import CancelIcon from '@mui/icons-material/Cancel';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import FiberManualRecordRoundedIcon from '@mui/icons-material/FiberManualRecordRounded';
 import api, { errorMessage } from '../api';
+import { useConfirm } from '../components/ConfirmDialog';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { daysSinceDate, fmtMoney } from '../utils/helpers';
 import { useFieldLabels } from '../utils/fieldLabels';
@@ -46,21 +48,42 @@ function loadSaved() {
   }
 }
 
+function StatusTag({ label, color, icon }) {
+  return (
+    <Chip
+      size="small"
+      label={label}
+      icon={icon}
+      sx={{
+        height: 24,
+        borderRadius: 1.5,
+        px: 0.5,
+        fontWeight: 800,
+        fontSize: 12,
+        lineHeight: 1,
+        color,
+        bgcolor: `${color}1F`,
+        border: `1px solid ${color}66`,
+        '& .MuiChip-icon': { fontSize: 15, color: 'inherit' }
+      }}
+    />
+  );
+}
+
 export default function OrderList() {
   const navigate = useNavigate();
   const theme = useTheme();
+  const confirm = useConfirm();
   const { t } = useFieldLabels();
   const saved = loadSaved();
   const [search, setSearch] = useState(saved.search || '');
   const [scope, setScope] = useState(saved.scope || 'active');
   const [page, setPage] = useState(saved.page && Number(saved.page) > 0 ? Number(saved.page) : 1);
   const [pageSize, setPageSize] = useState(saved.page_size && Number(saved.page_size) > 0 ? Number(saved.page_size) : 10);
-  const [endCustomerId, setEndCustomerId] = useState(saved.end_customer_id || '');
-  const [contractCustomerId, setContractCustomerId] = useState(saved.contract_customer_id || '');
+  const [customer, setCustomer] = useState(saved.customer || '');
   const [year, setYear] = useState(saved.year || '');
   const [month, setMonth] = useState(saved.month || '');
-  const [endCustomers, setEndCustomers] = useState([]);
-  const [contractCustomers, setContractCustomers] = useState([]);
+  const [customerOptions, setCustomerOptions] = useState([]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -86,8 +109,7 @@ export default function OrderList() {
       const params = { page, limit: pageSize };
       params.scope = scope;
       if (search.trim()) params.search = search.trim();
-      if (endCustomerId) params.end_customer_id = endCustomerId;
-      if (contractCustomerId) params.contract_customer_id = contractCustomerId;
+      if (customer.trim()) params.customer = customer.trim();
       if (year) params.year = year;
       if (month) params.month = month;
       const { data: result } = await api.get('/orders', { params });
@@ -98,7 +120,7 @@ export default function OrderList() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, scope, endCustomerId, contractCustomerId, year, month]);
+  }, [page, pageSize, search, scope, customer, year, month]);
 
   useEffect(() => {
     load();
@@ -107,30 +129,32 @@ export default function OrderList() {
   useEffect(() => {
     sessionStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ page, page_size: pageSize, scope, search, end_customer_id: endCustomerId, contract_customer_id: contractCustomerId, year, month })
+      JSON.stringify({ page, page_size: pageSize, scope, search, customer, year, month })
     );
-  }, [page, pageSize, scope, search, endCustomerId, contractCustomerId, year, month]);
+  }, [page, pageSize, scope, search, customer, year, month]);
 
   useEffect(() => {
     Promise.all([api.get('/end-customers'), api.get('/contract-customers')])
       .then(([endRes, contractRes]) => {
-        setEndCustomers(endRes.data.items || []);
-        setContractCustomers(contractRes.data.items || []);
+        const names = [
+          ...(endRes.data.items || []).map((item) => item.customer_name),
+          ...(contractRes.data.items || []).map((item) => item.customer_name)
+        ].filter(Boolean);
+        setCustomerOptions([...new Set(names)]);
       })
       .catch(() => {});
   }, []);
 
   const resetFilters = () => {
     setSearch('');
-    setEndCustomerId('');
-    setContractCustomerId('');
+    setCustomer('');
     setYear('');
     setMonth('');
     setPage(1);
   };
 
   const removeOrder = async (order) => {
-    if (!window.confirm(`确认删除销售机会「${order.order_id}」？删除后不可恢复。`)) return;
+    if (!(await confirm(`确认删除销售机会「${order.order_id}」？删除后不可恢复。`))) return;
     setDeletingId(order.id);
     setError('');
     try {
@@ -222,37 +246,24 @@ export default function OrderList() {
           </TextField>
           <Autocomplete
             size="small"
-            options={endCustomers}
-            getOptionLabel={(opt) => opt.customer_name || ''}
-            value={endCustomers.find((c) => String(c.id) === String(endCustomerId)) || null}
-            onChange={(_, value) => {
-              setEndCustomerId(value ? value.id : '');
+            freeSolo
+            options={customerOptions}
+            value={customer}
+            onInputChange={(_, value) => {
+              setCustomer(value || '');
               setPage(1);
             }}
-            sx={{ width: 230 }}
-            ListboxProps={{
-              sx: {
-                '& .MuiAutocomplete-option': { fontSize: 15, minHeight: 44, fontWeight: 500 }
-              }
-            }}
-            renderInput={(params) => <TextField {...params} label="最终客户" sx={filterInputSx} />}
-          />
-          <Autocomplete
-            size="small"
-            options={contractCustomers}
-            getOptionLabel={(opt) => opt.customer_name || ''}
-            value={contractCustomers.find((c) => String(c.id) === String(contractCustomerId)) || null}
             onChange={(_, value) => {
-              setContractCustomerId(value ? value.id : '');
+              setCustomer(typeof value === 'string' ? value || '' : value?.customer_name || '');
               setPage(1);
             }}
-            sx={{ width: 230 }}
+            sx={{ width: 240 }}
             ListboxProps={{
               sx: {
-                '& .MuiAutocomplete-option': { fontSize: 15, minHeight: 44, fontWeight: 500 }
+                '& .MuiAutocomplete-option': { fontSize: 14, minHeight: 40, fontWeight: 500 }
               }
             }}
-            renderInput={(params) => <TextField {...params} label="合同客户" sx={filterInputSx} />}
+            renderInput={(params) => <TextField {...params} label="客户（最终/合同）" sx={filterInputSx} />}
           />
           <TextField
             size="small"
@@ -319,8 +330,8 @@ export default function OrderList() {
                   }}
                 >
                     <TableCell sx={{ width: 56 }} />
-                  <TableCell>机会年月</TableCell>
-                    <TableCell>{t('end_customer')}</TableCell>
+                  <TableCell>机会编号</TableCell>
+                    <TableCell>客户信息</TableCell>
                     <TableCell>{t('project_name')}</TableCell>
                     <TableCell>项目号</TableCell>
                     <TableCell>PO</TableCell>
@@ -351,12 +362,12 @@ export default function OrderList() {
                     const block = order.status === 'cancelled'
                       ? { ...BLOCK.cancelled, icon: <CancelIcon sx={{ fontSize: 15 }} />, text: '', title: '合同取消' }
                       : isClosed && invoicedDays !== null
-                        ? { ...BLOCK.closed, icon: <CheckCircleRoundedIcon sx={{ fontSize: 16 }} />, text: '', title: `开票日期：${String(order.invoiced_date).slice(0, 10)}` }
+                        ? { ...BLOCK.closed, icon: <CheckCircleRoundedIcon sx={{ fontSize: 15 }} />, text: '', title: `开票日期：${String(order.invoiced_date).slice(0, 10)}` }
                         : urgent
-                          ? { ...BLOCK.urgent, icon: <WarningAmberRoundedIcon sx={{ fontSize: 14 }} />, text: `${invoicedDays}`, title: `开票后 ${invoicedDays} 天` }
+                          ? { ...BLOCK.urgent, icon: <WarningAmberRoundedIcon sx={{ fontSize: 15 }} />, text: `${invoicedDays}`, title: `开票后 ${invoicedDays} 天` }
                           : invoicedDays !== null
-                            ? { ...BLOCK.amber, icon: <ReceiptLongIcon sx={{ fontSize: 14 }} />, text: `${invoicedDays}`, title: `开票后 ${invoicedDays} 天` }
-                            : { ...BLOCK.none, icon: <ReceiptLongIcon sx={{ fontSize: 14 }} />, text: '—', title: '未开票' };
+                            ? { ...BLOCK.amber, icon: <ReceiptLongIcon sx={{ fontSize: 15 }} />, text: `${invoicedDays}`, title: `开票后 ${invoicedDays} 天` }
+                            : { ...BLOCK.none, icon: <ReceiptLongIcon sx={{ fontSize: 15 }} />, text: '—', title: '未开票' };
                     return (
                       <TableRow
                         key={order.id}
@@ -390,30 +401,42 @@ export default function OrderList() {
                             {block.text ? <Box component="span">{block.text}</Box> : null}
                           </Box>
                         </TableCell>
-                        <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap', fontSize: 14 }}>
-                          {order.year && order.month ? `${order.year}-${String(order.month).padStart(2, '0')}` : order.year || order.month || '-'}
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Stack spacing={0.25}>
+                            <Typography variant="body2" sx={{ fontWeight: 800, color: 'primary.main', fontSize: 13, lineHeight: 1.3 }}>
+                              {order.order_id || '-'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2 }}>
+                              {order.year && order.month ? `${order.year}-${String(order.month).padStart(2, '0')}` : order.year || order.month || '-'}
+                            </Typography>
+                          </Stack>
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.end_customer_name || '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', minWidth: 180 }}>
+                          <Stack spacing={0.25}>
+                            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>
+                              {order.end_customer_name || '-'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2 }}>
+                              {order.contract_customer_name || '-'}
+                            </Typography>
+                          </Stack>
+                        </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.project_name || '-'}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.project_no || '-'}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.po_numbers || '-'}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.sales_order || '-'}</TableCell>
                         <TableCell>
                           <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
-                            <Chip
-                              size="small"
+                            <StatusTag
                               label={STATUS_LABELS[order.status] || order.status}
-                              icon={<Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: STATUS_COLORS[order.status] || '#78909C' }} />}
-                              sx={{ bgcolor: `${STATUS_COLORS[order.status] || '#78909C'}22`, color: STATUS_COLORS[order.status] || '#78909C' }}
+                              color={STATUS_COLORS[order.status] || '#78909C'}
+                              icon={<FiberManualRecordRoundedIcon sx={{ fontSize: 15 }} />}
                             />
                             {order.commission_status === 'warn' && (
-                              <Chip
-                                size="small"
-                                color="error"
-                                icon={<WarningAmberRoundedIcon sx={{ fontSize: 14 }} />}
-                                label="佣金偏差"
-                                sx={{ fontWeight: 700 }}
-                              />
+                              <StatusTag label="佣金偏差" color="#D32F2F" icon={<WarningAmberRoundedIcon sx={{ fontSize: 15 }} />} />
+                            )}
+                            {order.commission_status === 'zero' && (
+                              <StatusTag label="无佣金" color="#1976D2" icon={<ReceiptLongIcon sx={{ fontSize: 15 }} />} />
                             )}
                           </Stack>
                         </TableCell>

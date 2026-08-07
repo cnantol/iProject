@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, getUploadDir } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
+import { authenticateDownload } from '../middleware/auth.js';
 import { nowUtc, badRequest, notFound } from '../utils.js';
 
 const router = Router();
@@ -42,7 +43,7 @@ router.get('/:orderId/attachments', (req, res) => {
   return res.json({ items });
 });
 
-router.get('/:orderId/attachments/:attachmentId/download', (req, res) => {
+router.get('/:orderId/attachments/:attachmentId/download', authenticateDownload, (req, res) => {
   const row = getDb()
     .prepare('SELECT * FROM order_attachments WHERE id = ? AND order_id = ?')
     .get(Number(req.params.attachmentId), Number(req.params.orderId));

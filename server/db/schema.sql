@@ -9,10 +9,19 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id INTEGER PRIMARY KEY,
+  lock_key TEXT NOT NULL UNIQUE,
+  fail_count INTEGER NOT NULL DEFAULT 0,
+  lock_until INTEGER,
+  updated_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS end_customers (
   id INTEGER PRIMARY KEY,
   customer_name TEXT NOT NULL UNIQUE,
   short_name TEXT,
+  parent_customer_id INTEGER REFERENCES end_customers(id),
   contact_person TEXT,
   phone TEXT,
   email TEXT,
@@ -118,6 +127,7 @@ CREATE TABLE IF NOT EXISTS quotations (
   order_id INTEGER REFERENCES orders(id),
   round_no INTEGER,
   round_label TEXT,
+  quote_no TEXT,
   status TEXT DEFAULT 'draft',
   total_amount REAL,
   remark TEXT,
@@ -205,13 +215,32 @@ CREATE TABLE IF NOT EXISTS import_logs (
   fail_rows INTEGER,
   detail TEXT,
   revoked INTEGER DEFAULT 0,
+  task_id TEXT,
   created_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS import_tasks (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER,
+  target_type TEXT,
+  file_name TEXT,
+  total_rows INTEGER DEFAULT 0,
+  processed_rows INTEGER DEFAULT 0,
+  success_rows INTEGER DEFAULT 0,
+  fail_rows INTEGER DEFAULT 0,
+  failures TEXT,
+  success_detail TEXT,
+  status TEXT,
+  error TEXT,
+  created_at TEXT,
+  updated_at TEXT,
+  done_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS commission_manual_records (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),
-  amount REAL NOT NULL CHECK (amount > 0),
+  amount REAL NOT NULL CHECK (amount >= 0),
   remark TEXT,
   operator_id INTEGER REFERENCES users(id),
   created_at TEXT
@@ -276,12 +305,14 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_materials_uniq ON materials(end_customer_id, material_no, valid_from);
 CREATE INDEX IF NOT EXISTS idx_materials_valid_from ON materials(valid_from);
+CREATE INDEX IF NOT EXISTS idx_materials_end_customer_valid ON materials(end_customer_id, valid_from);
 CREATE INDEX IF NOT EXISTS idx_guide_prices_material_no ON guide_prices(material_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_round ON quotations(order_id, round_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_po ON customer_pos(order_id, po_number);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_no ON invoice_records(order_id, invoice_no);
 
 CREATE INDEX IF NOT EXISTS idx_commission_manual_order ON commission_manual_records(order_id);
+CREATE INDEX IF NOT EXISTS idx_orders_year_month_id ON orders(year, month, order_id DESC);
 
 CREATE TRIGGER IF NOT EXISTS trg_orders_check BEFORE INSERT ON orders
 BEGIN

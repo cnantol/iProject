@@ -32,5 +32,5 @@ export function useFieldLabels() {
   }, []);
 
   const t = (key) => labels[key] || FIELD_LABEL_DEFAULTS[key] || key;
-  return { labels, t };
+  return { t };
 }

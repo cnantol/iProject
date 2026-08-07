@@ -20,7 +20,9 @@ import InputLabel from '@mui/material/InputLabel';
 import LinearProgress from '@mui/material/LinearProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
+import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
+import { useTheme } from '@mui/material/styles';
 import Switch from '@mui/material/Switch';
 import Tab from '@mui/material/Tab';
 import Table from '@mui/material/Table';
@@ -67,7 +69,7 @@ import { useAppLogo } from '../context/AppLogoContext';
 import { FIELD_LABEL_DEFAULTS } from '../utils/fieldLabels';
 import { IMPORT_TARGET_LABELS, STATUS_LABELS } from '../utils/constants';
 import { fmtDateTime } from '../utils/helpers';
-import { downloadUrl } from '../utils/download';
+import { downloadFile } from '../utils/download';
 import { QUOTE_STYLE_DEFAULTS } from '../utils/quoteStyleDefaults';
 
 const ENTITY_CARDS = [
@@ -117,6 +119,15 @@ const CUSTOM_FIELD_STEP_KEYS = ['customer_info'];
 export default function Settings() {
   const [tab, setTab] = useState('system');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [confirmState, setConfirmState] = useState(null);
+
+  const askConfirm = useCallback((message) => new Promise((resolve) => setConfirmState({ message, resolve })), []);
+  const handleConfirm = (ok) => {
+    const { resolve } = confirmState || {};
+    setConfirmState(null);
+    if (resolve) resolve(ok);
+  };
 
   return (
     <Stack spacing={2}>
@@ -126,6 +137,16 @@ export default function Settings() {
           流程与字段、数据导入、报价单式样与系统管理
         </Typography>
       </Box>
+      <Snackbar
+        open={Boolean(notice)}
+        autoHideDuration={4000}
+        onClose={() => setNotice('')}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert severity="success" variant="filled" onClose={() => setNotice('')}>
+          {notice}
+        </Alert>
+      </Snackbar>
       {error && <Alert severity="error">{error}</Alert>}
       <Card>
         <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
@@ -146,15 +167,27 @@ export default function Settings() {
           <Tab value="flow" label="流程与字段" icon={<AccountTreeIcon />} iconPosition="start" />
         </Tabs>
       </Card>
-      {tab === 'flow' && <FlowFieldManager onError={setError} />}
-      {tab === 'import' && <ImportManager onError={setError} />}
-      {tab === 'quote' && <QuoteStyle onError={setError} />}
-      {tab === 'system' && <SystemManager onError={setError} />}
+      {tab === 'flow' && <FlowFieldManager onError={setError} onNotice={setNotice} onConfirm={askConfirm} />}
+      {tab === 'import' && <ImportManager onError={setError} onNotice={setNotice} onConfirm={askConfirm} />}
+      {tab === 'quote' && <QuoteStyle onError={setError} onNotice={setNotice} onConfirm={askConfirm} />}
+      {tab === 'system' && <SystemManager onError={setError} onNotice={setNotice} onConfirm={askConfirm} />}
+      <Dialog open={Boolean(confirmState)} onClose={() => handleConfirm(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>确认操作</DialogTitle>
+        <DialogContent>
+          <Typography>{confirmState?.message || ''}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => handleConfirm(false)}>取消</Button>
+          <Button color="error" variant="contained" onClick={() => handleConfirm(true)}>
+            确认
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }
 
-function FlowFieldManager({ onError }) {
+function FlowFieldManager({ onError, onNotice, onConfirm }) {
   const [steps, setSteps] = useState([]);
   const [allFields, setAllFields] = useState([]);
   const [bindings, setBindings] = useState({});
@@ -212,7 +245,7 @@ function FlowFieldManager({ onError }) {
     try {
       await api.put('/settings/workflow', { steps });
       onError('');
-      window.alert('流程展示配置已保存');
+      onNotice('流程展示配置已保存');
     } catch (err) {
       onError(errorMessage(err));
     } finally {
@@ -225,7 +258,7 @@ function FlowFieldManager({ onError }) {
       await api.put('/settings/workflow/bindings', { bindings: [{ step_key: stepKey, field_ids: fieldIds }] });
       setBindings((prev) => ({ ...prev, [stepKey]: fieldIds }));
       onError('');
-      if (message) window.alert(message);
+      if (message) onNotice(message);
       return true;
     } catch (err) {
       onError(errorMessage(err));
@@ -252,7 +285,7 @@ function FlowFieldManager({ onError }) {
       if (editor.id) {
         await api.put(`/settings/fields/${editor.id}`, { ...payload, sort_order: editor.sort_order });
         setEditor(null);
-        window.alert('自定义字段已更新');
+        onNotice('自定义字段已更新');
         load();
         return;
       }
@@ -267,16 +300,16 @@ function FlowFieldManager({ onError }) {
   };
 
   const removeFromStep = async (field) => {
-    if (!window.confirm(`确认将「${field.field_name}」从当前步骤移除？字段本身不会删除。`)) return;
+    if (!await onConfirm(`确认将「${field.field_name}」从当前步骤移除？字段本身不会删除。`)) return;
     const next = selectedFieldIds.filter((id) => id !== field.id);
     await persistBindings(selectedStep, next, `「${field.field_name}」已从当前步骤移除`);
   };
 
   const deleteField = async (field) => {
-    if (!window.confirm(`确认删除自定义字段「${field.field_name}」？关联值、绑定关系将一并删除。`)) return;
+    if (!await onConfirm(`确认删除自定义字段「${field.field_name}」？关联值、绑定关系将一并删除。`)) return;
     try {
       await api.delete(`/settings/fields/${field.id}`);
-      window.alert('自定义字段已删除');
+      onNotice('自定义字段已删除');
       load();
     } catch (err) {
       onError(errorMessage(err));
@@ -651,7 +684,7 @@ const IMPORT_TARGET_META = {
   history: { color: '#7B1FA2', desc: '导入历史销售机会与闭环数据' }
 };
 
-function ImportManager({ onError }) {
+function ImportManager({ onError, onNotice, onConfirm }) {
   const [result, setResult] = useState(null);
   const [logs, setLogs] = useState([]);
   const [progressOpen, setProgressOpen] = useState(false);
@@ -817,15 +850,14 @@ function ImportManager({ onError }) {
 
   const openDownload = async (path) => {
     try {
-      const url = await downloadUrl(path);
-      window.open(url, '_blank');
+      await downloadFile(path);
     } catch (err) {
       onError(errorMessage(err));
     }
   };
 
   const undoImport = async (row) => {
-    if (!window.confirm(`确认撤回本次「${IMPORT_TARGET_LABELS[row.target_type] || row.target_type}」导入？撤回后将删除本次导入的 ${row.success_rows} 条数据。`)) return;
+    if (!await onConfirm(`确认撤回本次「${IMPORT_TARGET_LABELS[row.target_type] || row.target_type}」导入？撤回后将删除本次导入的 ${row.success_rows} 条数据。`)) return;
     setUndoSuccess('');
     try {
       const { data } = await api.post(`/settings/import/${row.id}/undo`);
@@ -1197,7 +1229,9 @@ function normalizeQuoteStyleForClient(data = {}) {
   };
 }
 
-function QuoteStyle({ onError }) {
+function QuoteStyle({ onError, onNotice, onConfirm }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [style, setStyle] = useState(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -1221,7 +1255,7 @@ function QuoteStyle({ onError }) {
       const { data } = await api.put('/settings/quote-style', style);
       setStyle(normalizeQuoteStyleForClient(data));
       onError('');
-      window.alert('报价单式样已保存，PDF 导出将使用该样式');
+      onNotice('报价单式样已保存，PDF 导出将使用该样式');
     } catch (err) {
       onError(errorMessage(err));
     } finally {
@@ -1241,7 +1275,7 @@ function QuoteStyle({ onError }) {
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      window.alert('测试 PDF 已生成并开始下载');
+      onNotice('测试 PDF 已生成并开始下载');
     } catch (err) {
       onError(errorMessage(err));
     } finally {
@@ -1296,6 +1330,12 @@ function QuoteStyle({ onError }) {
   };
   const currentLabels = style.language === 'en' ? style.labels_en : style.labels;
   const previewFont = fontFamilies[style.font_family] || fontFamilies.sans;
+  const previewQuoteNo = (() => {
+    const template = String(style.quote_no_template || '').trim();
+    if (!template) return 'Q-AC-20260802-R1';
+    const values = { customer: 'AC', date: '20260802', round: 'R1', order: 'OPP-2026-TEST' };
+    return template.replace(/\{(customer|date|round|order)\}/g, (_, key) => values[key] || '');
+  })();
   const sampleRows = [
     { no: 'AC-1001', desc: '压缩机组示例', type: '标准', source: '指导价', price: '128,500.50', qty: 1, amount: '128,500.50' },
     { no: 'AC-1002', desc: '备件套件示例', type: '非标', source: '手工', price: '0.00', qty: 1, amount: '0.00' }
@@ -1315,28 +1355,115 @@ function QuoteStyle({ onError }) {
   };
   const cell = { px: 1, py: 0.75, textAlign: 'left', verticalAlign: 'middle' };
   const headerCell = { ...cell, color: '#ffffff', fontWeight: 700, whiteSpace: 'nowrap' };
-  const sectionTitle = {
-    width: 4,
-    height: 22,
-    borderRadius: 2,
-    bgcolor: 'secondary.main'
-  };
+  const sectionHeader = (icon, title, meta = null) => (
+    <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
+      <Box
+        sx={{
+          width: 34,
+          height: 34,
+          borderRadius: 2.5,
+          bgcolor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,78,154,0.10)',
+          color: isDark ? '#8FB8E8' : '#004E9A',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0
+        }}
+      >
+        {icon}
+      </Box>
+      <Typography variant="subtitle2" sx={{ fontWeight: 800, flex: 1 }}>{title}</Typography>
+      {meta}
+    </Stack>
+  );
+
+  const sectionCard = (content, icon = null, title = '', meta = null) => (
+    <Box
+      sx={{
+        borderRadius: 3,
+        border: 1,
+        borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#DDE7F3',
+        bgcolor: isDark ? 'rgba(255,255,255,0.045)' : '#F8FAFC',
+        p: 2,
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+    >
+      <Box
+        sx={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 4,
+          bgcolor: 'primary.main'
+        }}
+      />
+      {icon && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            mb: 1.5,
+            pb: 1.25,
+            borderBottom: 1,
+            borderColor: 'divider'
+          }}
+        >
+          <Box
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: 2,
+              bgcolor: isDark ? 'rgba(0,78,154,0.35)' : 'rgba(0,78,154,0.12)',
+              color: isDark ? '#8FB8E8' : '#004E9A',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >
+            {icon}
+          </Box>
+          <Typography variant="subtitle2" sx={{ fontWeight: 800, flex: 1 }}>{title}</Typography>
+          {meta}
+        </Box>
+      )}
+      {content}
+    </Box>
+  );
 
   return (
-    <Card>
+    <Card sx={{ overflow: 'visible' }}>
       <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'secondary.main' }} />
-      <CardContent>
-        <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ xs: 'flex-start', md: 'center' }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2, flexWrap: 'wrap', rowGap: 1 }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'secondary.main' }} />
+      <Box sx={{ px: { xs: 2, md: 3 }, pt: 2.5, pb: 2, bgcolor: isDark ? 'rgba(0,78,154,0.22)' : 'rgba(0,78,154,0.07)' }}>
+        <Stack direction={{ xs: 'column', lg: 'row' }} alignItems={{ xs: 'stretch', lg: 'center' }} justifyContent="space-between" spacing={1.5}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box
+              sx={{
+                width: 46,
+                height: 46,
+                borderRadius: 2,
+                bgcolor: isDark ? 'rgba(0,78,154,0.35)' : 'primary.main',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: isDark ? 'none' : '0 8px 20px rgba(0,78,154,0.22)'
+              }}
+            >
+              <RequestQuoteIcon sx={{ fontSize: 25 }} />
+            </Box>
             <Box>
-              <Typography variant="h6">报价单式样</Typography>
-              <Typography variant="body2" color="text.secondary">
-                配置 Logo、语言、颜色、联系方式与字段名称，实时预览并测试 PDF
+              <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.25, fontSize: 17 }}>报价单式样设置</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.3 }}>
+                实时配置 Logo、语言、颜色、字段与版式，右侧所见即所得
               </Typography>
             </Box>
           </Stack>
-          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} alignItems={{ xs: 'stretch', sm: 'center' }} flexWrap="wrap" useFlexGap>
             <Stack direction="row" spacing={1} alignItems="center">
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>语言</Typography>
               <ToggleButtonGroup size="small" exclusive value={style.language} onChange={(_, value) => value && setStyle((prev) => ({ ...prev, language: value }))}>
@@ -1344,24 +1471,22 @@ function QuoteStyle({ onError }) {
                 <ToggleButton value="en">English</ToggleButton>
               </ToggleButtonGroup>
             </Stack>
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <Button variant="contained" startIcon={<SaveIcon />} onClick={save} disabled={saving || testing}>
+            <Stack direction="row" spacing={1.25} alignItems="center">
+              <Button variant="contained" startIcon={<SaveIcon />} onClick={save} disabled={saving || testing} sx={{ whiteSpace: 'nowrap' }}>
                 {saving ? <CircularProgress size={18} color="inherit" /> : '保存式样'}
               </Button>
-              <Button variant="outlined" startIcon={<DownloadIcon />} onClick={testPdf} disabled={saving || testing}>
+              <Button variant="outlined" startIcon={<DownloadIcon />} onClick={testPdf} disabled={saving || testing} sx={{ whiteSpace: 'nowrap' }}>
                 {testing ? <CircularProgress size={18} color="inherit" /> : '生成测试 PDF'}
               </Button>
             </Stack>
           </Stack>
         </Stack>
-        <Grid container spacing={3}>
+      </Box>
+      <CardContent sx={{ pt: 2.5 }}>
+        <Grid container spacing={2.5}>
           <Grid item xs={12} md={5}>
             <Stack spacing={2.5}>
-              <Box>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                  <Box sx={sectionTitle} />
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>公司信息</Typography>
-                </Stack>
+              {sectionCard(
                 <Grid container spacing={1.5}>
                   <Grid item xs={12}>
                     <TextField label="公司名称" size="small" fullWidth value={style.company_name} onChange={(e) => setStyle((prev) => ({ ...prev, company_name: e.target.value }))} />
@@ -1375,202 +1500,206 @@ function QuoteStyle({ onError }) {
                   <Grid item xs={12} sm={6}>
                     <TextField label="电子邮箱" size="small" fullWidth value={style.company_email} onChange={(e) => setStyle((prev) => ({ ...prev, company_email: e.target.value }))} />
                   </Grid>
-                </Grid>
-              </Box>
+                </Grid>,
+                <AccountBalanceIcon fontSize="small" />,
+                '公司信息'
+              )}
 
-              <Box>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                  <Box sx={sectionTitle} />
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>视觉与 Logo</Typography>
-                </Stack>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', sm: 'center' }} sx={{ mb: 1.5 }}>
-                  <TextField
-                    label="主色"
-                    type="color"
-                    size="small"
-                    value={style.primary_color}
-                    onChange={(e) => setStyle((prev) => ({ ...prev, primary_color: e.target.value }))}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ flex: 1 }}
-                  />
-                  <TextField
-                    label="辅助色"
-                    type="color"
-                    size="small"
-                    value={style.secondary_color}
-                    onChange={(e) => setStyle((prev) => ({ ...prev, secondary_color: e.target.value }))}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ flex: 1 }}
-                  />
-                  <FormControl size="small" sx={{ minWidth: 130 }}>
-                    <InputLabel>字体风格</InputLabel>
-                    <Select value={style.font_family} label="字体风格" onChange={(e) => setStyle((prev) => ({ ...prev, font_family: e.target.value }))}>
-                      <MenuItem value="sans">无衬线</MenuItem>
-                      <MenuItem value="serif">衬线</MenuItem>
-                      <MenuItem value="mono">等宽</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Stack>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
-                  <FormControl size="small" sx={{ minWidth: 160 }}>
-                    <InputLabel>Logo 位置</InputLabel>
-                    <Select value={style.logo_position} label="Logo 位置" onChange={(e) => setStyle((prev) => ({ ...prev, logo_position: e.target.value }))}>
-                      <MenuItem value="left">靠左</MenuItem>
-                      <MenuItem value="center">居中</MenuItem>
-                      <MenuItem value="right">靠右</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Stack>
-                <Box sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: 'action.hover' }}>
-                  <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
-                    {style.logo ? (
-                      <img src={style.logo} alt="Logo" style={{ maxWidth: 130, maxHeight: 54, objectFit: 'contain' }} />
-                    ) : (
-                      <Box sx={{ width: 120, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed', borderColor: 'text.disabled', borderRadius: 1.5, color: 'text.secondary', fontSize: 12 }}>
-                        暂无 Logo
-                      </Box>
-                    )}
-                    <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />}>
-                      上传 Logo
-                      <input type="file" hidden accept="image/png,image/jpeg" onChange={handleLogo} />
-                    </Button>
-                    {style.logo && (
-                      <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => setStyle((prev) => ({ ...prev, logo: null }))}>
-                        移除
-                      </Button>
-                    )}
+              {sectionCard(
+                <Box>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', sm: 'center' }} sx={{ mb: 1.5 }}>
+                    <TextField
+                      label="主色"
+                      type="color"
+                      size="small"
+                      value={style.primary_color}
+                      onChange={(e) => setStyle((prev) => ({ ...prev, primary_color: e.target.value }))}
+                      sx={{ minWidth: 140, flex: 1 }}
+                    />
+                    <TextField
+                      label="辅助色"
+                      type="color"
+                      size="small"
+                      value={style.secondary_color}
+                      onChange={(e) => setStyle((prev) => ({ ...prev, secondary_color: e.target.value }))}
+                      sx={{ minWidth: 140, flex: 1 }}
+                    />
                   </Stack>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-                    支持 PNG / JPG，不超过 2MB
-                  </Typography>
-                </Box>
-              </Box>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+                    <FormControl size="small" sx={{ minWidth: 160, flex: 1 }}>
+                      <InputLabel>字体</InputLabel>
+                      <Select value={style.font_family} label="字体" onChange={(e) => setStyle((prev) => ({ ...prev, font_family: e.target.value }))}>
+                        <MenuItem value="sans">无衬线</MenuItem>
+                        <MenuItem value="serif">衬线</MenuItem>
+                        <MenuItem value="mono">等宽</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <FormControl size="small" sx={{ minWidth: 160, flex: 1 }}>
+                      <InputLabel>Logo 位置</InputLabel>
+                      <Select value={style.logo_position} label="Logo 位置" onChange={(e) => setStyle((prev) => ({ ...prev, logo_position: e.target.value }))}>
+                        <MenuItem value="left">靠左</MenuItem>
+                        <MenuItem value="center">居中</MenuItem>
+                        <MenuItem value="right">靠右</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Stack>
+                  <Box sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#FFFFFF' }}>
+                    <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                      {style.logo ? (
+                        <img src={style.logo} alt="Logo" style={{ maxWidth: 130, maxHeight: 54, objectFit: 'contain' }} />
+                      ) : (
+                        <Box sx={{ width: 120, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed', borderColor: 'text.disabled', borderRadius: 1.5, color: 'text.secondary', fontSize: 12 }}>
+                          暂无 Logo
+                        </Box>
+                      )}
+                      <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />}>
+                        上传 Logo
+                        <input type="file" hidden accept="image/png,image/jpeg" onChange={handleLogo} />
+                      </Button>
+                      {style.logo && (
+                        <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => setStyle((prev) => ({ ...prev, logo: null }))}>
+                          移除
+                        </Button>
+                      )}
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                      支持 PNG / JPG，不超过 2MB
+                    </Typography>
+                  </Box>
+                </Box>,
+                <ImageIcon fontSize="small" />,
+                '视觉与 Logo'
+              )}
 
-              <Box>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                  <Box sx={sectionTitle} />
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>版式设置</Typography>
-                </Stack>
-                <TextField size="small" label="页眉文本" fullWidth value={style.header_text} onChange={(e) => setStyle((prev) => ({ ...prev, header_text: e.target.value }))} sx={{ mb: 1.5 }} />
-                <TextField
-                  size="small"
-                  label="报价日期"
-                  type="date"
-                  fullWidth
-                  value={style.quote_date}
-                  onChange={(e) => setStyle((prev) => ({ ...prev, quote_date: e.target.value }))}
-                  InputLabelProps={{ shrink: true }}
-                  sx={{ mb: 1.5 }}
-                />
-                <TextField
-                  size="small"
-                  label="页脚文本"
-                  multiline
-                  minRows={2}
-                  fullWidth
-                  value={style.footer_text}
-                  onChange={(e) => setStyle((prev) => ({ ...prev, footer_text: e.target.value }))}
-                  sx={{ mb: 1.5 }}
-                />
-                <Grid container spacing={1.5}>
-                  <Grid item xs={12} sm={6}>
-                    <FormControl size="small" fullWidth>
-                      <InputLabel>标题对齐</InputLabel>
-                      <Select value={style.title_alignment} label="标题对齐" onChange={(e) => setStyle((prev) => ({ ...prev, title_alignment: e.target.value }))}>
-                        {QUOTE_ALIGN_OPTIONS.map((item) => (
-                          <MenuItem key={item.value} value={item.value}>
-                            {item.label}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <FormControl size="small" fullWidth>
-                      <InputLabel>单据信息对齐</InputLabel>
-                      <Select value={style.info_alignment} label="单据信息对齐" onChange={(e) => setStyle((prev) => ({ ...prev, info_alignment: e.target.value }))}>
-                        {QUOTE_ALIGN_OPTIONS.map((item) => (
-                          <MenuItem key={item.value} value={item.value}>
-                            {item.label}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <FormControl size="small" fullWidth>
-                      <InputLabel>页眉对齐</InputLabel>
-                      <Select value={style.header_alignment} label="页眉对齐" onChange={(e) => setStyle((prev) => ({ ...prev, header_alignment: e.target.value }))}>
-                        {QUOTE_ALIGN_OPTIONS.map((item) => (
-                          <MenuItem key={item.value} value={item.value}>
-                            {item.label}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <FormControl size="small" fullWidth>
-                      <InputLabel>页脚对齐</InputLabel>
-                      <Select value={style.footer_alignment} label="页脚对齐" onChange={(e) => setStyle((prev) => ({ ...prev, footer_alignment: e.target.value }))}>
-                        {QUOTE_ALIGN_OPTIONS.map((item) => (
-                          <MenuItem key={item.value} value={item.value}>
-                            {item.label}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                </Grid>
-              </Box>
-
-              <Box>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                  <Box sx={sectionTitle} />
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>单据字段名称</Typography>
-                  <Chip size="small" label={`已启用 ${enabledMetaCount}/${QUOTE_META_VISIBILITY_KEYS.length}`} />
-                </Stack>
-                <Grid container spacing={1.5}>
-                  {QUOTE_META_FIELDS.map((item) => (
-                    <Grid item xs={12} sm={6} key={item.key}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <TextField
-                          size="small"
-                          label={item.label}
-                          fullWidth
-                          value={currentLabels[item.key]}
-                          onChange={(e) => setLabel(item.key, e.target.value)}
-                          disabled={Boolean(item.switchKey) && !Boolean(style.field_visibility[item.switchKey])}
-                          sx={{ opacity: Boolean(item.switchKey) && !Boolean(style.field_visibility[item.switchKey]) ? 0.55 : 1 }}
-                        />
-                        {item.switchKey && (
-                          <FormControlLabel
-                            control={<Switch size="small" checked={Boolean(style.field_visibility[item.switchKey])} onChange={() => toggleVisibility(item.switchKey)} />}
-                            label={style.field_visibility[item.switchKey] ? '启用' : '不启用'}
-                            sx={{ ml: 0, whiteSpace: 'nowrap' }}
-                          />
-                        )}
-                      </Stack>
-                    </Grid>
-                  ))}
-                </Grid>
-                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1.5 }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-                    联系方式（地址 / 电话 / 邮箱）
-                  </Typography>
-                  <FormControlLabel
-                    control={<Switch size="small" checked={Boolean(style.field_visibility.contact_info)} onChange={() => toggleVisibility('contact_info')} />}
-                    label={style.field_visibility.contact_info ? '启用' : '不启用'}
+              {sectionCard(
+                <Box>
+                  <TextField size="small" label="页眉文本" fullWidth value={style.header_text} onChange={(e) => setStyle((prev) => ({ ...prev, header_text: e.target.value }))} sx={{ mb: 1.5 }} />
+                  <TextField
+                    size="small"
+                    label="报价日期"
+                    type="date"
+                    fullWidth
+                    value={style.quote_date}
+                    onChange={(e) => setStyle((prev) => ({ ...prev, quote_date: e.target.value }))}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ mb: 1.5 }}
                   />
-                </Stack>
-              </Box>
+                  <TextField
+                    size="small"
+                    label="报价单编号模板"
+                    fullWidth
+                    value={style.quote_no_template || ''}
+                    onChange={(e) => setStyle((prev) => ({ ...prev, quote_no_template: e.target.value }))}
+                    helperText="留空自动生成；支持 {customer} {date} {round} {order}"
+                    sx={{ mb: 1.5 }}
+                  />
+                  <TextField
+                    size="small"
+                    label="页脚文本"
+                    multiline
+                    minRows={2}
+                    fullWidth
+                    value={style.footer_text}
+                    onChange={(e) => setStyle((prev) => ({ ...prev, footer_text: e.target.value }))}
+                    sx={{ mb: 1.5 }}
+                  />
+                  <Grid container spacing={1.5}>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl size="small" fullWidth>
+                        <InputLabel>标题对齐</InputLabel>
+                        <Select value={style.title_alignment} label="标题对齐" onChange={(e) => setStyle((prev) => ({ ...prev, title_alignment: e.target.value }))}>
+                          {QUOTE_ALIGN_OPTIONS.map((item) => (
+                            <MenuItem key={item.value} value={item.value}>
+                              {item.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl size="small" fullWidth>
+                        <InputLabel>单据信息对齐</InputLabel>
+                        <Select value={style.info_alignment} label="单据信息对齐" onChange={(e) => setStyle((prev) => ({ ...prev, info_alignment: e.target.value }))}>
+                          {QUOTE_ALIGN_OPTIONS.map((item) => (
+                            <MenuItem key={item.value} value={item.value}>
+                              {item.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl size="small" fullWidth>
+                        <InputLabel>页眉对齐</InputLabel>
+                        <Select value={style.header_alignment} label="页眉对齐" onChange={(e) => setStyle((prev) => ({ ...prev, header_alignment: e.target.value }))}>
+                          {QUOTE_ALIGN_OPTIONS.map((item) => (
+                            <MenuItem key={item.value} value={item.value}>
+                              {item.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl size="small" fullWidth>
+                        <InputLabel>页脚对齐</InputLabel>
+                        <Select value={style.footer_alignment} label="页脚对齐" onChange={(e) => setStyle((prev) => ({ ...prev, footer_alignment: e.target.value }))}>
+                          {QUOTE_ALIGN_OPTIONS.map((item) => (
+                            <MenuItem key={item.value} value={item.value}>
+                              {item.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  </Grid>
+                </Box>,
+                <EditIcon fontSize="small" />,
+                '版式设置'
+              )}
 
-              <Box>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                  <Box sx={sectionTitle} />
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>表格列名</Typography>
-                  <Chip size="small" label={`已启用 ${enabledColumnCount}/${QUOTE_COLUMN_FIELDS.length}`} />
-                </Stack>
+              {sectionCard(
+                <Box>
+                  <Grid container spacing={1.5}>
+                    {QUOTE_META_FIELDS.map((item) => (
+                      <Grid item xs={12} sm={6} key={item.key}>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <TextField
+                            size="small"
+                            label={item.label}
+                            fullWidth
+                            value={currentLabels[item.key]}
+                            onChange={(e) => setLabel(item.key, e.target.value)}
+                            disabled={Boolean(item.switchKey) && !Boolean(style.field_visibility[item.switchKey])}
+                            sx={{ opacity: Boolean(item.switchKey) && !Boolean(style.field_visibility[item.switchKey]) ? 0.55 : 1 }}
+                          />
+                          {item.switchKey && (
+                            <FormControlLabel
+                              control={<Switch size="small" checked={Boolean(style.field_visibility[item.switchKey])} onChange={() => toggleVisibility(item.switchKey)} />}
+                              label={style.field_visibility[item.switchKey] ? '启用' : '不启用'}
+                              sx={{ ml: 0, whiteSpace: 'nowrap' }}
+                            />
+                          )}
+                        </Stack>
+                      </Grid>
+                    ))}
+                  </Grid>
+                  <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1.5 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                      联系方式（地址 / 电话 / 邮箱）
+                    </Typography>
+                    <FormControlLabel
+                      control={<Switch size="small" checked={Boolean(style.field_visibility.contact_info)} onChange={() => toggleVisibility('contact_info')} />}
+                      label={style.field_visibility.contact_info ? '启用' : '不启用'}
+                    />
+                  </Stack>
+                </Box>,
+                <FactCheckIcon fontSize="small" />,
+                '单据字段名称',
+                <Chip size="small" label={`已启用 ${enabledMetaCount}/${QUOTE_META_VISIBILITY_KEYS.length}`} />
+              )}
+
+              {sectionCard(
                 <Grid container spacing={1.5}>
                   {QUOTE_COLUMN_FIELDS.map((item) => (
                     <Grid item xs={12} sm={6} key={item.key}>
@@ -1592,81 +1721,113 @@ function QuoteStyle({ onError }) {
                       </Stack>
                     </Grid>
                   ))}
-                </Grid>
-              </Box>
+                </Grid>,
+                <DescriptionIcon fontSize="small" />,
+                '表格列名',
+                <Chip size="small" label={`已启用 ${enabledColumnCount}/${QUOTE_COLUMN_FIELDS.length}`} />
+              )}
             </Stack>
           </Grid>
 
           <Grid item xs={12} md={7}>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-              <Box sx={sectionTitle} />
-              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>实时预览</Typography>
-            </Stack>
-            <Box sx={{ p: { xs: 1, sm: 2.5 }, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
-              <Box sx={{ maxWidth: 720, mx: 'auto', bgcolor: '#ffffff', borderRadius: 1.5, boxShadow: 6, p: { xs: 2, sm: 3 }, color: '#1f2937', fontFamily: previewFont }}>
-                {style.header_text && (
-                  <Box sx={{ textAlign: style.header_alignment, fontSize: 12, color: '#555555', mb: 0.75 }}>
-                    {style.header_text}
+            <Box
+              sx={{
+                position: 'sticky',
+                top: 84,
+                borderRadius: 3,
+                border: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.14)' : '#D8E2F0',
+                bgcolor: isDark ? 'rgba(15,23,42,0.55)' : '#EEF3FA',
+                overflow: 'hidden'
+              }}
+            >
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 2, py: 1.4, bgcolor: isDark ? 'rgba(0,78,154,0.32)' : '#FFFFFF', borderBottom: 1, borderColor: 'divider' }}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: isDark ? 'rgba(0,78,154,0.35)' : 'rgba(0,78,154,0.12)', color: isDark ? '#8FB8E8' : '#004E9A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <RequestQuoteIcon sx={{ fontSize: 18 }} />
                   </Box>
-                )}
-                <Box sx={{ textAlign: style.logo_position, mb: 1 }}>
-                  {style.logo ? (
-                    <img src={style.logo} alt="Logo" style={{ maxWidth: 150, maxHeight: 64, objectFit: 'contain' }} />
-                  ) : (
-                    <Box sx={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #cbd5e1', color: '#94a3b8', fontSize: 12 }}>
-                      LOGO 预览
-                    </Box>
-                  )}
-                </Box>
-                <Typography sx={{ textAlign: style.title_alignment, fontSize: 22, fontWeight: 800, color: style.primary_color, mb: 0.5 }}>
-                  {style.company_name} {currentLabels.quote_title}
-                </Typography>
-                <Stack spacing={0.4} sx={{ fontSize: 12, color: '#475569', textAlign: style.info_alignment, mb: 1.5 }}>
-                  {Boolean(style.field_visibility.quote_no) && <Box>{currentLabels.quote_no}：Q-AC-20260802-R1</Box>}
-                  {Boolean(style.field_visibility.order_no) && <Box>{currentLabels.order_no}：OPP-2026-TEST</Box>}
-                  {Boolean(style.field_visibility.project_name) && <Box>{currentLabels.project_name}：示例项目（测试）</Box>}
-                  {Boolean(style.field_visibility.end_customer) && <Box>{currentLabels.end_customer}：示例最终客户</Box>}
-                  {Boolean(style.field_visibility.contract_customer) && <Box>{currentLabels.contract_customer}：示例合同客户</Box>}
-                  {Boolean(style.field_visibility.contact_info) && (style.company_address || style.company_phone || style.company_email) && (
-                    <Box>
-                      {[style.company_address, style.company_phone, style.company_email].filter(Boolean).join('　|　')}
-                    </Box>
-                  )}
-                  {Boolean(style.field_visibility.quote_date) && (
-                    <Box>{currentLabels.quote_date}：{style.quote_date || new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)}</Box>
-                  )}
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>报价单实时预览</Typography>
                 </Stack>
-                <Typography sx={{ fontWeight: 700, color: style.primary_color, borderBottom: `2px solid ${style.secondary_color}`, pb: 0.5, mb: 1 }}>
-                  {currentLabels.detail_title}
-                </Typography>
-                {visibleColumns.length === 0 ? (
-                  <Box sx={{ py: 2, textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>未启用任何列</Box>
-                ) : (
-                  <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <Box component="thead">
-                      <Box component="tr" sx={{ bgcolor: style.primary_color }}>
-                        {visibleColumns.map((item) => (
-                          <Box component="th" sx={{ ...headerCell, textAlign: numericPreviewKeys.has(item.key) ? 'right' : 'left' }} key={item.key}>{currentLabels[item.key]}</Box>
+                <Stack direction="row" spacing={0.75}>
+                  <Chip size="small" label={style.language === 'en' ? 'English' : '中文'} variant="outlined" />
+                  <Chip size="small" label={style.font_family === 'serif' ? '衬线' : style.font_family === 'mono' ? '等宽' : '无衬线'} variant="outlined" />
+                </Stack>
+              </Stack>
+              <Box sx={{ p: { xs: 1.5, sm: 2.5 } }}>
+                <Box sx={{ maxWidth: 760, mx: 'auto', bgcolor: '#ffffff', borderRadius: 2, boxShadow: isDark ? '0 24px 50px rgba(0,0,0,0.42)' : '0 24px 50px rgba(15,23,42,0.14)', p: { xs: 2, sm: 2.5 }, color: '#1f2937', fontFamily: previewFont, border: '1px solid #D8E2F0' }}>
+                  {style.header_text && (
+                    <Box sx={{ textAlign: style.header_alignment, fontSize: 12, color: '#555555', mb: 0.75 }}>
+                      {style.header_text}
+                    </Box>
+                  )}
+                  <Box sx={{ textAlign: style.logo_position, mb: 0.75 }}>
+                    {style.logo ? (
+                      <img src={style.logo} alt="Logo" style={{ maxWidth: 140, maxHeight: 56, objectFit: 'contain' }} />
+                    ) : (
+                      <Box sx={{ height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #cbd5e1', color: '#94a3b8', fontSize: 12 }}>
+                        LOGO 预览
+                      </Box>
+                    )}
+                  </Box>
+                  <Typography sx={{ textAlign: style.title_alignment, fontSize: 20, fontWeight: 800, color: style.primary_color, mb: 0.5 }}>
+                    {style.company_name} {currentLabels.quote_title}
+                  </Typography>
+                  <Stack spacing={0.35} sx={{ fontSize: 12, color: '#475569', textAlign: style.info_alignment, mb: 1.25 }}>
+                    {Boolean(style.field_visibility.quote_no) && <Box>{currentLabels.quote_no}：{previewQuoteNo}</Box>}
+                    {Boolean(style.field_visibility.order_no) && <Box>{currentLabels.order_no}：OPP-2026-TEST</Box>}
+                    {Boolean(style.field_visibility.project_name) && <Box>{currentLabels.project_name}：示例项目（测试）</Box>}
+                    {Boolean(style.field_visibility.end_customer) && <Box>{currentLabels.end_customer}：示例最终客户</Box>}
+                    {Boolean(style.field_visibility.contract_customer) && <Box>{currentLabels.contract_customer}：示例合同客户</Box>}
+                    {Boolean(style.field_visibility.contact_info) && (style.company_address || style.company_phone || style.company_email) && (
+                      <Box>
+                        {[style.company_address, style.company_phone, style.company_email].filter(Boolean).join('　|　')}
+                      </Box>
+                    )}
+                    {Boolean(style.field_visibility.quote_date) && (
+                      <Box>{currentLabels.quote_date}：{style.quote_date || new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)}</Box>
+                    )}
+                  </Stack>
+                  <Typography sx={{ fontWeight: 700, color: style.primary_color, borderBottom: `2px solid ${style.secondary_color}`, pb: 0.4, mb: 0.75 }}>
+                    {currentLabels.detail_title}
+                  </Typography>
+                  {visibleColumns.length === 0 ? (
+                    <Box sx={{ py: 2, textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>未启用任何列</Box>
+                  ) : (
+                    <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <Box component="thead">
+                        <Box component="tr" sx={{ bgcolor: style.primary_color }}>
+                          {visibleColumns.map((item) => (
+                            <Box component="th" sx={{ ...headerCell, textAlign: numericPreviewKeys.has(item.key) ? 'right' : 'left' }} key={item.key}>{currentLabels[item.key]}</Box>
+                          ))}
+                        </Box>
+                      </Box>
+                      <Box component="tbody">
+                        {sampleRows.map((row, rowIndex) => (
+                          <Box component="tr" key={row.no} sx={{ borderBottom: '1px solid #e2e8f0', bgcolor: rowIndex % 2 ? '#F8FAFC' : '#FFFFFF' }}>
+                            {visibleColumns.map((item) => (
+                              <Box component="td" sx={{ ...cell, textAlign: numericPreviewKeys.has(item.key) ? 'right' : 'left' }} key={item.key}>{rowRenderers[item.key](row)}</Box>
+                            ))}
+                          </Box>
                         ))}
                       </Box>
                     </Box>
-                    <Box component="tbody">
-                      {sampleRows.map((row) => (
-                        <Box component="tr" key={row.no} sx={{ borderBottom: '1px solid #e2e8f0' }}>
-                          {visibleColumns.map((item) => (
-                            <Box component="td" sx={{ ...cell, textAlign: numericPreviewKeys.has(item.key) ? 'right' : 'left' }} key={item.key}>{rowRenderers[item.key](row)}</Box>
-                          ))}
-                        </Box>
-                      ))}
-                    </Box>
+                  )}
+                  <Box sx={{ textAlign: 'right', mt: 1.5, fontWeight: 800, color: style.primary_color }}>
+                    {currentLabels.total}：128,500.50
                   </Box>
-                )}
-                <Box sx={{ textAlign: 'right', mt: 1.5, fontWeight: 800, color: style.primary_color }}>
-                  {currentLabels.total}：128,500.50
+                  {style.footer_text && (
+                    <Box sx={{ textAlign: style.footer_alignment, mt: 0.5, fontSize: 11, color: '#94a3b8' }}>{style.footer_text}</Box>
+                  )}
                 </Box>
-                {style.footer_text && (
-                  <Box sx={{ textAlign: style.footer_alignment, mt: 0.5, fontSize: 11, color: '#94a3b8' }}>{style.footer_text}</Box>
-                )}
+                <Box sx={{ mt: 1.5, px: 1.5, py: 1, borderRadius: 1.5, bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.7)', border: 1, borderColor: 'divider', display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>当前设置概览</Typography>
+                  <Chip size="small" variant="outlined" label={`语言：${style.language === 'en' ? 'English' : '中文'}`} />
+                  <Chip size="small" variant="outlined" label={`字体：${style.font_family === 'serif' ? '衬线' : style.font_family === 'mono' ? '等宽' : '无衬线'}`} />
+                  <Chip size="small" variant="outlined" label={`字段 ${enabledMetaCount}/${QUOTE_META_VISIBILITY_KEYS.length}`} />
+                  <Chip size="small" variant="outlined" label={`列 ${enabledColumnCount}/${QUOTE_COLUMN_FIELDS.length}`} />
+                  <Chip size="small" variant="outlined" label={`标题：${QUOTE_ALIGN_OPTIONS.find((o) => o.value === style.title_alignment)?.label || ''}`} />
+                  <Chip size="small" variant="outlined" label={`页脚：${QUOTE_ALIGN_OPTIONS.find((o) => o.value === style.footer_alignment)?.label || ''}`} />
+                </Box>
               </Box>
             </Box>
           </Grid>
@@ -1676,7 +1837,7 @@ function QuoteStyle({ onError }) {
   );
 }
 
-function SystemManager({ onError }) {
+function SystemManager({ onError, onNotice, onConfirm }) {
   const { updateUser } = useAuth();
   const { setLogo, resetLogo } = useAppLogo();
   const [orderOptions, setOrderOptions] = useState([]);
@@ -1777,8 +1938,7 @@ function SystemManager({ onError }) {
 
   const openDownload = async (path) => {
     try {
-      const url = await downloadUrl(path);
-      window.open(url, '_blank');
+      await downloadFile(path);
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -1789,7 +1949,7 @@ function SystemManager({ onError }) {
       const { data } = await api.put('/settings/backup-schedule', schedule);
       setSchedule(data);
       onError('');
-      window.alert('定时备份配置已保存');
+      onNotice('定时备份配置已保存');
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -1798,12 +1958,12 @@ function SystemManager({ onError }) {
   const restore = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!window.confirm('还原将覆盖当前数据库与附件，确认继续？')) return;
+    if (!await onConfirm('还原将覆盖当前数据库与附件，确认继续？')) return;
     const formData = new FormData();
     formData.append('file', file);
     try {
       await api.post('/settings/restore', formData);
-      window.alert('还原成功');
+      onNotice('还原成功');
       window.location.reload();
     } catch (err) {
       onError(errorMessage(err));
@@ -1811,11 +1971,22 @@ function SystemManager({ onError }) {
   };
 
   const restoreFromList = async (filename) => {
-    if (!window.confirm(`还原将覆盖当前数据库与附件，确认从「${filename}」还原？`)) return;
+    if (!await onConfirm(`还原将覆盖当前数据库与附件，确认从「${filename}」还原？`)) return;
     try {
       await api.post(`/settings/restore/${filename}`);
-      window.alert('还原成功');
+      onNotice('还原成功');
       window.location.reload();
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
+  const deleteBackup = async (filename) => {
+    if (!await onConfirm(`确认删除备份文件「${filename}」？删除后不可恢复。`)) return;
+    try {
+      await api.delete(`/settings/backup/${filename}`);
+      onError('');
+      loadBackups();
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -1835,7 +2006,7 @@ function SystemManager({ onError }) {
       });
       setCorrectionOpen(false);
       setCorrection({ delivered: '', invoiced: '', total_amount: '', target_status: '' });
-      window.alert('数据修正成功');
+      onNotice('数据修正成功');
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -1851,7 +2022,7 @@ function SystemManager({ onError }) {
       await api.post(url, { password });
       setResetType(null);
       setPassword('');
-      window.alert(resetType === 'business' ? '业务数据已重置' : '系统已恢复出厂设置，请重新登录');
+      onNotice(resetType === 'business' ? '业务数据已重置' : '系统已恢复出厂设置，请重新登录');
       if (resetType === 'factory') window.location.href = '/login';
     } catch (err) {
       onError(errorMessage(err));
@@ -1881,7 +2052,7 @@ function SystemManager({ onError }) {
       });
       if (data.user) updateUser(data.user);
       setAccount({ current_password: '', username: '', new_password: '', confirm_password: '' });
-      window.alert('账户信息已更新，请重新登录');
+      onNotice('账户信息已更新，请重新登录');
       window.location.href = '/login';
     } catch (err) {
       onError(errorMessage(err));
@@ -1896,7 +2067,7 @@ function SystemManager({ onError }) {
     try {
       const { data } = await api.put('/settings/field-display-names', fieldLabels);
       setFieldLabels({ ...FIELD_LABEL_DEFAULTS, ...data });
-      window.alert('字段显示名称已保存');
+      onNotice('字段显示名称已保存');
     } catch (err) {
       onError(errorMessage(err));
     } finally {
@@ -1929,7 +2100,7 @@ function SystemManager({ onError }) {
       const { data } = await api.put('/settings/app-logo', { logo: appLogo });
       setAppLogo(data.logo || null);
       setLogo(data.logo || null);
-      window.alert('Logo 已更新，登录页与首页将同步生效');
+      onNotice('Logo 已更新，登录页与首页将同步生效');
     } catch (err) {
       onError(errorMessage(err));
     } finally {
@@ -1944,7 +2115,7 @@ function SystemManager({ onError }) {
       await api.put('/settings/app-logo', { logo: null });
       setAppLogo(null);
       resetLogo();
-      window.alert('已恢复默认 Logo');
+      onNotice('已恢复默认 Logo');
     } catch (err) {
       onError(errorMessage(err));
     } finally {
@@ -2046,13 +2217,13 @@ function SystemManager({ onError }) {
             <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                 <Box sx={{ width: 4, height: 18, borderRadius: 2, bgcolor: 'primary.main' }} />
-                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>已有备份（最近 3 条）</Typography>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>最近 1 条备份</Typography>
               </Stack>
               {backups.length === 0 ? (
                 <Typography variant="caption" color="text.secondary">暂无备份记录</Typography>
               ) : (
                 <Stack spacing={1}>
-                  {backups.slice(0, 3).map((item) => (
+                  {backups.slice(0, 1).map((item) => (
                     <Box
                       key={item.filename}
                       sx={{
@@ -2076,6 +2247,9 @@ function SystemManager({ onError }) {
                       </Box>
                       <IconButton size="small" title="下载" onClick={() => openDownload(item.downloadUrl)}>
                         <DownloadIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" color="error" title="删除" onClick={() => deleteBackup(item.filename)}>
+                        <DeleteIcon fontSize="small" />
                       </IconButton>
                       <Button size="small" variant="outlined" color="error" startIcon={<RestoreIcon />} onClick={() => restoreFromList(item.filename)}>
                         还原

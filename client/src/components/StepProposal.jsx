@@ -31,12 +31,15 @@ import SkipNextIcon from '@mui/icons-material/SkipNext';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import api, { errorMessage } from '../api';
-import { downloadUrl } from '../utils/download';
+import { useConfirm } from './ConfirmDialog';
+import { MATERIAL_TYPE_LABELS } from '../utils/constants';
+import { downloadFile } from '../utils/download';
 import StepWrapper from './StepWrapper';
 
 const EMPTY_SELECTION = { material_no: '', description: '', material_type: 'standard', qty: '', unit: 'pcs', remark: '' };
 
 export default function StepProposal({ order, readOnly, onChanged, onAdvance }) {
+  const confirm = useConfirm();
   const versions = order.versions || [];
   const [activeVersionId, setActiveVersionId] = useState(null);
   const [newVersion, setNewVersion] = useState({ version_label: '', remark: '' });
@@ -80,7 +83,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
   };
 
   const deleteVersion = async (versionId) => {
-    if (!window.confirm('确认删除该方案版本？关联的方案文件与选型明细将一并删除。')) return;
+    if (!(await confirm('确认删除该方案版本？关联的方案文件与选型明细将一并删除。'))) return;
     setError('');
     try {
       await api.delete(`/orders/${order.id}/versions/${versionId}`);
@@ -262,8 +265,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
 
   const openDownload = async (path) => {
     try {
-      const url = await downloadUrl(path);
-      window.open(url, '_blank');
+      await downloadFile(path);
     } catch {
       setError('下载失败，请重试');
     }
@@ -389,8 +391,8 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
                       disabled={readOnly}
                       onChange={(e) => setRows((prev) => prev.map((r, i) => (i === index ? { ...r, material_type: e.target.value } : r)))}
                     >
-                      <MenuItem value="standard">标准</MenuItem>
-                      <MenuItem value="non_standard">非标</MenuItem>
+                      <MenuItem value="standard">{MATERIAL_TYPE_LABELS.standard}</MenuItem>
+                      <MenuItem value="non_standard">{MATERIAL_TYPE_LABELS.non_standard}</MenuItem>
                     </Select>
                   </TableCell>
                   <TableCell>

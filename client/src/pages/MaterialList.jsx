@@ -36,6 +36,7 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import PriceCheckIcon from '@mui/icons-material/PriceCheck';
 import InboxIcon from '@mui/icons-material/Inbox';
 import api, { errorMessage } from '../api';
+import { useConfirm } from '../components/ConfirmDialog';
 import { fmtMoney } from '../utils/helpers';
 
 const TABS = [
@@ -47,6 +48,7 @@ const TABS = [
 const PAGED_TABS = ['material', 'guide_price'];
 
 export default function MaterialList() {
+  const confirm = useConfirm();
   const [tab, setTab] = useState('end_customer');
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -94,7 +96,13 @@ export default function MaterialList() {
         if (requestId !== requestIdRef.current) return;
         setItems(res.data.items || []);
         setTotal((res.data.items || []).length);
-        setEndCustomers([]);
+        if (nextTab === 'end_customer') {
+          const ecRes = await api.get('/end-customers');
+          if (requestId !== requestIdRef.current) return;
+          setEndCustomers(ecRes.data.items || []);
+        } else {
+          setEndCustomers([]);
+        }
       }
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
@@ -111,7 +119,7 @@ export default function MaterialList() {
   }, [tab, debouncedSearch]);
 
   const tabDef = {
-    end_customer: { url: 'end-customers', fields: ['customer_name', 'short_name', 'contact_person', 'phone', 'email', 'remark'], labels: { customer_name: '客户名称', short_name: '客户简称', contact_person: '联系人', phone: '电话', email: '邮箱', remark: '备注' } },
+    end_customer: { url: 'end-customers', fields: ['customer_name', 'short_name', 'parent_customer_id', 'contact_person', 'phone', 'email', 'remark'], labels: { customer_name: '客户名称', short_name: '客户简称', parent_customer_id: '所属集团', contact_person: '联系人', phone: '电话', email: '邮箱', remark: '备注' } },
     contract_customer: { url: 'contract-customers', fields: ['customer_name', 'short_name', 'contact_person', 'phone', 'email', 'remark'], labels: { customer_name: '客户名称', short_name: '客户简称', contact_person: '联系人', phone: '电话', email: '邮箱', remark: '备注' } },
     material: {
       url: 'materials',
@@ -145,7 +153,7 @@ export default function MaterialList() {
   };
 
   const remove = async (row) => {
-    if (!window.confirm(`确认删除「${row.customer_name || row.material_no || row.id}」？`)) return;
+    if (!(await confirm(`确认删除「${row.customer_name || row.material_no || row.id}」？`))) return;
     try {
       await api.delete(`/${tabDef[tab].url}/${row.id}`);
       loadData(tab, page);
@@ -206,6 +214,10 @@ export default function MaterialList() {
 
   const fieldValue = (row, field) => {
     if (field === 'end_customer_id') return row.end_customer_name || row.end_customer_id || '';
+    if (field === 'parent_customer_id') {
+      const parent = endCustomers.find((customer) => customer.id === Number(row.parent_customer_id));
+      return parent ? parent.customer_name : row.parent_customer_id ? `#${row.parent_customer_id}` : '-';
+    }
     if (['unit_price_ex_vat', 'guide_unit_price_ex_vat'].includes(field)) return fmtMoney(row[field]);
     return row[field] || '-';
   };
@@ -293,7 +305,7 @@ export default function MaterialList() {
                   <TableRow key={row.id} hover sx={{ transition: 'background-color 0.15s ease' }}>
                     {tabDef[tab].fields.map((field, index) => {
                       const nowrapFields = {
-                        end_customer: ['customer_name', 'phone', 'email'],
+                        end_customer: ['customer_name', 'parent_customer_id', 'phone', 'email'],
                         contract_customer: ['customer_name', 'phone', 'email'],
                         material: ['material_no', 'unit_price_ex_vat', 'valid_from', 'valid_to'],
                         guide_price: ['material_no', 'guide_unit_price_ex_vat']
@@ -441,6 +453,24 @@ export default function MaterialList() {
                         {customer.customer_name}
                       </MenuItem>
                     ))}
+                  </TextField>
+                ) : field === 'parent_customer_id' ? (
+                  <TextField
+                    select
+                    label="所属集团（框架归属）"
+                    fullWidth
+                    value={editor?.parent_customer_id || ''}
+                    onChange={(e) => setEditor((prev) => ({ ...prev, parent_customer_id: e.target.value === '' ? null : Number(e.target.value) }))}
+                    helperText="选择集团后，子客户可自动继承集团框架协议价格"
+                  >
+                    <MenuItem value="">独立客户（不使用集团框架）</MenuItem>
+                    {endCustomers
+                      .filter((customer) => !editor?.id || customer.id !== editor.id)
+                      .map((customer) => (
+                        <MenuItem key={customer.id} value={customer.id}>
+                          {customer.customer_name}
+                        </MenuItem>
+                      ))}
                   </TextField>
                 ) : (
                   <TextField

@@ -23,7 +23,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { PAYMENT_TERMS } from '../utils/constants';
 import { fmtMoney } from '../utils/helpers';
-import { downloadUrl } from '../utils/download';
+import { downloadFile } from '../utils/download';
 import { useFieldLabels } from '../utils/fieldLabels';
 import StepWrapper from './StepWrapper';
 
@@ -142,8 +142,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
 
   const openDownload = async (path) => {
     try {
-      const url = await downloadUrl(path);
-      window.open(url, '_blank');
+      await downloadFile(path);
     } catch {
       setError('下载失败，请重试');
     }

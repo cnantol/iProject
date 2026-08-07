@@ -30,6 +30,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createApp() {
   const app = express();
+  // 反向代理（Nginx/云负载均衡）后取真实客户端 IP，避免所有用户共享网关 IP 导致登录锁
+  const trustProxy = process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) : 1;
+  app.set('trust proxy', trustProxy);
   app.use(express.json({ limit: '10mb' }));
 
   app.use('/api/auth', authRoutes);
@@ -75,8 +78,12 @@ export function createApp() {
   app.use((req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     const indexFile = path.join(distDir, 'index.html');
-    if (fs.existsSync(indexFile)) return res.sendFile(indexFile);
-    return res.status(503).json({ error: '前端尚未构建，请先执行 pnpm --filter iproject-client build' });
+    if (!fs.existsSync(indexFile)) return res.status(503).json({ error: '前端尚未构建，请先执行 pnpm --filter iproject-client build' });
+    if (req.path.includes('assets/') || path.extname(req.path)) {
+      return res.status(404).end();
+    }
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    return res.sendFile(indexFile);
   });
 
   // 404 for unmatched API routes

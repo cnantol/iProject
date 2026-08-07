@@ -13,6 +13,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import Grid from '@mui/material/Grid';
 import InputLabel from '@mui/material/InputLabel';
+import InputAdornment from '@mui/material/InputAdornment';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
@@ -23,9 +24,11 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import CheckIcon from '@mui/icons-material/Check';
+import PaymentsIcon from '@mui/icons-material/Payments';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
-import { fmtDateTime } from '../utils/helpers';
+import { fmtDateTime, fmtMoney } from '../utils/helpers';
 import { useFieldLabels } from '../utils/fieldLabels';
 
 export default function CommissionPage() {
@@ -42,6 +45,7 @@ export default function CommissionPage() {
   const [manualTarget, setManualTarget] = useState(null);
   const [manualAmount, setManualAmount] = useState('');
   const [manualRemark, setManualRemark] = useState('');
+  const [manualError, setManualError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,19 +109,20 @@ export default function CommissionPage() {
   };
 
   const manual = async () => {
-    if (!manualAmount || Number(manualAmount) <= 0) {
-      setError('补录金额必须大于 0');
+    if (manualAmount.trim() === '' || !Number.isFinite(Number(manualAmount)) || Number(manualAmount) < 0) {
+      setManualError('补录金额不能小于 0');
       return;
     }
-    setError('');
+    setManualError('');
     try {
       await api.post('/commission/manual', { order_id: manualTarget.id, amount: Number(manualAmount), remark: manualRemark });
       setManualTarget(null);
       setManualAmount('');
       setManualRemark('');
+      setManualError('');
       load();
     } catch (err) {
-      setError(errorMessage(err));
+      setManualError(errorMessage(err));
     }
   };
 
@@ -298,18 +303,47 @@ export default function CommissionPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={Boolean(manualTarget)} onClose={() => setManualTarget(null)}>
-        <DialogTitle>人工补录佣金</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1, minWidth: 360 }}>
-            <TextField label={t('order_id')} value={manualTarget?.order_id || ''} disabled />
-            <TextField label="佣金金额（必填，>0）" type="number" value={manualAmount} onChange={(e) => setManualAmount(e.target.value)} fullWidth />
-            <TextField label="补录备注" multiline minRows={2} value={manualRemark} onChange={(e) => setManualRemark(e.target.value)} fullWidth />
+      <Dialog open={Boolean(manualTarget)} onClose={() => { setManualTarget(null); setManualError(''); }} maxWidth="sm" fullWidth>
+        <Box sx={{ height: 4, bgcolor: 'warning.main' }} />
+        <DialogTitle sx={{ pb: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={1.2}>
+            <Box sx={{ width: 38, height: 38, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(237,108,2,0.12)', color: 'warning.main' }}>
+              <PaymentsIcon fontSize="small" />
+            </Box>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.25 }}>人工补录佣金</Typography>
+              <Typography variant="caption" color="text.secondary">仅用于特殊业务场景，提交后该机会将进入闭环</Typography>
+            </Box>
+          </Stack>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Stack spacing={2}>
+            {manualError && <Alert severity="error">{manualError}</Alert>}
+            <Box sx={{ p: 1.6, borderRadius: 2, bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider' }}>
+              <Stack spacing={0.6}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{manualTarget?.order_id || '-'}</Typography>
+                <Typography variant="body2" color="text.secondary">项目：{manualTarget?.project_name || '-'}</Typography>
+                <Typography variant="body2" color="text.secondary">最终客户：{manualTarget?.end_customer_name || '-'}</Typography>
+                {Number(manualTarget?.total_amount) > 0 && (
+                  <Typography variant="body2" color="text.secondary">订单金额：¥ {fmtMoney(manualTarget.total_amount)}</Typography>
+                )}
+              </Stack>
+            </Box>
+            <TextField
+              label="佣金金额（元）"
+              type="number"
+              value={manualAmount}
+              onChange={(e) => setManualAmount(e.target.value)}
+              fullWidth
+              helperText="允许为 0，保存后该机会将关闭"
+              InputProps={{ startAdornment: <InputAdornment position="start">¥</InputAdornment> }}
+            />
+            <TextField label="补录备注" multiline minRows={2} value={manualRemark} onChange={(e) => setManualRemark(e.target.value)} fullWidth helperText="选填，建议记录补录原因" />
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setManualTarget(null)}>取消</Button>
-          <Button color="warning" onClick={manual}>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button variant="outlined" onClick={() => { setManualTarget(null); setManualError(''); }}>取消</Button>
+          <Button variant="contained" color="warning" startIcon={<CheckIcon />} onClick={manual}>
             确认补录
           </Button>
         </DialogActions>

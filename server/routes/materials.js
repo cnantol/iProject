@@ -5,29 +5,65 @@ import { nowUtc, todayLocal, badRequest, notFound, pick, isMoney, isValidDate } 
 const router = Router();
 const FIELDS = ['end_customer_id', 'material_no', 'description', 'unit_price_ex_vat', 'unit', 'agreement_no', 'valid_from', 'valid_to', 'remark'];
 
+function frameworkCustomerIds(customerId) {
+  const db = getDb();
+  const ids = [];
+  const seen = new Set();
+  let current = Number(customerId);
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    ids.push(current);
+    const row = db.prepare('SELECT parent_customer_id FROM end_customers WHERE id = ?').get(current);
+    current = row && row.parent_customer_id ? Number(row.parent_customer_id) : null;
+  }
+  return ids;
+}
+
 function hasFrameworkForCustomer(customerId) {
   if (!customerId) return false;
   const today = todayLocal();
+  const ids = frameworkCustomerIds(customerId);
+  if (ids.length === 0) return false;
+  const placeholders = ids.map(() => '?').join(',');
   const row = getDb()
     .prepare(
       `SELECT 1 AS hit FROM materials
-       WHERE end_customer_id = ? AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)
+       WHERE end_customer_id IN (${placeholders}) AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)
        LIMIT 1`
     )
-    .get(Number(customerId), today, today);
+    .get(...ids, today, today);
   return Boolean(row);
 }
 
 function latestFramework(customerId, materialNo) {
   const today = todayLocal();
-  return getDb()
-    .prepare(
-      `SELECT * FROM materials
-       WHERE end_customer_id = ? AND material_no = ?
-         AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)
-       ORDER BY valid_from DESC, id DESC LIMIT 1`
-    )
-    .get(Number(customerId), String(materialNo).trim(), today, today);
+  const stmt = getDb().prepare(
+    `SELECT * FROM materials
+     WHERE end_customer_id = ? AND material_no = ?
+       AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)
+     ORDER BY valid_from DESC, id DESC LIMIT 1`
+  );
+  for (const id of frameworkCustomerIds(customerId)) {
+    const row = stmt.get(id, String(materialNo).trim(), today, today);
+    if (row) return row;
+  }
+  return null;
+}
+
+function frameworkSourceCustomer(customerId) {
+  if (!customerId) return null;
+  const today = todayLocal();
+  const stmt = getDb().prepare(
+    `SELECT 1 AS hit FROM materials
+     WHERE end_customer_id = ? AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)
+     LIMIT 1`
+  );
+  for (const id of frameworkCustomerIds(customerId)) {
+    if (stmt.get(id, today, today)) {
+      return getDb().prepare('SELECT id, customer_name FROM end_customers WHERE id = ?').get(id) || null;
+    }
+  }
+  return null;
 }
 
 router.get('/', (req, res) => {
@@ -202,4 +238,4 @@ router.delete('/:id', (req, res) => {
 });
 
 export default router;
-export { hasFrameworkForCustomer };
+export { hasFrameworkForCustomer, frameworkCustomerIds, latestFramework, frameworkSourceCustomer };

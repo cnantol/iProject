@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import PDFDocument from 'pdfkit';
 import xlsx from 'xlsx';
-import { getDb, getUploadDir, getDataDir } from '../db/init.js';
+import { getDb, getDataDir } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
+import { authenticateDownload } from '../middleware/auth.js';
+import { frameworkCustomerIds } from './materials.js';
 import {
   nowUtc,
   todayLocal,
@@ -32,26 +34,19 @@ function resolvePrice(order, materialNo, materialType) {
   if (materialType === 'non_standard') {
     return { price_source: 'manual', unit_price_ex_vat: null, description: null };
   }
-  const hasFramework = Number(order.has_framework) === 1;
-  if (hasFramework) {
-    const framework = db
-      .prepare(
-        `SELECT * FROM materials WHERE end_customer_id = ? AND material_no = ?
-         AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)
-         ORDER BY valid_from DESC, id DESC LIMIT 1`
-      )
-      .get(order.end_customer_id, String(materialNo).trim(), todayLocal(), todayLocal());
+  const frameworkQuery = db.prepare(
+    `SELECT * FROM materials WHERE end_customer_id = ? AND material_no = ?
+     AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)
+     ORDER BY valid_from DESC, id DESC LIMIT 1`
+  );
+  for (const customerId of frameworkCustomerIds(order.end_customer_id)) {
+    const framework = frameworkQuery.get(customerId, String(materialNo).trim(), todayLocal(), todayLocal());
     if (framework) {
       const guideDescription = framework.description
         ? framework.description
         : (db.prepare('SELECT description FROM guide_prices WHERE material_no = ?').get(String(materialNo).trim()) || {}).description || null;
       return { price_source: 'framework', unit_price_ex_vat: framework.unit_price_ex_vat, description: guideDescription };
     }
-    const guide = db.prepare('SELECT * FROM guide_prices WHERE material_no = ?').get(String(materialNo).trim());
-    if (guide) {
-      return { price_source: 'guide_price', unit_price_ex_vat: guide.guide_unit_price_ex_vat, description: guide.description };
-    }
-    return { price_source: 'manual', unit_price_ex_vat: null, description: null };
   }
   const guide = db.prepare('SELECT * FROM guide_prices WHERE material_no = ?').get(String(materialNo).trim());
   if (guide) {
@@ -65,74 +60,6 @@ function recomputeTotal(db, roundId) {
   const total = round2(row.total);
   db.prepare('UPDATE quotations SET total_amount = ? WHERE id = ?').run(total, roundId);
   return total;
-}
-
-function copySelectionsToRound(db, order, roundId) {
-  const version = db
-    .prepare('SELECT * FROM proposal_versions WHERE order_id = ? ORDER BY sort_order DESC, id DESC LIMIT 1')
-    .get(order.id);
-  if (!version) return;
-  const selections = db.prepare('SELECT * FROM proposal_selections WHERE proposal_version_id = ? ORDER BY sort_order, id').all(version.id);
-  const insert = db.prepare(
-    `INSERT INTO quotation_items (quotation_id, material_no, description, material_type, price_source, unit_price_ex_vat,
-      pay_percent, final_unit_price, qty, line_amount, unit, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-  );
-  const tx = db.transaction((rows) => {
-    for (const selection of rows) {
-      const materialType = selection.material_type || 'standard';
-      const price = resolvePrice(order, selection.material_no || '', materialType);
-      const unitPrice = price.unit_price_ex_vat;
-      const payPercent = 100;
-      const finalPrice = price.price_source === 'guide_price' ? round4((Number(unitPrice) * payPercent) / 100) : unitPrice;
-      const lineAmount = finalPrice !== null && finalPrice !== undefined && selection.qty ? round2(finalPrice * Number(selection.qty)) : null;
-      insert.run(
-        roundId,
-        selection.material_no,
-        price.description ?? selection.description ?? null,
-        materialType,
-        price.price_source,
-        unitPrice,
-        payPercent,
-        finalPrice,
-        Number(selection.qty),
-        lineAmount,
-        selection.unit || 'pcs',
-        selection.remark ?? null
-      );
-    }
-  });
-  tx(selections);
-}
-
-function copyPreviousRound(db, orderId, roundId) {
-  const previous = db
-    .prepare('SELECT * FROM quotations WHERE order_id = ? ORDER BY round_no DESC LIMIT 1')
-    .get(orderId);
-  if (!previous) return;
-  const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id').all(previous.id);
-  const insert = db.prepare(
-    `INSERT INTO quotation_items (quotation_id, material_no, description, material_type, price_source, unit_price_ex_vat,
-      pay_percent, final_unit_price, qty, line_amount, unit, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-  );
-  const tx = db.transaction((rows) => {
-    for (const item of rows) {
-      insert.run(
-        roundId,
-        item.material_no,
-        item.description,
-        item.material_type,
-        item.price_source,
-        item.unit_price_ex_vat,
-        item.pay_percent,
-        item.final_unit_price,
-        item.qty,
-        item.line_amount,
-        item.unit,
-        item.remark
-      );
-    }
-  });
-  tx(items);
 }
 
 function createRound(db, order, body) {
@@ -151,18 +78,12 @@ function createRound(db, order, body) {
       nowUtc()
     );
   const roundId = info.lastInsertRowid;
-  const count = db.prepare('SELECT COUNT(*) AS c FROM quotations WHERE order_id = ?').get(order.id).c;
-  if (count === 1) {
-    if (Number(order.proposal_skipped) !== 1) copySelectionsToRound(db, order, roundId);
-  } else {
-    copyPreviousRound(db, order.id, roundId);
-  }
   recomputeTotal(db, roundId);
   return roundId;
 }
 
-function findCjkFont() {
-  const candidates = [
+function findCjkFont(family = 'sans') {
+  const sans = [
     process.env.CJK_FONT_PATH,
     path.join(process.cwd(), 'assets', 'fonts', 'NotoSansCJK-Regular.ttc'),
     '/app/assets/fonts/NotoSansCJK-Regular.ttc',
@@ -171,16 +92,62 @@ function findCjkFont() {
     '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
     '/System/Library/Fonts/PingFang.ttc',
     '/System/Library/Fonts/Hiragino Sans GB.ttc',
+    '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc',
+    '/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc',
     '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
     '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc',
     '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
     '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
     '/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc'
   ].filter(Boolean);
+  const serif = [
+    process.env.CJK_SERIF_FONT_PATH,
+    path.join(process.cwd(), 'assets', 'fonts', 'NotoSerifCJK-Regular.ttc'),
+    '/app/assets/fonts/NotoSerifCJK-Regular.ttc',
+    '/System/Library/Fonts/Supplemental/Songti.ttc',
+    '/System/Library/Fonts/Supplemental/STSong.ttf',
+    '/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc',
+    '/usr/share/fonts/noto-cjk/NotoSerifCJK-Regular.ttc'
+  ].filter(Boolean);
+  const mono = [
+    process.env.CJK_MONO_FONT_PATH,
+    path.join(process.cwd(), 'assets', 'fonts', 'NotoSansMonoCJK-Regular.ttc'),
+    '/app/assets/fonts/NotoSansMonoCJK-Regular.ttc'
+  ].filter(Boolean);
+  const candidates = family === 'serif' ? serif : family === 'mono' ? mono : sans;
   for (const file of candidates) {
     if (fs.existsSync(file)) return file;
   }
   return null;
+}
+
+function buildQuoteNo(style, quoteShort, datePart, round, order) {
+  const template = String(style.quote_no_template || '').trim();
+  const auto = quoteShort ? `Q-${quoteShort}-${datePart}-R${round.round_no}` : `Q-${datePart}-R${round.round_no}`;
+  if (!template) return auto;
+  const values = {
+    customer: quoteShort || '',
+    date: datePart,
+    round: `R${round.round_no}`,
+    order: order.order_id || ''
+  };
+  return template.replace(/\{(customer|date|round|order)\}/g, (_, key) => values[key]).trim();
+}
+
+function resolveQuoteNo(db, order, round, style, quoteShort, datePart) {
+  const base = buildQuoteNo(style, quoteShort, datePart, round, order);
+  if (!round || !round.id) return base;
+  let quoteNo = base;
+  let seq = 0;
+  while (db.prepare('SELECT id FROM quotations WHERE quote_no = ? AND id <> ? LIMIT 1').get(quoteNo, round.id)) {
+    seq += 1;
+    quoteNo = `${base}-${seq === 1 ? order.order_id : seq}`;
+  }
+  const row = db.prepare('SELECT quote_no FROM quotations WHERE id = ?').get(round.id);
+  if (!row || row.quote_no !== quoteNo) {
+    db.prepare('UPDATE quotations SET quote_no = ?, updated_at = ? WHERE id = ?').run(quoteNo, nowUtc(), round.id);
+  }
+  return quoteNo;
 }
 
 function buildQuotationPdf(order, round, items, customerNames, styleOverride = null) {
@@ -202,10 +169,11 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
   const show = (key) => visibility[key] !== 0 && visibility[key] !== false;
   const quoteShort = customerNames.endShort || customerNames.contractShort || null;
   const quoteDatePart = todayLocal().replace(/-/g, '');
-  const quoteNo = quoteShort ? `Q-${quoteShort}-${quoteDatePart}-R${round.round_no}` : `Q-${quoteDatePart}-R${round.round_no}`;
-  const fontFile = findCjkFont();
+  const quoteNo = resolveQuoteNo(getDb(), order, round, style, quoteShort, quoteDatePart);
+  const fontFile = findCjkFont(style.font_family) || findCjkFont('sans');
   if (fontFile) doc.registerFont('cjk', fontFile);
-  const font = (bold = false) => (fontFile ? (bold ? 'cjk' : 'cjk') : 'Helvetica');
+  const latinFallback = style.font_family === 'serif' ? 'Times-Roman' : style.font_family === 'mono' ? 'Courier' : 'Helvetica';
+  const font = (bold = false) => (fontFile ? 'cjk' : bold ? 'Helvetica-Bold' : latinFallback);
   const fitFontSize = (text, maxWidth, maxSize = 9, minSize = 6.5) => {
     let size = maxSize;
     doc.fontSize(size);
@@ -270,31 +238,32 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
   });
   const numericKeys = new Set(['unit_price', 'qty', 'line_amount']);
   let x = 48;
-  if (columns.length === 0) {
-    doc.font(font()).fontSize(10).fillColor('#888888').text('未启用任何列', { align: infoAlign });
-  } else {
+  const drawTableHeader = (topY) => {
     doc.font(font(true)).fontSize(9).fillColor('#ffffff');
-    doc.rect(48, tableTop, 499, 20).fill(style.primary_color);
+    doc.rect(48, topY, 499, 20).fill(style.primary_color);
     doc.fillColor('#ffffff');
+    let hx = 48;
     for (const col of columns) {
       const headerSize = fitFontSize(col.label, col.width - 8, 9, 6.5);
       doc.fontSize(headerSize);
-      doc.text(col.label, x + 4, tableTop + 6, { width: col.width - 8, align: numericKeys.has(col.key) ? 'right' : 'left', lineBreak: false });
-      x += col.width;
+      doc.text(col.label, hx + 4, topY + 6, { width: col.width - 8, align: numericKeys.has(col.key) ? 'right' : 'left', lineBreak: false });
+      hx += col.width;
     }
+    doc.font(font()).fillColor('#000000');
+    return topY + 24;
+  };
+  if (columns.length === 0) {
+    doc.font(font()).fontSize(10).fillColor('#888888').text('未启用任何列', { align: infoAlign });
+  } else {
+    drawTableHeader(tableTop);
   }
   doc.font(font()).fillColor('#000000');
-  let y = tableTop + 24;
+  let y = columns.length > 0 ? tableTop + 24 : tableTop;
   for (const item of items) {
     if (columns.length === 0) break;
-    if (y > 760) {
-      doc.addPage();
-      y = 48;
-    }
-    x = 48;
     const valueMap = {
       material_no: item.material_no || '',
-      description: (item.description || '').slice(0, 34),
+      description: item.description || '',
       type: item.material_type === 'non_standard' ? '非标' : '标准',
       price_source: { framework: '协议价', guide_price: '指导价', manual: '手工' }[item.price_source] || item.price_source || '',
       unit_price: item.unit_price_ex_vat == null ? '' : Number(item.unit_price_ex_vat).toFixed(2),
@@ -302,13 +271,30 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
       line_amount: item.line_amount == null ? '' : Number(item.line_amount).toFixed(2)
     };
     const values = columns.map((col) => valueMap[col.key]);
+    const descIndex = columns.findIndex((col) => col.key === 'description');
+    let rowHeight = 22;
+    if (descIndex >= 0 && String(values[descIndex] || '').trim()) {
+      doc.font(font()).fontSize(9);
+      rowHeight = Math.max(22, Math.ceil(doc.heightOfString(String(values[descIndex]), { width: columns[descIndex].width - 8 }) / 12) * 12 + 6);
+    }
+    if (y + rowHeight > 760) {
+      doc.addPage();
+      y = drawTableHeader(48);
+    }
+    x = 48;
+    doc.font(font()).fontSize(9).fillColor('#000000');
     values.forEach((value, idx) => {
-      const cellSize = fitFontSize(value, columns[idx].width - 8, 9, 6.5);
-      doc.fontSize(cellSize);
-      doc.text(String(value), x + 4, y + 2, { width: columns[idx].width - 8, align: numericKeys.has(columns[idx].key) ? 'right' : 'left', lineBreak: false });
+      if (idx !== descIndex) {
+        const cellSize = fitFontSize(value, columns[idx].width - 8, 9, 6.5);
+        doc.fontSize(cellSize);
+      } else {
+        doc.fontSize(9);
+      }
+      doc.text(String(value), x + 4, y + 2, { width: columns[idx].width - 8, align: numericKeys.has(columns[idx].key) ? 'right' : 'left', lineBreak: true });
       x += columns[idx].width;
     });
-    y += 22;
+    doc.y = y + rowHeight;
+    y = doc.y;
   }
   doc.moveDown(1);
   doc.font(font(true)).fontSize(11).fillColor(style.primary_color).text(`${labels.total || '合计（未税）'}：${round.total_amount == null ? '0.00' : Number(round.total_amount).toFixed(2)}`, { align: 'right' });
@@ -359,7 +345,7 @@ router.post('/:orderId/quotations', (req, res) => {
   return res.status(201).json({ ...round, items });
 });
 
-router.get('/:orderId/quotations/:roundId/pdf', (req, res) => {
+router.get('/:orderId/quotations/:roundId/pdf', authenticateDownload, (req, res) => {
   const db = getDb();
   const order = loadOrder(db, req.params.orderId);
   if (!order) return notFound(res);
@@ -384,17 +370,8 @@ router.post('/:orderId/quotations/:roundId/pdf', (req, res) => {
   const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id').all(round.id);
   const ec = db.prepare('SELECT customer_name, short_name FROM end_customers WHERE id = ?').get(order.end_customer_id);
   const cc = db.prepare('SELECT customer_name, short_name FROM contract_customers WHERE id = ?').get(order.contract_customer_id);
-  const doc = buildQuotationPdf(order, round, items, { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '', endShort: ec?.short_name || null, contractShort: cc?.short_name || null });
-  const uploads = getUploadDir();
-  fs.mkdirSync(uploads, { recursive: true });
-  res.setHeader('Cache-Control', 'no-store');
   const filename = `quotation-${order.order_id}-R${round.round_no}.pdf`;
-  const filePath = path.join(uploads, filename);
-  const stream = fs.createWriteStream(filePath);
-  doc.pipe(stream);
-  stream.on('finish', () => {
-    return res.json({ url: `/api/orders/${order.id}/quotations/${round.id}/pdf`, filename });
-  });
+  return res.json({ url: `/api/orders/${order.id}/quotations/${round.id}/pdf`, filename });
 });
 
 function validateItemData(data) {
@@ -596,6 +573,38 @@ function cell(row, idx) {
   return value === undefined ? null : value;
 }
 
+function insertBulkItems(db, order, roundId, materialNos) {
+  const insert = db.prepare(
+    `INSERT INTO quotation_items (quotation_id, material_no, description, material_type, price_source, unit_price_ex_vat,
+      pay_percent, final_unit_price, qty, line_amount, unit, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  );
+  const created = [];
+  const tx = db.transaction((nos) => {
+    for (const materialNo of nos) {
+      const price = resolvePrice(order, materialNo, 'standard');
+      const finalPrice = price.unit_price_ex_vat == null ? null : round4(Number(price.unit_price_ex_vat));
+      const lineAmount = finalPrice == null ? null : round2(finalPrice * 1);
+      const info = insert.run(
+        roundId,
+        materialNo,
+        price.description,
+        'standard',
+        price.price_source,
+        price.unit_price_ex_vat,
+        100,
+        finalPrice,
+        1,
+        lineAmount,
+        'pcs',
+        null
+      );
+      created.push({ id: info.lastInsertRowid, material_no: materialNo, price_source: price.price_source, unit_price_ex_vat: price.unit_price_ex_vat, description: price.description });
+    }
+  });
+  tx(materialNos);
+  return created;
+}
+
 router.post('/:orderId/quotations/:roundId/items/import', upload.single('file'), (req, res) => {
   if (!req.file) return badRequest(res, '请上传 Excel 文件');
   const db = getDb();
@@ -615,7 +624,7 @@ router.post('/:orderId/quotations/:roundId/items/import', upload.single('file'),
   }
   let rows;
   try {
-    const workbook = xlsx.readFile(req.file.path);
+    const workbook = xlsx.read(fs.readFileSync(req.file.path), { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
   } catch {
@@ -626,77 +635,24 @@ router.post('/:orderId/quotations/:roundId/items/import', upload.single('file'),
   if (!rows || rows.length < 2) return badRequest(res, 'Excel 无有效数据');
 
   const headers = rows[0] || [];
-  const idx = {
-    material_no: headerIndex(headers, '物料号'),
-    description: headerIndex(headers, '物料描述'),
-    material_type: headerIndex(headers, '物料类型'),
-    price_source: headerIndex(headers, '价格来源'),
-    unit_price: headerIndex(headers, '未税单价'),
-    pay_percent: headerIndex(headers, '实付比例'),
-    qty: headerIndex(headers, '数量'),
-    unit: headerIndex(headers, '单位'),
-    remark: headerIndex(headers, '备注')
-  };
-  if (idx.material_no < 0 || idx.qty < 0) {
-    return badRequest(res, 'Excel 缺少必填列（物料号/数量）');
-  }
-
-  const sourceMap = { 框架协议价: 'framework', 指导价: 'guide_price', 手工: 'manual', 手工录入: 'manual' };
-  const typeMap = { 标准: 'standard', 非标: 'non_standard' };
-  let success = 0;
+  const materialIdx = headerIndex(headers, '物料号', 'material_no', 'material no');
+  const dataStart = materialIdx >= 0 ? 1 : 0;
+  const materialCol = materialIdx >= 0 ? materialIdx : 0;
+  const materialNos = [];
   const failures = [];
-  const insert = db.prepare(
-    `INSERT INTO quotation_items (quotation_id, material_no, description, material_type, price_source, unit_price_ex_vat,
-      pay_percent, final_unit_price, qty, line_amount, unit, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-  );
-  const tx = db.transaction((dataRows) => {
-    for (let i = 1; i < dataRows.length; i++) {
-      const row = dataRows[i];
-      const rowNumber = i + 1;
-      if (row.every((value) => value === null || value === undefined || value === '')) continue;
-      const materialNo = cell(row, idx.material_no);
-      const qty = Number(cell(row, idx.qty));
-      if (materialNo === null || String(materialNo).trim() === '' || !isQty(qty)) {
-        failures.push({ row: rowNumber, reason: '物料号或数量无效' });
-        continue;
-      }
-      const materialType = typeMap[String(cell(row, idx.material_type) || '').trim()] || 'standard';
-      const priceSource = sourceMap[String(cell(row, idx.price_source) || '').trim()] || 'manual';
-      const unitPrice = Number(cell(row, idx.unit_price));
-      if (!isMoney(unitPrice)) {
-        failures.push({ row: rowNumber, reason: '未税单价必须大于 0' });
-        continue;
-      }
-      const payPercent = priceSource === 'guide_price' ? Number(cell(row, idx.pay_percent) ?? 100) : 100;
-      if (!isPct(payPercent)) {
-        failures.push({ row: rowNumber, reason: '实付比例必须大于 0 且不超过 100' });
-        continue;
-      }
-      let description = cell(row, idx.description);
-      if (materialType === 'standard' && (description === null || String(description).trim() === '')) {
-        const guide = db.prepare('SELECT description FROM guide_prices WHERE material_no = ?').get(String(materialNo).trim());
-        description = guide ? guide.description : null;
-      }
-      const finalPrice = priceSource === 'guide_price' ? round4((unitPrice * payPercent) / 100) : round4(unitPrice);
-      const lineAmount = round2(finalPrice * qty);
-      insert.run(
-        round.id,
-        String(materialNo).trim(),
-        description == null ? null : String(description),
-        materialType,
-        priceSource,
-        unitPrice,
-        payPercent,
-        finalPrice,
-        qty,
-        lineAmount,
-        cell(row, idx.unit) ? String(cell(row, idx.unit)) : 'pcs',
-        cell(row, idx.remark) ? String(cell(row, idx.remark)) : null
-      );
-      success += 1;
+  let success = 0;
+  for (let i = dataStart; i < rows.length; i++) {
+    const row = rows[i] || [];
+    if (row.every((value) => value === null || value === undefined || value === '')) continue;
+    const materialNo = cell(row, materialCol);
+    if (materialNo === null || String(materialNo).trim() === '') {
+      failures.push({ row: i + 1, reason: '物料号无效' });
+      continue;
     }
-  });
-  tx(rows);
+    materialNos.push(String(materialNo).trim());
+  }
+  const created = insertBulkItems(db, order, round.id, materialNos);
+  success = created.length;
   recomputeTotal(db, round.id);
   const log = db
     .prepare('INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, created_at) VALUES (?,?,?,?,?,?)')
@@ -722,34 +678,7 @@ router.post('/:orderId/quotations/:roundId/items/bulk', (req, res) => {
     ? (req.body || {}).material_nos.map((value) => String(value || '').trim()).filter(Boolean)
     : [];
   if (materialNos.length === 0) return badRequest(res, '请至少提供一个物料号');
-  const insert = db.prepare(
-    `INSERT INTO quotation_items (quotation_id, material_no, description, material_type, price_source, unit_price_ex_vat,
-      pay_percent, final_unit_price, qty, line_amount, unit, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-  );
-  const created = [];
-  const tx = db.transaction((nos) => {
-    for (const materialNo of nos) {
-      const price = resolvePrice(order, materialNo, 'standard');
-      const finalPrice = price.unit_price_ex_vat == null ? null : round4(Number(price.unit_price_ex_vat));
-      const lineAmount = finalPrice == null ? null : round2(finalPrice * 1);
-      const info = insert.run(
-        round.id,
-        materialNo,
-        price.description,
-        'standard',
-        price.price_source,
-        price.unit_price_ex_vat,
-        100,
-        finalPrice,
-        1,
-        lineAmount,
-        'pcs',
-        null
-      );
-      created.push({ id: info.lastInsertRowid, material_no: materialNo, price_source: price.price_source, unit_price_ex_vat: price.unit_price_ex_vat, description: price.description });
-    }
-  });
-  tx(materialNos);
+  const created = insertBulkItems(db, order, round.id, materialNos);
   const total = recomputeTotal(db, round.id);
   return res.status(201).json({ created: created.length, total_amount: total, items: created });
 });

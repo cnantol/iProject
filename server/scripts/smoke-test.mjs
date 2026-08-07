@@ -3,11 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import xlsx from 'xlsx';
-import { initDb, closeDb, getDb } from '../db/init.js';
+import { initDb, closeDb, getDb, getUploadDir } from '../db/init.js';
 import { createApp } from '../index.js';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'iproject-smoke-'));
 initDb(dataDir);
+const manualRecordsDdl = getDb().prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'commission_manual_records'").get().sql;
+assert.match(manualRecordsDdl, /CHECK\s*\(\s*amount\s*>=\s*0\)/i, '人工补录金额约束应为 >= 0');
 const app = createApp();
 const server = await new Promise((resolve) => {
   const s = app.listen(0, () => resolve(s));
@@ -64,6 +66,14 @@ try {
   const token = login.token;
   ok('登录成功');
 
+  for (let i = 0; i < 5; i += 1) {
+    await call('POST', '/api/auth/login', { body: { username: 'admin', password: 'wrong-password' } });
+  }
+  const locked = await call('POST', '/api/auth/login', { body: { username: 'admin', password: 'password' } });
+  assert.strictEqual(locked.status, 429);
+  getDb().prepare('DELETE FROM login_attempts').run();
+  ok('登录失败锁定持久化');
+
   // 基础数据
   const ec = must(await call('POST', '/api/end-customers', { token, body: { customer_name: '客户A', contact_person: '张三' } }), 201, '创建最终客户');
   const cc = must(await call('POST', '/api/contract-customers', { token, body: { customer_name: '合同客户A' } }), 201, '创建合同客户');
@@ -102,6 +112,28 @@ try {
   ok('销售机会创建与销售机会编号生成');
 
   must(await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'advance' } }), 200, '客户信息→方案');
+  const version = must(
+    await call('POST', `/api/orders/${orderId}/versions`, { token, body: { version_label: 'V1' } }),
+    201,
+    '创建方案版本'
+  );
+  const fd = new FormData();
+  fd.append('stage', 'proposal');
+  fd.append('reference_type', 'proposal_version');
+  fd.append('reference_id', String(version.id));
+  fd.append('file', new Blob(['smoke-attachment'], { type: 'application/pdf' }), 'attachment.pdf');
+  const attachment = must(
+    await call('POST', `/api/orders/${orderId}/attachments`, { token, form: fd }),
+    201,
+    '方案版本附件上传'
+  );
+  must(await call('DELETE', `/api/orders/${orderId}/versions/${version.id}`, { token }), 200, '删除方案版本');
+  assert.strictEqual(
+    fs.existsSync(path.join(getUploadDir(), attachment.file_path)),
+    false,
+    '删除方案版本应同步清理附件文件'
+  );
+  ok('方案版本删除同步清理附件');
   must(await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'advance', skip: 1 } }), 200, '方案跳过→报价');
 
   // 报价：框架价 + 指导价 + 手工价
@@ -125,6 +157,36 @@ try {
     token,
     body: { material_no: 'NON-STD-1', material_type: 'non_standard', price_source: 'manual', unit_price_ex_vat: 300, qty: 1 }
   });
+  const emptyRound = must(await call('POST', `/api/orders/${orderId}/quotations`, { token, body: {} }), 201, '新增报价轮次');
+  assert.strictEqual(emptyRound.items.length, 0, '新轮次不得自动复制上一轮明细');
+  const importBook = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(
+    importBook,
+    xlsx.utils.aoa_to_sheet([['物料号'], ['M-001'], ['M-002'], ['UNKNOWN-9']]),
+    'Sheet1'
+  );
+  const importFd = new FormData();
+  importFd.append(
+    'file',
+    new Blob([xlsx.write(importBook, { type: 'buffer', bookType: 'xlsx' })], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    }),
+    'items.xlsx'
+  );
+  const importResult = must(
+    await call('POST', `/api/orders/${orderId}/quotations/${emptyRound.id}/items/import`, { token, form: importFd }),
+    200,
+    '报价 Excel 只导物料号'
+  );
+  assert.strictEqual(importResult.success_rows, 3);
+  const afterImport = must(await call('GET', `/api/orders/${orderId}/quotations`, { token }), 200, '报价轮次查询');
+  const importedItems = afterImport.items.find((round) => round.id === emptyRound.id).items;
+  assert.strictEqual(importedItems.length, 3);
+  const unknown = importedItems.find((item) => item.material_no === 'UNKNOWN-9');
+  assert.strictEqual(unknown.price_source, 'manual');
+  assert.strictEqual(unknown.unit_price_ex_vat, null);
+  ok('报价 Excel 自动带价、未知物料留空人工处理');
+  await call('DELETE', `/api/orders/${orderId}/quotations/${emptyRound.id}`, { token });
   const submitted = must(
     await call('PATCH', `/api/orders/${orderId}/quotations/${roundId}`, { token, body: { action: 'submit' } }),
     200,
@@ -135,7 +197,8 @@ try {
 
   const pdfPost = must(await call('POST', `/api/orders/${orderId}/quotations/${roundId}/pdf`, { token, body: {} }), 200, '报价 PDF 生成');
   assert.ok(pdfPost.url);
-  const pdfGet = await fetch(base + pdfPost.url, { headers: { Authorization: `Bearer ${token}` } });
+  const dlToken = must(await call('POST', '/api/auth/download-token', { token, body: {} }), 200, '下载令牌');
+  const pdfGet = await fetch(base + pdfPost.url, { headers: { Authorization: `Bearer ${dlToken.token}` } });
   assert.strictEqual(pdfGet.status, 200);
   assert.match(String(pdfGet.headers.get('content-type') || ''), /application\/pdf/);
   ok('报价单 PDF 导出');
@@ -232,6 +295,9 @@ try {
   assert.strictEqual(rejected.status, 'quotation');
   const roundAfterReject = must(await call('GET', `/api/orders/${order2.id}/quotations`, { token }), 200, '驳回后轮次');
   assert.strictEqual(roundAfterReject.items[0].status, 'draft');
+  const blockedResubmit = await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'submit-approval', round_id: round2 } });
+  assert.strictEqual(blockedResubmit.status, 400, '草稿轮次禁止直接送审');
+  must(await call('PATCH', `/api/orders/${order2.id}/quotations/${round2}`, { token, body: { action: 'submit' } }), 200, '驳回后重新提交报价');
   await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'submit-approval', round_id: round2 } });
   const sf2b = must(await call('POST', `/api/orders/${order2.id}/approvals`, { token, body: { approval_type: 'sales_force' } }), 201, 'SF 重提');
   const oa2b = must(await call('POST', `/api/orders/${order2.id}/approvals`, { token, body: { approval_type: 'oa_contract' } }), 201, 'OA 重提');

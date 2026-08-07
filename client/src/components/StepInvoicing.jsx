@@ -27,10 +27,12 @@ import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import api, { errorMessage } from '../api';
+import { useConfirm } from './ConfirmDialog';
 import { fmtMoney, fmtDate } from '../utils/helpers';
 import StepWrapper from './StepWrapper';
 
 export default function StepInvoicing({ order, readOnly, onChanged }) {
+  const confirm = useConfirm();
   const [invoices, setInvoices] = useState(order.invoices || []);
   const [form, setForm] = useState({ po_id: '', invoice_no: '', amount: '', invoice_date: '', remark: '' });
   const [invoiced, setInvoiced] = useState(Number(order.invoiced) === 1);
@@ -71,7 +73,7 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
     const po = pos.find((item) => item.id === Number(form.po_id));
     const poInvoiced = invoices.filter((item) => item.po_id === Number(form.po_id)).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const wouldExceed = po && Number(poInvoiced) + Number(form.amount) > Number(po.po_amount);
-    if (wouldExceed && !window.confirm(`该 PO 累计开票将超过 PO 金额（PO ${fmtMoney(po.po_amount)}，已开 ${fmtMoney(poInvoiced)}），确认继续？`)) {
+    if (wouldExceed && !(await confirm(`该 PO 累计开票将超过 PO 金额（PO ${fmtMoney(po.po_amount)}，已开 ${fmtMoney(poInvoiced)}），确认继续？`))) {
       return;
     }
     setError('');

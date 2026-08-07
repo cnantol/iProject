@@ -6,7 +6,6 @@ import { authenticate } from '../middleware/auth.js';
 import { nowUtc, badRequest, writeAudit } from '../utils.js';
 
 const router = Router();
-const LOGIN_ATTEMPTS = new Map();
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
@@ -14,27 +13,33 @@ function loginAttemptKey(req, username) {
   return `${req.ip || req.socket.remoteAddress || 'unknown'}:${String(username || '').trim().toLowerCase()}`;
 }
 
+function cleanupLoginAttempts(db, now) {
+  db.prepare('DELETE FROM login_attempts WHERE lock_until IS NOT NULL AND lock_until < ?').run(now - LOGIN_LOCK_MS);
+}
+
 router.post('/login', (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return badRequest(res, '请输入用户名和密码');
+  const db = getDb();
   const now = Date.now();
-  for (const [key, value] of LOGIN_ATTEMPTS) {
-    if (value.lockUntil && value.lockUntil < now - LOGIN_LOCK_MS) LOGIN_ATTEMPTS.delete(key);
-  }
+  cleanupLoginAttempts(db, now);
   const key = loginAttemptKey(req, username);
-  const attempt = LOGIN_ATTEMPTS.get(key);
-  if (attempt && attempt.lockUntil > now) {
+  const attempt = db.prepare('SELECT fail_count, lock_until FROM login_attempts WHERE lock_key = ?').get(key);
+  if (attempt && Number(attempt.lock_until) > now) {
     return res.status(429).json({ error: '尝试次数过多，请 15 分钟后再试' });
   }
-  const user = getDb().prepare('SELECT * FROM users WHERE username = ?').get(String(username).trim());
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(String(username).trim());
   if (!user || !bcrypt.compareSync(String(password), user.password)) {
-    const count = (attempt ? attempt.count : 0) + 1;
+    const count = Number(attempt ? attempt.fail_count : 0) + 1;
     const lockUntil = count >= MAX_LOGIN_ATTEMPTS ? now + LOGIN_LOCK_MS : null;
-    LOGIN_ATTEMPTS.set(key, { count, lockUntil });
+    db.prepare(
+      `INSERT INTO login_attempts (lock_key, fail_count, lock_until, updated_at) VALUES (?,?,?,?)
+       ON CONFLICT(lock_key) DO UPDATE SET fail_count = excluded.fail_count, lock_until = excluded.lock_until, updated_at = excluded.updated_at`
+    ).run(key, count, lockUntil, nowUtc());
     if (lockUntil) return res.status(429).json({ error: '尝试次数过多，请 15 分钟后再试' });
     return res.status(401).json({ error: '用户名或密码错误' });
   }
-  LOGIN_ATTEMPTS.delete(key);
+  db.prepare('DELETE FROM login_attempts WHERE lock_key = ?').run(key);
   const token = jwt.sign({ id: user.id, username: user.username }, getJwtSecret(), { expiresIn: '7d' });
   return res.json({ token, user: { id: user.id, username: user.username } });
 });

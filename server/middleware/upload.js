@@ -7,6 +7,7 @@ import { getUploadDir } from '../db/init.js';
 const WHITELIST = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg', 'gif', 'webp'];
 
 export const MAX_FILE_SIZE = 20 * 1024 * 1024;
+export const RESTORE_MAX_FILE_SIZE = 200 * 1024 * 1024;
 
 const storage = multer.diskStorage({
   destination(req, file, cb) {
@@ -32,4 +33,17 @@ export const upload = multer({
   storage,
   fileFilter,
   limits: { fileSize: MAX_FILE_SIZE }
+});
+
+function restoreFileFilter(req, file, cb) {
+  if (path.extname(file.originalname).slice(1).toLowerCase() !== 'zip') {
+    return cb(new Error('仅支持 ZIP 备份文件'));
+  }
+  return cb(null, true);
+}
+
+export const uploadRestore = multer({
+  storage,
+  fileFilter: restoreFileFilter,
+  limits: { fileSize: RESTORE_MAX_FILE_SIZE }
 });

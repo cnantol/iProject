@@ -16,9 +16,12 @@ import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
+import Tooltip from '@mui/material/Tooltip';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CancelIcon from '@mui/icons-material/Cancel';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import WorkspacePremiumIcon from '@mui/icons-material/WorkspacePremium';
 import api, { errorMessage } from '../api';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { fmtDateTime, fmtMoney, isStepReadOnly } from '../utils/helpers';
@@ -175,9 +178,70 @@ export default function OrderDetail() {
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/orders')}>
           返回
         </Button>
-        <Typography variant="h5" sx={{ flex: 1, minWidth: 220 }}>
-          {order.order_id}
-        </Typography>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: 1, minWidth: 220 }}>
+          <Typography variant="h5" sx={{ minWidth: 0 }}>{order.order_id}</Typography>
+          <Tooltip
+            title={
+              Number(order.has_framework) === 1
+                ? order.framework_source_customer_name
+                  ? `适用${order.framework_source_customer_name}框架协议`
+                  : '该客户存在框架协议价格，可自动带价'
+                : '该客户暂无框架协议价格，报价需人工处理'
+            }
+            arrow
+            placement="top"
+          >
+            <Chip
+              icon={Number(order.has_framework) === 1 ? <WorkspacePremiumIcon /> : <CancelIcon />}
+              label={Number(order.has_framework) === 1 ? '框架协议客户' : '非框架客户'}
+              sx={(theme) => {
+                const dark = theme.palette.mode === 'dark';
+                const isFramework = Number(order.has_framework) === 1;
+                return {
+                  height: 34,
+                  minWidth: 116,
+                  pl: 1,
+                  pr: 1.4,
+                  borderRadius: '999px',
+                  fontWeight: 800,
+                  fontSize: 13,
+                  lineHeight: 1,
+                  letterSpacing: 0,
+                  whiteSpace: 'nowrap',
+                  color: isFramework
+                    ? dark ? '#DDF7E8' : '#0E6B3A'
+                    : dark ? '#FFE3E0' : '#B3261E',
+                  background: isFramework
+                    ? dark
+                      ? 'linear-gradient(135deg, rgba(46, 188, 110, 0.36), rgba(24, 128, 78, 0.30))'
+                      : 'linear-gradient(135deg, #DDF4E6, #BFE9CE)'
+                    : dark
+                      ? 'linear-gradient(135deg, rgba(255, 102, 92, 0.28), rgba(198, 40, 40, 0.22))'
+                      : 'linear-gradient(135deg, #FDE3E1, #F6C7C4)',
+                  border: isFramework
+                    ? `1px solid ${dark ? 'rgba(83, 220, 138, 0.75)' : 'rgba(14, 107, 58, 0.30)'}`
+                    : `1px solid ${dark ? 'rgba(255, 138, 128, 0.65)' : 'rgba(179, 38, 30, 0.30)'}`,
+                  boxShadow: isFramework
+                    ? dark
+                      ? '0 8px 20px rgba(38, 173, 98, 0.20)'
+                      : '0 8px 20px rgba(14, 107, 58, 0.16)'
+                    : dark
+                      ? '0 8px 20px rgba(255, 82, 82, 0.16)'
+                      : '0 8px 20px rgba(211, 47, 47, 0.14)',
+                  '& .MuiChip-icon': {
+                    fontSize: 18,
+                    ml: 0.4,
+                    mr: 0.15,
+                    color: isFramework
+                      ? dark ? '#8CE4B7' : '#15884D'
+                      : dark ? '#FF9C95' : '#C62828'
+                  },
+                  '& .MuiChip-label': { px: 0.2, overflow: 'visible', textOverflow: 'clip' }
+                };
+              }}
+            />
+          </Tooltip>
+        </Stack>
         <Chip
           label={STATUS_LABELS[order.status] || order.status}
           sx={{ bgcolor: `${STATUS_COLORS[order.status] || '#78909C'}22`, color: STATUS_COLORS[order.status] || '#78909C', fontWeight: 700 }}

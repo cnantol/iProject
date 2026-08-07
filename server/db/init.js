@@ -79,6 +79,11 @@ export function initDb(dir) {
   `);
   db.exec('CREATE INDEX IF NOT EXISTS idx_workflow_step_fields_step ON workflow_step_fields(step_key)');
 
+  const quotationColumns = db.prepare('PRAGMA table_info(quotations)').all();
+  if (!quotationColumns.some((col) => col.name === 'quote_no')) {
+    db.exec('ALTER TABLE quotations ADD COLUMN quote_no TEXT');
+  }
+
   const ensureShortName = (table) => {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all();
     if (!columns.some((col) => col.name === 'short_name')) {
@@ -88,6 +93,12 @@ export function initDb(dir) {
   };
   ensureShortName('end_customers');
   ensureShortName('contract_customers');
+
+  const endCustomerColumns = db.prepare('PRAGMA table_info(end_customers)').all();
+  if (!endCustomerColumns.some((col) => col.name === 'parent_customer_id')) {
+    db.exec('ALTER TABLE end_customers ADD COLUMN parent_customer_id INTEGER REFERENCES end_customers(id)');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_end_customers_parent ON end_customers(parent_customer_id)');
 
   const ensureOrdersTotalNonNegative = () => {
     const ddlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get();
@@ -128,12 +139,76 @@ export function initDb(dir) {
   };
   ensureOrdersTotalNonNegative();
 
+  const ensureCommissionManualNonNegative = () => {
+    const ddlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'commission_manual_records'").get();
+    const ddl = ddlRow && ddlRow.sql ? String(ddlRow.sql) : '';
+    if (!/CHECK\s*\(\s*amount\s*>\s*0\)/i.test(ddl)) return;
+    const indexSqls = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'commission_manual_records' AND sql IS NOT NULL")
+      .all()
+      .map((row) => row.sql);
+    const triggerSqls = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'commission_manual_records' AND sql IS NOT NULL")
+      .all()
+      .map((row) => row.sql);
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec('BEGIN');
+    try {
+      db.exec(`CREATE TABLE commission_manual_records_migrated (
+        id INTEGER PRIMARY KEY,
+        order_id INTEGER REFERENCES orders(id),
+        amount REAL NOT NULL CHECK (amount >= 0),
+        remark TEXT,
+        operator_id INTEGER REFERENCES users(id),
+        created_at TEXT
+      )`);
+      db.exec('INSERT INTO commission_manual_records_migrated SELECT id, order_id, amount, remark, operator_id, created_at FROM commission_manual_records');
+      db.exec('DROP TABLE commission_manual_records');
+      db.exec('ALTER TABLE commission_manual_records_migrated RENAME TO commission_manual_records');
+      for (const sql of indexSqls) db.exec(sql);
+      for (const sql of triggerSqls) db.exec(sql);
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+    const issues = db.pragma('foreign_key_check');
+    if (issues.length > 0) {
+      throw new Error('commission_manual_records 表迁移后外键校验失败');
+    }
+  };
+  ensureCommissionManualNonNegative();
+
   const importLogColumns = db.prepare('PRAGMA table_info(import_logs)').all();
   if (!importLogColumns.some((col) => col.name === 'detail')) {
     db.exec('ALTER TABLE import_logs ADD COLUMN detail TEXT');
   }
   if (!importLogColumns.some((col) => col.name === 'revoked')) {
     db.exec('ALTER TABLE import_logs ADD COLUMN revoked INTEGER DEFAULT 0');
+  }
+  if (!importLogColumns.some((col) => col.name === 'task_id')) {
+    db.exec('ALTER TABLE import_logs ADD COLUMN task_id TEXT');
+  }
+
+  const restartTime = nowUtc();
+  db.prepare("UPDATE import_tasks SET status = 'error', error = '服务重启，任务已终止', updated_at = ?, done_at = ? WHERE status = 'processing'").run(restartTime, restartTime);
+  const doneTasks = db
+    .prepare("SELECT id, target_type, file_name, total_rows, success_rows, fail_rows, success_detail FROM import_tasks WHERE status = 'done' AND success_detail IS NOT NULL AND success_detail != ''")
+    .all();
+  const hasImportLog = db.prepare('SELECT 1 FROM import_logs WHERE task_id = ? LIMIT 1');
+  const insertImportLog = db.prepare('INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, detail, revoked, task_id, created_at) VALUES (?,?,?,?,?,?,0,?,?)');
+  for (const task of doneTasks) {
+    if (!task.id || hasImportLog.get(task.id)) continue;
+    let detail = null;
+    try {
+      detail = JSON.parse(task.success_detail);
+    } catch {
+      detail = null;
+    }
+    if (!detail || typeof detail !== 'object') continue;
+    insertImportLog.run(task.target_type, task.file_name, task.total_rows, task.success_rows, task.fail_rows, JSON.stringify(detail), task.id, restartTime);
   }
 
   const admin = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');

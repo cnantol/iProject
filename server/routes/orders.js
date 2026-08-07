@@ -15,7 +15,7 @@ import {
   isValidDate,
   writeAudit
 } from '../utils.js';
-import { hasFrameworkForCustomer } from './materials.js';
+import { hasFrameworkForCustomer, frameworkSourceCustomer } from './materials.js';
 
 const router = Router();
 
@@ -49,6 +49,9 @@ function withCommissionCheck(order) {
     const ratio = Math.abs(amount - expected) / expected;
     result.commission_expected = expected;
     result.commission_status = ratio <= 0.02 ? 'ok' : 'warn';
+  } else if (order.status === 'closed' && total > 0) {
+    result.commission_expected = total * 0.01;
+    result.commission_status = 'zero';
   }
   return { ...order, ...result };
 }
@@ -70,6 +73,12 @@ function loadOrderDetail(db, orderId) {
     )
     .get(Number(orderId));
   if (!order) return null;
+
+  order.framework_source_customer_name = null;
+  if (Number(order.has_framework) === 1) {
+    const source = frameworkSourceCustomer(order.end_customer_id);
+    order.framework_source_customer_name = source ? source.customer_name : null;
+  }
 
   const versions = db.prepare('SELECT * FROM proposal_versions WHERE order_id = ? ORDER BY sort_order, id').all(order.id);
   const versionIds = versions.map((version) => version.id);
@@ -212,7 +221,7 @@ function generateOrderId(db, tryInsert, shortName = null) {
 
 router.get('/', (req, res) => {
   const db = getDb();
-  const { search, status, end_customer_id, contract_customer_id, year, month, scope } = req.query;
+  const { search, status, end_customer_id, contract_customer_id, customer, year, month, scope } = req.query;
   const so = String(req.query.so || '').trim();
   const po = String(req.query.po || '').trim();
   const projectNo = String(req.query.project_no || '').trim();
@@ -246,6 +255,13 @@ router.get('/', (req, res) => {
   if (contract_customer_id) {
     base.push('o.contract_customer_id = ?');
     baseParams.push(Number(contract_customer_id));
+  }
+  if (customer) {
+    const like = `%${String(customer).trim()}%`;
+    base.push(
+      '(EXISTS (SELECT 1 FROM end_customers ec WHERE ec.id = o.end_customer_id AND ec.customer_name LIKE ?) OR EXISTS (SELECT 1 FROM contract_customers cc WHERE cc.id = o.contract_customer_id AND cc.customer_name LIKE ?))'
+    );
+    baseParams.push(like, like);
   }
   if (year) {
     base.push('o.year = ?');
@@ -281,7 +297,7 @@ router.get('/', (req, res) => {
        FROM orders o
        LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
        LEFT JOIN contract_customers cc ON cc.id = o.contract_customer_id
-       ${whereSql} ORDER BY o.order_id DESC LIMIT ? OFFSET ?`
+       ${whereSql} ORDER BY o.year DESC, o.month DESC, o.order_id DESC LIMIT ? OFFSET ?`
     )
     .all(...params, limit, (page - 1) * limit);
   return res.json({ items: items.map(withCommissionCheck), total, page, limit, activeCount, archivedCount });
@@ -504,12 +520,7 @@ router.patch('/:id/status', (req, res) => {
       .prepare('SELECT id, status FROM quotations WHERE id = ? AND order_id = ?')
       .get(roundId, order.id);
     if (!round) return badRequest(res, '所选报价轮次不存在');
-    const hasApprovalHistory = db
-      .prepare('SELECT id FROM approval_records WHERE quotation_id = ? LIMIT 1')
-      .get(roundId);
-    if (round.status !== 'submitted' && !hasApprovalHistory) {
-      return badRequest(res, '请先提交该轮报价');
-    }
+    if (round.status !== 'submitted') return badRequest(res, '请先提交该轮报价，驳回后修改需重新提交');
     const info = db
       .prepare("UPDATE orders SET status = 'approval_pending', selected_round_id = ?, updated_at = ? WHERE id = ? AND status = 'quotation'")
       .run(roundId, ts, order.id);

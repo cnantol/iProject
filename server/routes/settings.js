@@ -1,14 +1,17 @@
 import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import AdmZip from 'adm-zip';
 import bcrypt from 'bcryptjs';
 import xlsx from 'xlsx';
 import { getDb, getDataDir, getUploadDir, closeDb, initDb, seedWorkflow, rotateJwtSecret } from '../db/init.js';
-import { upload } from '../middleware/upload.js';
+import { upload, uploadRestore, RESTORE_MAX_FILE_SIZE } from '../middleware/upload.js';
+import { authenticateDownload } from '../middleware/auth.js';
 import { nowUtc, badRequest, notFound, isMoney, isBool, isValidDate, isNonNegativeNumber, normalizeDate, normalizeSo, writeAudit } from '../utils.js';
 import { loadOrderDetail, checkSalesOrderUnique } from './orders.js';
 import { buildQuotationPdf } from './quotations.js';
+import { hasFrameworkForCustomer } from './materials.js';
 
 const router = Router();
 
@@ -193,7 +196,7 @@ router.get('/import-meta', (req, res) => {
   return res.json({ items });
 });
 
-router.get('/import/:target/template', (req, res) => {
+router.get('/import/:target/template', authenticateDownload, (req, res) => {
   const target = IMPORT_TARGETS[req.params.target];
   if (!target) return notFound(res);
   const sheet = xlsx.utils.aoa_to_sheet([target.headers, target.headers.map(() => '')]);
@@ -208,10 +211,93 @@ router.get('/import/:target/template', (req, res) => {
 const importTasks = new Map();
 const IMPORT_TASK_TTL_MS = 30 * 60 * 1000;
 
+function taskTime(ms) {
+  return ms ? new Date(ms).toISOString().replace('T', ' ').slice(0, 19) : null;
+}
+
+function persistImportTask(task) {
+  try {
+    const db = getDb();
+    let successDetail = null;
+    if (task.status === 'done') {
+      const detailByTable = {};
+      for (const item of task.successIds || []) {
+        if (!detailByTable[item.table]) detailByTable[item.table] = [];
+        detailByTable[item.table].push(item.id);
+      }
+      successDetail = JSON.stringify(detailByTable);
+    }
+    db.prepare(`
+      INSERT INTO import_tasks (id, user_id, target_type, file_name, total_rows, processed_rows, success_rows, fail_rows, failures, success_detail, status, error, created_at, updated_at, done_at)
+      VALUES (@id, @userId, @target, @fileName, @total, @processed, @success, @failRows, @failures, @successDetail, @status, @error, @createdAt, @updatedAt, @doneAt)
+      ON CONFLICT(id) DO UPDATE SET
+        processed_rows = excluded.processed_rows,
+        success_rows = excluded.success_rows,
+        fail_rows = excluded.fail_rows,
+        failures = excluded.failures,
+        success_detail = excluded.success_detail,
+        status = excluded.status,
+        error = excluded.error,
+        updated_at = excluded.updated_at,
+        done_at = excluded.done_at
+    `).run({
+      id: task.id,
+      userId: task.userId,
+      target: task.target,
+      fileName: task.fileName,
+      total: task.total,
+      processed: task.processed,
+      success: task.success,
+      failRows: task.failures.length,
+      failures: JSON.stringify(task.failures.slice(0, 500)),
+      successDetail,
+      status: task.status,
+      error: task.error || null,
+      createdAt: taskTime(task.createdAt),
+      updatedAt: nowUtc(),
+      doneAt: taskTime(task.doneAt)
+    });
+  } catch (err) {
+    console.error('导入任务落盘失败:', err);
+  }
+}
+
+function loadImportTask(id) {
+  const row = getDb().prepare('SELECT * FROM import_tasks WHERE id = ?').get(id);
+  if (!row) return null;
+  let failures = [];
+  try {
+    failures = row.failures ? JSON.parse(row.failures) : [];
+  } catch {
+    failures = [];
+  }
+  return {
+    id: row.id,
+    userId: row.user_id,
+    target: row.target_type,
+    fileName: row.file_name,
+    total: row.total_rows,
+    processed: row.processed_rows,
+    success: row.success_rows,
+    successIds: [],
+    failures,
+    status: row.status,
+    error: row.error,
+    createdAt: row.created_at ? new Date(`${row.created_at.replace(' ', 'T')}Z`).getTime() : Date.now(),
+    doneAt: row.done_at ? new Date(`${row.done_at.replace(' ', 'T')}Z`).getTime() : null
+  };
+}
+
 function pruneImportTasks() {
   const now = Date.now();
   for (const [taskId, task] of importTasks) {
     if (task.doneAt && now - task.doneAt > IMPORT_TASK_TTL_MS) importTasks.delete(taskId);
+  }
+  try {
+    const cutoff = new Date(now - IMPORT_TASK_TTL_MS).toISOString().replace('T', ' ').slice(0, 19);
+    getDb().prepare('DELETE FROM import_tasks WHERE done_at IS NOT NULL AND done_at < ?').run(cutoff);
+  } catch {
+    // 数据库未就绪时静默跳过，仅保留内存清理
   }
 }
 
@@ -253,8 +339,10 @@ async function runImportTask(task, rows, headers) {
           task.status = 'error';
           task.error = err.message || '数据写入失败';
           task.doneAt = Date.now();
+          persistImportTask(task);
           return;
         }
+        persistImportTask(task);
       }
       await yieldEventLoop();
     }
@@ -264,8 +352,8 @@ async function runImportTask(task, rows, headers) {
       detailByTable[item.table].push(item.id);
     }
     const info = db
-      .prepare('INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, detail, revoked, created_at) VALUES (?,?,?,?,?,?,0,?)')
-      .run(task.target, task.fileName, task.total, task.success, task.failures.length, JSON.stringify(detailByTable), nowUtc());
+      .prepare('INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, detail, revoked, task_id, created_at) VALUES (?,?,?,?,?,?,0,?,?)')
+      .run(task.target, task.fileName, task.total, task.success, task.failures.length, JSON.stringify(detailByTable), task.id, nowUtc());
     writeAudit(db, {
       userId: task.userId,
       action: 'other',
@@ -275,10 +363,12 @@ async function runImportTask(task, rows, headers) {
     });
     task.status = 'done';
     task.doneAt = Date.now();
+    persistImportTask(task);
   } catch (err) {
     task.status = 'error';
     task.error = err.message || '导入失败';
     task.doneAt = Date.now();
+    persistImportTask(task);
   }
 }
 
@@ -291,7 +381,7 @@ router.post('/import/:target', upload.single('file'), (req, res) => {
   }
   let rows;
   try {
-    const workbook = xlsx.readFile(req.file.path);
+    const workbook = xlsx.read(fs.readFileSync(req.file.path), { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
   } catch {
@@ -342,16 +432,18 @@ router.post('/import/:target', upload.single('file'), (req, res) => {
     doneAt: null
   };
   importTasks.set(taskId, task);
+  persistImportTask(task);
   runImportTask(task, rows, headers).catch((err) => {
     task.status = 'error';
     task.error = err.message || '导入失败';
     task.doneAt = Date.now();
+    persistImportTask(task);
   });
   return res.json({ task_id: taskId, target: req.params.target, file_name: req.file.originalname, total_rows: task.total, status: 'processing' });
 });
 
 router.get('/import-progress/:taskId', (req, res) => {
-  const task = importTasks.get(req.params.taskId);
+  const task = importTasks.get(req.params.taskId) || loadImportTask(req.params.taskId);
   if (!task) return notFound(res);
   if (task.doneAt && Date.now() - task.doneAt > IMPORT_TASK_TTL_MS) {
     importTasks.delete(task.id);
@@ -566,7 +658,7 @@ function importHistoryRow(db, headers, row) {
         commissionAmount,
         commissionMatched === 1 ? ts : null,
         status,
-        0,
+        hasFrameworkForCustomer(endCustomerId) ? 1 : 0,
         0,
         ['closed', 'lost_closed', 'cancelled'].includes(status) ? ts : null,
         ts,
@@ -673,6 +765,8 @@ router.post('/import/:id/undo', (req, res) => {
 });
 
 // ---------- 备份与还原 ----------
+const BACKUP_NAME_RE = /^iproject-backup-[\d]{14}(?:-[a-f0-9]{6})?\.zip$/;
+
 function createBackup() {
   const db = getDb();
   db.pragma('wal_checkpoint(FULL)');
@@ -680,8 +774,8 @@ function createBackup() {
   const dbPath = path.join(dataDir, 'database.sqlite');
   const backupDir = path.join(dataDir, 'backups');
   fs.mkdirSync(backupDir, { recursive: true });
-  const ts = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace(/[-:T]/g, '').slice(0, 14);
-  const filename = `iproject-backup-${ts}.zip`;
+  const ts = new Date(Date.now() + 8 * 3600 * 1000).toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+  const filename = `iproject-backup-${ts}-${crypto.randomBytes(3).toString('hex')}.zip`;
   const zip = new AdmZip();
   if (fs.existsSync(dbPath)) zip.addFile('database.sqlite', fs.readFileSync(dbPath));
   if (fs.existsSync(quoteStyleFile())) zip.addFile('quote-style.json', fs.readFileSync(quoteStyleFile()));
@@ -753,6 +847,7 @@ function defaultQuoteStyle() {
     header_text: '',
     footer_text: '',
     font_family: 'sans',
+    quote_no_template: '',
     title_alignment: 'center',
     info_alignment: 'center',
     header_alignment: 'center',
@@ -848,6 +943,7 @@ function normalizeQuoteStyle(raw = {}) {
     header_text: text(raw.header_text, '', 200),
     footer_text: text(raw.footer_text, '', 200),
     font_family: ['sans', 'serif', 'mono'].includes(raw.font_family) ? raw.font_family : defaults.font_family,
+    quote_no_template: text(raw.quote_no_template, defaults.quote_no_template, 120),
     title_alignment: align(raw.title_alignment, defaults.title_alignment),
     info_alignment: align(raw.info_alignment, defaults.info_alignment),
     header_alignment: align(raw.header_alignment, defaults.header_alignment),
@@ -1068,12 +1164,22 @@ export function startBackupScheduler() {
   }, 60000);
 }
 
-router.get('/backup/:filename/download', (req, res) => {
+router.get('/backup/:filename/download', authenticateDownload, (req, res) => {
   const filename = String(req.params.filename);
-  if (!/^iproject-backup-[\d]{14}\.zip$/.test(filename)) return badRequest(res, '备份文件名无效');
+  if (!BACKUP_NAME_RE.test(filename)) return badRequest(res, '备份文件名无效');
   const filePath = path.join(getDataDir(), 'backups', filename);
   if (!fs.existsSync(filePath)) return notFound(res, '备份文件不存在');
   return res.download(filePath, filename);
+});
+
+router.delete('/backup/:filename', (req, res) => {
+  const filename = String(req.params.filename);
+  if (!BACKUP_NAME_RE.test(filename)) return badRequest(res, '备份文件名无效');
+  const filePath = path.join(getDataDir(), 'backups', filename);
+  if (!fs.existsSync(filePath)) return notFound(res, '备份文件不存在');
+  fs.unlinkSync(filePath);
+  writeAudit(getDb(), { userId: req.user.id, action: 'other', entityType: 'settings', detail: { event: 'delete_backup', filename } });
+  return res.json({ message: '备份文件已删除', filename });
 });
 
 router.get('/backups', (req, res) => {
@@ -1081,7 +1187,7 @@ router.get('/backups', (req, res) => {
   fs.mkdirSync(backupDir, { recursive: true });
   const items = fs
     .readdirSync(backupDir)
-    .filter((name) => /^iproject-backup-[\d]{14}\.zip$/.test(name))
+    .filter((name) => BACKUP_NAME_RE.test(name))
     .map((name) => {
       const stat = fs.statSync(path.join(backupDir, name));
       return {
@@ -1098,6 +1204,8 @@ router.get('/backups', (req, res) => {
 function performRestore(zipPath, displayName, userId) {
   const dataDir = getDataDir();
   const tmpDir = path.join(dataDir, 'restore-tmp');
+  const stagedDb = path.join(dataDir, 'database.sqlite.restore');
+  const targetDb = path.join(dataDir, 'database.sqlite');
   fs.rmSync(tmpDir, { recursive: true, force: true });
   fs.mkdirSync(tmpDir, { recursive: true });
   try {
@@ -1111,35 +1219,60 @@ function performRestore(zipPath, displayName, userId) {
     zip.extractAllTo(tmpDir, true);
     const dbFile = path.join(tmpDir, 'database.sqlite');
     if (!fs.existsSync(dbFile)) throw new Error('备份文件缺少 database.sqlite');
-    const uploadsZip = path.join(tmpDir, 'uploads');
-    const stagedDb = path.join(dataDir, 'database.sqlite.restore');
     fs.copyFileSync(dbFile, stagedDb);
-    closeDb();
-    fs.renameSync(stagedDb, path.join(dataDir, 'database.sqlite'));
-    fs.rmSync(path.join(dataDir, 'database.sqlite-wal'), { force: true });
-    fs.rmSync(path.join(dataDir, 'database.sqlite-shm'), { force: true });
-    if (fs.existsSync(uploadsZip)) {
-      fs.rmSync(getUploadDir(), { recursive: true, force: true });
-      fs.cpSync(uploadsZip, getUploadDir(), { recursive: true });
+    if (!fs.existsSync(stagedDb)) throw new Error('备份数据库复制失败');
+
+    let reinitialized = false;
+    try {
+      closeDb();
+      fs.renameSync(stagedDb, targetDb);
+      fs.rmSync(path.join(dataDir, 'database.sqlite-wal'), { force: true });
+      fs.rmSync(path.join(dataDir, 'database.sqlite-shm'), { force: true });
+      const uploadsDir = path.join(tmpDir, 'uploads');
+      if (fs.existsSync(uploadsDir)) {
+        fs.rmSync(getUploadDir(), { recursive: true, force: true });
+        fs.cpSync(uploadsDir, getUploadDir(), { recursive: true });
+      }
+      const styleFile = path.join(tmpDir, 'quote-style.json');
+      if (fs.existsSync(styleFile)) fs.copyFileSync(styleFile, quoteStyleFile());
+      const fieldFile = path.join(tmpDir, 'field-display-names.json');
+      if (fs.existsSync(fieldFile)) fs.copyFileSync(fieldFile, fieldDisplayFile());
+      const logoFile = path.join(tmpDir, 'app-logo.json');
+      if (fs.existsSync(logoFile)) fs.copyFileSync(logoFile, appLogoFile());
+      initDb(dataDir);
+      reinitialized = true;
+      writeAudit(getDb(), { userId, action: 'other', entityType: 'settings', detail: { event: 'restore', filename: displayName } });
+      return { message: '还原成功' };
+    } catch (err) {
+      if (!reinitialized) {
+        try {
+          initDb(dataDir);
+        } catch (reopenErr) {
+          throw new Error(`还原失败且数据库无法重新打开: ${reopenErr.message}`);
+        }
+      }
+      throw new Error(`还原失败: ${err.message}`);
     }
-    const styleZip = path.join(tmpDir, 'quote-style.json');
-    if (fs.existsSync(styleZip)) fs.copyFileSync(styleZip, quoteStyleFile());
-    const fieldZip = path.join(tmpDir, 'field-display-names.json');
-    if (fs.existsSync(fieldZip)) fs.copyFileSync(fieldZip, fieldDisplayFile());
-    const logoZip = path.join(tmpDir, 'app-logo.json');
-    if (fs.existsSync(logoZip)) fs.copyFileSync(logoZip, appLogoFile());
-    initDb(dataDir);
-    writeAudit(getDb(), { userId, action: 'other', entityType: 'settings', detail: { event: 'restore', filename: displayName } });
-    return res.json({ message: '还原成功' });
   } finally {
+    fs.rmSync(stagedDb, { force: true });
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
-router.post('/restore', upload.single('file'), (req, res) => {
+router.post('/restore', (req, res, next) => {
+  uploadRestore.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return badRequest(res, `备份文件大小不能超过 ${Math.round(RESTORE_MAX_FILE_SIZE / 1024 / 1024)}MB`);
+      }
+      return badRequest(res, err.message || '备份文件上传失败');
+    }
+    return next();
+  });
+}, (req, res) => {
   if (!req.file) return badRequest(res, '请上传备份文件');
   try {
-    return performRestore(req.file.path, req.file.originalname, req.user.id);
+    return res.json(performRestore(req.file.path, req.file.originalname, req.user.id));
   } catch (err) {
     return badRequest(res, err.message || '还原失败');
   } finally {
@@ -1149,11 +1282,11 @@ router.post('/restore', upload.single('file'), (req, res) => {
 
 router.post('/restore/:filename', (req, res) => {
   const filename = String(req.params.filename);
-  if (!/^iproject-backup-[\d]{14}\.zip$/.test(filename)) return badRequest(res, '备份文件名无效');
+  if (!BACKUP_NAME_RE.test(filename)) return badRequest(res, '备份文件名无效');
   const filePath = path.join(getDataDir(), 'backups', filename);
   if (!fs.existsSync(filePath)) return notFound(res, '备份文件不存在');
   try {
-    return performRestore(filePath, filename, req.user.id);
+    return res.json(performRestore(filePath, filename, req.user.id));
   } catch (err) {
     return badRequest(res, err.message || '还原失败');
   }
@@ -1336,6 +1469,7 @@ function deleteBusinessData(db) {
     'todos',
     'orders',
     'import_logs',
+    'import_tasks',
     'guide_prices',
     'materials',
     'end_customers',
@@ -1372,6 +1506,7 @@ router.post('/reset-factory', (req, res) => {
   if (!verifyPassword(db, password)) return badRequest(res, '管理员密码不正确');
   writeAudit(db, { userId: req.user.id, action: 'reset_factory', entityType: 'settings', detail: { scope: 'factory' } });
   deleteBusinessData(db);
+  db.prepare('DELETE FROM login_attempts').run();
   db.prepare("DELETE FROM users WHERE username <> 'admin'").run();
   seedWorkflow(db);
   rotateJwtSecret();

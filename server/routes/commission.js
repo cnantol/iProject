@@ -3,12 +3,12 @@ import fs from 'node:fs';
 import xlsx from 'xlsx';
 import { getDb } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
-import { nowUtc, badRequest, notFound, conflict, normalizeSo, isMoney, writeAudit } from '../utils.js';
+import { nowUtc, badRequest, notFound, conflict, normalizeSo, isNonNegativeNumber, writeAudit } from '../utils.js';
 
 const router = Router();
 
 function readWorkbook(filePath) {
-  const workbook = xlsx.readFile(filePath);
+  const workbook = xlsx.read(fs.readFileSync(filePath), { type: 'buffer' });
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) return null;
   const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: null, raw: true });
@@ -179,7 +179,7 @@ router.post('/manual', (req, res) => {
   if (order.status !== 'commission' || Number(order.commission_matched) === 1) {
     return badRequest(res, '仅佣金阶段且未匹配的销售机会可人工补录');
   }
-  if (!isMoney(amount)) return badRequest(res, '补录金额必须大于 0');
+  if (!isNonNegativeNumber(amount)) return badRequest(res, '补录金额不能小于 0');
   const ts = nowUtc();
   const tx = db.transaction(() => {
     const record = db

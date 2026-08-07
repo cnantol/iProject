@@ -60,8 +60,10 @@ export default function StepApproval({ order, readOnly, onChanged }) {
     }
   };
 
-  const latest = (type) => approvals.filter((record) => record.approval_type === type).slice(-1)[0];
-  const history = (type) => approvals.filter((record) => record.approval_type === type);
+  const latest = (type) => {
+    const pool = selectedRound ? approvals.filter((record) => record.quotation_id === selectedRound.id) : approvals;
+    return pool.filter((record) => record.approval_type === type).slice(-1)[0];
+  };
 
   return (
     <StepWrapper title="并行审批" subtitle="Sales Force 与 OA 合同双线审批（同一报价轮次）" readOnly={readOnly}>
@@ -115,7 +117,7 @@ export default function StepApproval({ order, readOnly, onChanged }) {
         <Chip
           size="small"
           color={selectedRound ? (selectedRound.status === 'submitted' ? 'success' : 'warning') : 'default'}
-          label={selectedRound ? (selectedRound.status === 'submitted' ? '已提交' : '草稿/重提') : '未选定'}
+          label={selectedRound ? (selectedRound.status === 'submitted' ? '已提交' : '草稿') : '未选定'}
           sx={{ fontWeight: 700 }}
         />
       </Box>
@@ -203,7 +205,12 @@ export default function StepApproval({ order, readOnly, onChanged }) {
                 <TableRow key={item.id}>
                   <TableCell>{fmtDateTime(item.responded_at || item.applied_at)}</TableCell>
                   <TableCell>{line ? line.label : item.approval_type}</TableCell>
-                  <TableCell>{round ? round.round_label || `R${round.round_no}` : `#${item.quotation_id || '-'}`}</TableCell>
+                  <TableCell>
+                    {round ? round.round_label || `R${round.round_no}` : `#${item.quotation_id || '-'}`}
+                    {selectedRound && item.quotation_id === selectedRound.id && (
+                      <Chip size="small" color="primary" label="当前轮次" sx={{ ml: 1 }} />
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Chip size="small" color={STATUS_COLORS[item.status]} label={STATUS_LABELS[item.status] || item.status} />
                   </TableCell>
@@ -219,7 +226,7 @@ export default function StepApproval({ order, readOnly, onChanged }) {
         <DialogTitle>确认驳回审批</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1.5 }}>
-            驳回后销售机会将回退至报价阶段，选中轮次回退草稿并可修改后重新提交。
+            驳回后销售机会将回退至报价阶段，选中轮次回退草稿，需重新提交报价后再送审。
           </Typography>
           <TextField
             label="审批备注"

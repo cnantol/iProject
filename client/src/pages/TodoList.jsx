@@ -34,6 +34,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import api, { errorMessage } from '../api';
+import { useConfirm } from '../components/ConfirmDialog';
 import { PRIORITY_LABELS, PRIORITY_COLORS } from '../utils/constants';
 import { todayStr, fmtDateTime, overdueDays } from '../utils/helpers';
 
@@ -251,6 +252,7 @@ const lunarDay = (dateStr) => {
 
 export default function TodoList() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const now = new Date();
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [selectedDate, setSelectedDate] = useState(todayStr());
@@ -333,7 +335,7 @@ export default function TodoList() {
   };
 
   const remove = async (todo) => {
-    if (!window.confirm('确认删除该待办？')) return;
+    if (!(await confirm('确认删除该待办？'))) return;
     try {
       await api.delete(`/todos/${todo.id}`);
       load();

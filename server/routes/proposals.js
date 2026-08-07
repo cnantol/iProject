@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import fs from 'node:fs';
+import path from 'node:path';
 import xlsx from 'xlsx';
-import { getDb } from '../db/init.js';
+import { getDb, getUploadDir } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
+import { frameworkCustomerIds } from './materials.js';
 import { nowUtc, badRequest, notFound, pick, isQty } from '../utils.js';
 
 const router = Router();
@@ -62,10 +64,18 @@ router.delete('/:orderId/versions/:versionId', (req, res) => {
   if (!canEditProposal(order)) return badRequest(res, '仅方案阶段可删除方案版本');
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM proposal_selections WHERE proposal_version_id = ?').run(version.id);
+    const files = db
+      .prepare("SELECT file_path FROM order_attachments WHERE order_id = ? AND reference_type = 'proposal_version' AND reference_id = ?")
+      .all(order.id, version.id);
     db.prepare("DELETE FROM order_attachments WHERE order_id = ? AND reference_type = 'proposal_version' AND reference_id = ?").run(
       order.id,
       version.id
     );
+    for (const row of files) {
+      if (!row.file_path) continue;
+      const filePath = path.join(getUploadDir(), String(row.file_path));
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
     db.prepare('DELETE FROM proposal_versions WHERE id = ?').run(version.id);
   });
   tx();
@@ -114,7 +124,7 @@ router.post('/:orderId/versions/:versionId/selections/import', upload.single('fi
   }
   let rows;
   try {
-    const workbook = xlsx.readFile(req.file.path);
+    const workbook = xlsx.read(fs.readFileSync(req.file.path), { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
   } catch {
@@ -199,7 +209,12 @@ router.post('/:orderId/versions/:versionId/selections/bulk', (req, res) => {
   const tx = db.transaction((nos) => {
     for (const materialNo of nos) {
       const guide = db.prepare('SELECT description FROM guide_prices WHERE material_no = ?').get(materialNo);
-      const material = db.prepare('SELECT description FROM materials WHERE end_customer_id = ? AND material_no = ? ORDER BY valid_from DESC LIMIT 1').get(order.end_customer_id, materialNo);
+      const materialStmt = db.prepare('SELECT description FROM materials WHERE end_customer_id = ? AND material_no = ? ORDER BY valid_from DESC LIMIT 1');
+      let material = null;
+      for (const customerId of frameworkCustomerIds(order.end_customer_id)) {
+        material = materialStmt.get(customerId, materialNo);
+        if (material) break;
+      }
       const description = (guide && guide.description) || (material && material.description) || null;
       maxSort += 1;
       const info = insert.run(version.id, materialNo, description, 'standard', 1, 'pcs', maxSort, null);
