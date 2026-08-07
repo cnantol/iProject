@@ -5,6 +5,7 @@ import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import CheckIcon from '@mui/icons-material/Check';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import CancelIcon from '@mui/icons-material/Cancel';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
@@ -41,12 +42,13 @@ const STEP_ICONS = {
   finance: <AccountBalanceIcon sx={{ fontSize: 18 }} />,
   shipping_invoicing: <LocalShippingIcon sx={{ fontSize: 18 }} />,
   commission: <PaidIcon sx={{ fontSize: 18 }} />,
-  closed: <LockIcon sx={{ fontSize: 18 }} />
+  closed: <LockIcon sx={{ fontSize: 18 }} />,
+  cancelled: <CancelIcon sx={{ fontSize: 18 }} />
 };
 
 export default function OrderStepper({ order, activeKey, onSelect }) {
   const currentIndex = STEP_KEY_INDEX[order?.status];
-  const isClosed = ['closed', 'lost_closed'].includes(order?.status);
+  const isClosed = ['closed', 'lost_closed', 'cancelled'].includes(order?.status);
   const activeIndex = isClosed ? -1 : STEP_KEY_INDEX[activeKey];
   const statusColor = STATUS_COLORS[order?.status] || '#78909C';
 
@@ -66,8 +68,8 @@ export default function OrderStepper({ order, activeKey, onSelect }) {
         {isClosed && (
           <Chip
             size="small"
-            color={order?.status === 'closed' ? 'success' : 'error'}
-            label={order?.status === 'closed' ? '已闭环' : '未中标关闭'}
+            color={order?.status === 'closed' ? 'success' : order?.status === 'lost_closed' ? 'error' : 'default'}
+            label={order?.status === 'closed' ? '已闭环' : order?.status === 'lost_closed' ? '未中标关闭' : '合同取消'}
             sx={{ fontWeight: 700 }}
           />
         )}

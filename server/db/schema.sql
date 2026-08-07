@@ -73,14 +73,14 @@ CREATE TABLE IF NOT EXISTS orders (
   project_owner TEXT,
   project_remark TEXT,
   sales_order TEXT UNIQUE,
-  total_amount REAL CHECK (total_amount IS NULL OR total_amount > 0),
+  total_amount REAL CHECK (total_amount IS NULL OR total_amount >= 0),
   payment_terms TEXT,
   delivered INTEGER DEFAULT 0 CHECK (delivered IN (0,1)),
   delivered_date TEXT,
   invoiced INTEGER DEFAULT 0 CHECK (invoiced IN (0,1)),
   invoiced_date TEXT,
   commission_matched INTEGER DEFAULT 0 CHECK (commission_matched IN (0,1)),
-  commission_amount REAL CHECK (commission_amount IS NULL OR commission_amount > 0),
+  commission_amount REAL CHECK (commission_amount IS NULL OR commission_amount >= 0),
   commission_date TEXT,
   status TEXT DEFAULT 'customer_info',
   selected_round_id INTEGER REFERENCES quotations(id),
@@ -285,12 +285,12 @@ CREATE INDEX IF NOT EXISTS idx_commission_manual_order ON commission_manual_reco
 
 CREATE TRIGGER IF NOT EXISTS trg_orders_check BEFORE INSERT ON orders
 BEGIN
-  SELECT CASE WHEN NEW.status NOT IN ('customer_info','proposal','quotation','approval_pending','bid_decision','finance','shipping_invoicing','commission','closed','lost_closed') THEN RAISE(ABORT,'invalid status') END;
+  SELECT CASE WHEN NEW.status NOT IN ('customer_info','proposal','quotation','approval_pending','bid_decision','finance','shipping_invoicing','commission','closed','lost_closed','cancelled') THEN RAISE(ABORT,'invalid status') END;
   SELECT CASE WHEN NEW.bid_result IS NOT NULL AND NEW.bid_result NOT IN ('won','lost') THEN RAISE(ABORT,'invalid bid_result') END;
 END;
 CREATE TRIGGER IF NOT EXISTS trg_orders_check_upd BEFORE UPDATE OF status,bid_result ON orders
 BEGIN
-  SELECT CASE WHEN NEW.status NOT IN ('customer_info','proposal','quotation','approval_pending','bid_decision','finance','shipping_invoicing','commission','closed','lost_closed') THEN RAISE(ABORT,'invalid status') END;
+  SELECT CASE WHEN NEW.status NOT IN ('customer_info','proposal','quotation','approval_pending','bid_decision','finance','shipping_invoicing','commission','closed','lost_closed','cancelled') THEN RAISE(ABORT,'invalid status') END;
   SELECT CASE WHEN NEW.bid_result IS NOT NULL AND NEW.bid_result NOT IN ('won','lost') THEN RAISE(ABORT,'invalid bid_result') END;
 END;
 CREATE TRIGGER IF NOT EXISTS trg_approval_check BEFORE INSERT ON approval_records

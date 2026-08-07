@@ -15,6 +15,7 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
+import CancelIcon from '@mui/icons-material/Cancel';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import api, { errorMessage } from '../api';
 import { fmtMoney } from '../utils/helpers';
@@ -22,6 +23,7 @@ import StepWrapper from './StepWrapper';
 
 export default function StepBidResult({ order, readOnly, onChanged }) {
   const [lostOpen, setLostOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [error, setError] = useState('');
   const editable = !readOnly && order.status === 'bid_decision';
   const selectedRound = (order.quotations || []).find((round) => round.id === order.selected_round_id);
@@ -98,7 +100,15 @@ export default function StepBidResult({ order, readOnly, onChanged }) {
             <Button variant="outlined" color="error" onClick={() => setLostOpen(true)}>
               未中标（lost）
             </Button>
+            <Button variant="outlined" color="inherit" startIcon={<CancelIcon />} onClick={() => setCancelOpen(true)}>
+              合同取消
+            </Button>
           </Stack>
+        )}
+        {order.status === 'cancelled' && (
+          <Alert severity="warning">
+            该销售机会因合同取消而关闭。如需恢复，请在系统设置「数据修正」中回退至中标结果。
+          </Alert>
         )}
         {order.status === 'lost_closed' && (
           <Alert severity="warning">
@@ -117,6 +127,18 @@ export default function StepBidResult({ order, readOnly, onChanged }) {
           <Button onClick={() => setLostOpen(false)}>取消</Button>
           <Button color="error" onClick={() => bid('lost')}>
             确认未中标
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)}>
+        <DialogTitle>确认合同取消</DialogTitle>
+        <DialogContent>
+          <DialogContentText>合同取消后销售机会将进入取消关闭终点，不可在流程中恢复。是否确认？</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCancelOpen(false)}>取消</Button>
+          <Button color="error" onClick={() => bid('cancelled')}>
+            确认合同取消
           </Button>
         </DialogActions>
       </Dialog>

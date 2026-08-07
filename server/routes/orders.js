@@ -10,6 +10,7 @@ import {
   conflict,
   pick,
   isMoney,
+  isNonNegativeNumber,
   isBool,
   isValidDate,
   writeAudit
@@ -37,6 +38,19 @@ function checkSalesOrderUnique(db, salesOrder, excludeId) {
     ? db.prepare('SELECT id FROM orders WHERE sales_order = ? AND id <> ?').get(salesOrder, excludeId)
     : db.prepare('SELECT id FROM orders WHERE sales_order = ?').get(salesOrder);
   return !row;
+}
+
+function withCommissionCheck(order) {
+  const amount = Number(order.commission_amount);
+  const total = Number(order.total_amount);
+  const result = { commission_expected: null, commission_status: 'none' };
+  if (amount > 0 && total > 0) {
+    const expected = total * 0.01;
+    const ratio = Math.abs(amount - expected) / expected;
+    result.commission_expected = expected;
+    result.commission_status = ratio <= 0.02 ? 'ok' : 'warn';
+  }
+  return { ...order, ...result };
 }
 
 function getQuotationTotal(db, roundId) {
@@ -199,14 +213,31 @@ function generateOrderId(db, tryInsert, shortName = null) {
 router.get('/', (req, res) => {
   const db = getDb();
   const { search, status, end_customer_id, contract_customer_id, year, month, scope } = req.query;
+  const so = String(req.query.so || '').trim();
+  const po = String(req.query.po || '').trim();
+  const projectNo = String(req.query.project_no || '').trim();
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
   const base = [];
   const baseParams = [];
   if (search) {
     const like = `%${String(search).trim()}%`;
-    base.push('(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ?)');
-    baseParams.push(like, like, like, like);
+    base.push(
+      '(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ? OR o.project_no LIKE ? OR EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?))'
+    );
+    baseParams.push(like, like, like, like, like, like);
+  }
+  if (so) {
+    base.push('o.sales_order LIKE ?');
+    baseParams.push(`%${so}%`);
+  }
+  if (po) {
+    base.push('EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?)');
+    baseParams.push(`%${po}%`);
+  }
+  if (projectNo) {
+    base.push('o.project_no LIKE ?');
+    baseParams.push(`%${projectNo}%`);
   }
   if (end_customer_id) {
     base.push('o.end_customer_id = ?');
@@ -231,8 +262,8 @@ router.get('/', (req, res) => {
     filter.push('o.status = ?');
     params.push(String(status));
   }
-  if (scope === 'active') filter.push("o.status NOT IN ('closed','lost_closed')");
-  if (scope === 'archived') filter.push("o.status IN ('closed','lost_closed')");
+  if (scope === 'active') filter.push("o.status NOT IN ('closed','lost_closed','cancelled')");
+  if (scope === 'archived') filter.push("o.status IN ('closed','lost_closed','cancelled')");
   const allWhere = [baseWhere, ...filter].filter(Boolean).join(' AND ');
   const whereSql = allWhere ? `WHERE ${allWhere}` : '';
   const countWith = (cond) => {
@@ -240,8 +271,8 @@ router.get('/', (req, res) => {
     const sql = parts ? `WHERE ${parts}` : '';
     return db.prepare(`SELECT COUNT(*) AS c FROM orders o ${sql}`).get(...(status ? [...baseParams, String(status)] : baseParams)).c;
   };
-  const activeCount = countWith("o.status NOT IN ('closed','lost_closed')");
-  const archivedCount = countWith("o.status IN ('closed','lost_closed')");
+  const activeCount = countWith("o.status NOT IN ('closed','lost_closed','cancelled')");
+  const archivedCount = countWith("o.status IN ('closed','lost_closed','cancelled')");
   const total = db.prepare(`SELECT COUNT(*) AS c FROM orders o ${whereSql}`).get(...params).c;
   const items = db
     .prepare(
@@ -250,15 +281,16 @@ router.get('/', (req, res) => {
        FROM orders o
        LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
        LEFT JOIN contract_customers cc ON cc.id = o.contract_customer_id
-       ${whereSql} ORDER BY o.id DESC LIMIT ? OFFSET ?`
+       ${whereSql} ORDER BY o.order_id DESC LIMIT ? OFFSET ?`
     )
     .all(...params, limit, (page - 1) * limit);
-  return res.json({ items, total, page, limit, activeCount, archivedCount });
+  return res.json({ items: items.map(withCommissionCheck), total, page, limit, activeCount, archivedCount });
 });
 
 router.get('/:id', (req, res) => {
   const detail = loadOrderDetail(getDb(), req.params.id);
   if (!detail) return notFound(res);
+  detail.order = withCommissionCheck(detail.order);
   return res.json(detail);
 });
 
@@ -448,7 +480,7 @@ router.patch('/:id/status', (req, res) => {
       const so = order.sales_order ? String(order.sales_order).trim() : '';
       if (!so) return badRequest(res, 'Sales Order 必填');
       if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他销售机会使用');
-      if (order.total_amount === null || order.total_amount === undefined || !isMoney(order.total_amount)) {
+      if (order.total_amount === null || order.total_amount === undefined || !isNonNegativeNumber(order.total_amount)) {
         return badRequest(res, '销售机会总金额无效，无法进入下一步');
       }
       const pos = db.prepare('SELECT * FROM customer_pos WHERE order_id = ?').all(order.id);
@@ -510,7 +542,14 @@ router.patch('/:id/status', (req, res) => {
       if (info.changes === 0) return conflict(res);
       return res.json(loadOrderDetail(db, order.id));
     }
-    return badRequest(res, '中标结果必须为 won 或 lost');
+    if (result === 'cancelled') {
+      const info = db
+        .prepare("UPDATE orders SET status = 'cancelled', closed_at = ?, updated_at = ? WHERE id = ? AND status = 'bid_decision'")
+        .run(ts, ts, order.id);
+      if (info.changes === 0) return conflict(res);
+      return res.json(loadOrderDetail(db, order.id));
+    }
+    return badRequest(res, '中标结果必须为 won、lost 或 cancelled');
   }
 
   if (action === 'toggle-delivered') {

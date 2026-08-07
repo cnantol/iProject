@@ -155,7 +155,7 @@ export default function OrderDetail() {
     if (key === 'shipping') return <StepShipping {...common} />;
     if (key === 'invoicing') return <StepInvoicing {...common} />;
     if (key === 'commission') return <StepCommission {...common} />;
-    if (key === 'closed' || key === 'lost_closed') return <StepClose order={order} />;
+    if (key === 'closed' || key === 'lost_closed' || key === 'cancelled') return <StepClose order={order} />;
     if (key === 'shipping_invoicing') {
       return (
         <>

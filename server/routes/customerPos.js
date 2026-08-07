@@ -10,7 +10,7 @@ function loadOrder(db, orderId) {
 }
 
 function posLocked(order) {
-  const locked = ['shipping_invoicing', 'commission', 'closed', 'lost_closed'];
+  const locked = ['shipping_invoicing', 'commission', 'closed', 'lost_closed', 'cancelled'];
   return locked.includes(order.status);
 }
 

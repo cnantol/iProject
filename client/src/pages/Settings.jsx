@@ -37,6 +37,7 @@ import AddIcon from '@mui/icons-material/Add';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import BackupIcon from '@mui/icons-material/Backup';
+import BuildIcon from '@mui/icons-material/Build';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -64,7 +65,7 @@ import api, { errorMessage } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useAppLogo } from '../context/AppLogoContext';
 import { FIELD_LABEL_DEFAULTS } from '../utils/fieldLabels';
-import { IMPORT_TARGET_LABELS } from '../utils/constants';
+import { IMPORT_TARGET_LABELS, STATUS_LABELS } from '../utils/constants';
 import { fmtDateTime } from '../utils/helpers';
 import { downloadUrl } from '../utils/download';
 import { QUOTE_STYLE_DEFAULTS } from '../utils/quoteStyleDefaults';
@@ -107,7 +108,8 @@ const STEP_ICONS = {
   shipping_invoicing: <LocalShippingIcon />,
   commission: <PaidIcon />,
   closed: <LockIcon />,
-  lost_closed: <CancelIcon />
+  lost_closed: <CancelIcon />,
+  cancelled: <CancelIcon />
 };
 
 const CUSTOM_FIELD_STEP_KEYS = ['customer_info'];
@@ -1682,6 +1684,7 @@ function SystemManager({ onError }) {
   const [correction, setCorrection] = useState({ delivered: '', invoiced: '', total_amount: '', target_status: '' });
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [backupInfo, setBackupInfo] = useState(null);
+  const [backups, setBackups] = useState([]);
   const [schedule, setSchedule] = useState({ enabled: false, hour: 2, minute: 0 });
   const [resetType, setResetType] = useState(null);
   const [password, setPassword] = useState('');
@@ -1723,6 +1726,15 @@ function SystemManager({ onError }) {
     }
   };
 
+  const loadBackups = async () => {
+    try {
+      const { data } = await api.get('/settings/backups');
+      setBackups(data.items || []);
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
   const loadFieldLabels = async () => {
     try {
       const { data } = await api.get('/settings/field-display-names');
@@ -1748,6 +1760,7 @@ function SystemManager({ onError }) {
   useEffect(() => {
     loadOrders();
     loadSchedule();
+    loadBackups();
     loadFieldLabels();
     loadAppLogo();
   }, []);
@@ -1756,6 +1769,7 @@ function SystemManager({ onError }) {
     try {
       const { data } = await api.post('/settings/backup');
       setBackupInfo(data);
+      loadBackups();
     } catch (err) {
       onError(errorMessage(err));
     }
@@ -1789,6 +1803,17 @@ function SystemManager({ onError }) {
     formData.append('file', file);
     try {
       await api.post('/settings/restore', formData);
+      window.alert('还原成功');
+      window.location.reload();
+    } catch (err) {
+      onError(errorMessage(err));
+    }
+  };
+
+  const restoreFromList = async (filename) => {
+    if (!window.confirm(`还原将覆盖当前数据库与附件，确认从「${filename}」还原？`)) return;
+    try {
+      await api.post(`/settings/restore/${filename}`);
       window.alert('还原成功');
       window.location.reload();
     } catch (err) {
@@ -2021,6 +2046,48 @@ function SystemManager({ onError }) {
             <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                 <Box sx={{ width: 4, height: 18, borderRadius: 2, bgcolor: 'primary.main' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>已有备份（最近 3 条）</Typography>
+              </Stack>
+              {backups.length === 0 ? (
+                <Typography variant="caption" color="text.secondary">暂无备份记录</Typography>
+              ) : (
+                <Stack spacing={1}>
+                  {backups.slice(0, 3).map((item) => (
+                    <Box
+                      key={item.filename}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        p: 0.75,
+                        borderRadius: 1.5,
+                        border: 1,
+                        borderColor: 'divider',
+                        bgcolor: 'background.paper'
+                      }}
+                    >
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {item.filename}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {fmtDateTime(item.modified_at)} · {(item.size / 1024 / 1024).toFixed(1)} MB
+                        </Typography>
+                      </Box>
+                      <IconButton size="small" title="下载" onClick={() => openDownload(item.downloadUrl)}>
+                        <DownloadIcon fontSize="small" />
+                      </IconButton>
+                      <Button size="small" variant="outlined" color="error" startIcon={<RestoreIcon />} onClick={() => restoreFromList(item.filename)}>
+                        还原
+                      </Button>
+                    </Box>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+            <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                <Box sx={{ width: 4, height: 18, borderRadius: 2, bgcolor: 'primary.main' }} />
                 <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>定时备份配置</Typography>
               </Stack>
               <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
@@ -2207,52 +2274,106 @@ function SystemManager({ onError }) {
           </Box>
 
         <Dialog open={correctionOpen} onClose={() => setCorrectionOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>数据修正</DialogTitle>
+          <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'warning.main' }} />
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: 2,
+                bgcolor: 'warning.main',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <BuildIcon fontSize="small" />
+            </Box>
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                数据修正
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                仅管理员可用，所有操作写入审计日志
+              </Typography>
+            </Box>
+          </DialogTitle>
           <DialogContent>
-            <Stack spacing={2} sx={{ mt: 1 }}>
+            <Stack spacing={2} sx={{ mt: 0.5 }}>
               <Autocomplete
                 options={orderOptions}
                 getOptionLabel={(option) => `${option.order_id}（${option.project_name || ''}）`}
                 value={selectedOrder}
                 onChange={(_, value) => setSelectedOrder(value)}
-                renderInput={(params) => <TextField {...params} label="选择销售机会" />}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="选择销售机会"
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
+                  />
+                )}
               />
-              <FormControl fullWidth>
-                <InputLabel>发货状态</InputLabel>
-                <Select value={correction.delivered} label="发货状态" onChange={(e) => setCorrection((prev) => ({ ...prev, delivered: e.target.value }))}>
-                  <MenuItem value="">不修改</MenuItem>
-                  <MenuItem value="0">改为未发货</MenuItem>
-                  <MenuItem value="1">改为已发货</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl fullWidth>
-                <InputLabel>开票状态</InputLabel>
-                <Select value={correction.invoiced} label="开票状态" onChange={(e) => setCorrection((prev) => ({ ...prev, invoiced: e.target.value }))}>
-                  <MenuItem value="">不修改</MenuItem>
-                  <MenuItem value="0">改为未开票</MenuItem>
-                  <MenuItem value="1">改为已开票</MenuItem>
-                </Select>
-              </FormControl>
-              <TextField label="总金额（留空不修改）" type="number" value={correction.total_amount} onChange={(e) => setCorrection((prev) => ({ ...prev, total_amount: e.target.value }))} />
-              <FormControl fullWidth>
-                <InputLabel>回退目标状态</InputLabel>
-                <Select value={correction.target_status} label="回退目标状态" onChange={(e) => setCorrection((prev) => ({ ...prev, target_status: e.target.value }))}>
-                  <MenuItem value="">不回退状态</MenuItem>
-                  <MenuItem value="shipping_invoicing">shipping_invoicing</MenuItem>
-                  <MenuItem value="finance">finance</MenuItem>
-                  <MenuItem value="commission">commission</MenuItem>
-                  <MenuItem value="bid_decision">bid_decision</MenuItem>
-                  <MenuItem value="quotation">quotation</MenuItem>
-                </Select>
-              </FormControl>
-              <Typography variant="caption" color="text.secondary">
+              {selectedOrder && (
+                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                  当前状态：<strong>{STATUS_LABELS[selectedOrder.status] || selectedOrder.status}</strong> · {selectedOrder.order_id}
+                </Alert>
+              )}
+              <Box sx={{ p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.25 }}>
+                  字段修正
+                </Typography>
+                <Stack spacing={1.5}>
+                  <FormControl fullWidth>
+                    <InputLabel>发货状态</InputLabel>
+                    <Select value={correction.delivered} label="发货状态" onChange={(e) => setCorrection((prev) => ({ ...prev, delivered: e.target.value }))}>
+                      <MenuItem value="">不修改</MenuItem>
+                      <MenuItem value="0">改为未发货</MenuItem>
+                      <MenuItem value="1">改为已发货</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <FormControl fullWidth>
+                    <InputLabel>开票状态</InputLabel>
+                    <Select value={correction.invoiced} label="开票状态" onChange={(e) => setCorrection((prev) => ({ ...prev, invoiced: e.target.value }))}>
+                      <MenuItem value="">不修改</MenuItem>
+                      <MenuItem value="0">改为未开票</MenuItem>
+                      <MenuItem value="1">改为已开票</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    label="总金额（留空不修改）"
+                    type="number"
+                    value={correction.total_amount}
+                    onChange={(e) => setCorrection((prev) => ({ ...prev, total_amount: e.target.value }))}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
+                  />
+                </Stack>
+              </Box>
+              <Box sx={{ p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.25 }}>
+                  回退状态
+                </Typography>
+                <FormControl fullWidth>
+                  <InputLabel>回退目标状态</InputLabel>
+                  <Select value={correction.target_status} label="回退目标状态" onChange={(e) => setCorrection((prev) => ({ ...prev, target_status: e.target.value }))}>
+                    <MenuItem value="">不回退状态</MenuItem>
+                    <MenuItem value="shipping_invoicing">发货+开票</MenuItem>
+                    <MenuItem value="finance">财务信息</MenuItem>
+                    <MenuItem value="commission">佣金结算</MenuItem>
+                    <MenuItem value="bid_decision">中标结果</MenuItem>
+                    <MenuItem value="quotation">报价阶段</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+              <Alert severity="warning" sx={{ borderRadius: 2 }}>
                 将 delivered/invoiced 改为 0 且销售机会已到 commission/closed 时必须指定回退目标状态；所有修正写入审计日志。
-              </Typography>
+              </Alert>
             </Stack>
           </DialogContent>
-          <DialogActions>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
             <Button onClick={() => setCorrectionOpen(false)}>取消</Button>
-            <Button variant="contained" color="warning" onClick={doCorrection} disabled={!selectedOrder}>
+            <Button variant="contained" color="warning" startIcon={<BuildIcon />} onClick={doCorrection} disabled={!selectedOrder}>
               确认修正
             </Button>
           </DialogActions>

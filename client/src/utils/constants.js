@@ -8,7 +8,8 @@ export const STATUS_LABELS = {
   shipping_invoicing: '发货+开票',
   commission: '佣金结算',
   closed: '已闭环',
-  lost_closed: '未中标关闭'
+  lost_closed: '未中标关闭',
+  cancelled: '合同取消'
 };
 
 export const STATUS_COLORS = {
@@ -21,7 +22,8 @@ export const STATUS_COLORS = {
   shipping_invoicing: '#0288D1',
   commission: '#6D4C41',
   closed: '#2E7D32',
-  lost_closed: '#B71C1C'
+  lost_closed: '#B71C1C',
+  cancelled: '#78909C'
 };
 
 export const STEP_ORDER = [

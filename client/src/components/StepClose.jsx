@@ -12,21 +12,31 @@ export default function StepClose({ order }) {
   const { t } = useFieldLabels();
   const closed = order.status === 'closed';
   const lostClosed = order.status === 'lost_closed';
-  const notClosed = !closed && !lostClosed;
+  const cancelled = order.status === 'cancelled';
+  const notClosed = !closed && !lostClosed && !cancelled;
   const subtitle = closed
     ? '中标销售机会已闭环，全步骤只读'
     : lostClosed
       ? '未中标销售机会已关闭，全步骤只读'
-      : `销售机会尚未闭环（当前阶段：${STATUS_LABELS[order.status] || order.status}）`;
+      : cancelled
+        ? '合同已取消，销售机会已关闭，全步骤只读'
+        : `销售机会尚未闭环（当前阶段：${STATUS_LABELS[order.status] || order.status}）`;
   return (
     <StepWrapper title="项目闭环" subtitle={subtitle}>
-      <Alert severity={closed ? 'success' : lostClosed ? 'warning' : 'info'} sx={{ mb: 2 }}>
+      <Alert severity={closed ? 'success' : lostClosed || cancelled ? 'warning' : 'info'} sx={{ mb: 2 }}>
         {closed
           ? '该销售机会已完成佣金结算并闭环，数据仅供查阅。'
           : lostClosed
             ? '该销售机会已标记未中标并关闭。'
-            : '该销售机会尚未闭环，佣金匹配完成后将自动进入闭环。'}
+            : cancelled
+              ? '该销售机会因合同取消而关闭。'
+              : '该销售机会尚未闭环，佣金匹配完成后将自动进入闭环。'}
       </Alert>
+      {order.commission_status === 'warn' && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          佣金金额与订单金额的 1% 规则偏差超过 2%，请核对佣金金额（当前 {order.commission_amount}，按 1% 应为 {Number(order.commission_expected).toFixed(2)}）。
+        </Alert>
+      )}
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6} md={3}>
           <Typography variant="body2" color="text.secondary">中标结果</Typography>

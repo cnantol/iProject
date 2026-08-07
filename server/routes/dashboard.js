@@ -7,17 +7,56 @@ const router = Router();
 router.get('/', (req, res) => {
   const db = getDb();
   const total = db.prepare('SELECT COUNT(*) AS c FROM orders').get().c;
-  const inProgress = db.prepare("SELECT COUNT(*) AS c FROM orders WHERE status NOT IN ('closed','lost_closed')").get().c;
-  const closed = db.prepare("SELECT COUNT(*) AS c FROM orders WHERE status = 'closed'").get().c;
+  const inProgress = db.prepare("SELECT COUNT(*) AS c FROM orders WHERE status NOT IN ('closed','lost_closed','cancelled')").get().c;
+  const closed = db.prepare("SELECT COUNT(*) AS c FROM orders WHERE status IN ('closed','lost_closed','cancelled')").get().c;
   const totalAmount = db
     .prepare("SELECT COALESCE(SUM(total_amount), 0) AS s FROM orders WHERE status = 'closed' AND bid_result = 'won' AND total_amount IS NOT NULL")
     .get().s;
+  const totalOrderAmount = db
+    .prepare('SELECT COALESCE(SUM(total_amount), 0) AS s FROM orders WHERE total_amount IS NOT NULL')
+    .get().s;
+  const totalCommission = db
+    .prepare('SELECT COALESCE(SUM(commission_amount), 0) AS s FROM orders WHERE commission_amount IS NOT NULL')
+    .get().s;
+  const customerTotals = db
+    .prepare(
+      `SELECT ec.customer_name AS customer_name, COALESCE(SUM(o.total_amount), 0) AS total_amount, COUNT(o.id) AS order_count
+       FROM orders o LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
+       GROUP BY o.end_customer_id
+       ORDER BY total_amount DESC LIMIT 8`
+    )
+    .all();
+  const inProgressByTime = db
+    .prepare(
+      `SELECT year, month, COUNT(*) AS count FROM orders
+       WHERE status NOT IN ('closed','lost_closed','cancelled')
+       GROUP BY year, month ORDER BY year DESC, CAST(month AS INTEGER) DESC`
+    )
+    .all();
+  const inProgressByCustomer = db
+    .prepare(
+      `SELECT ec.customer_name AS customer_name, COUNT(*) AS count, COALESCE(SUM(o.total_amount), 0) AS total_amount FROM orders o
+       LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
+       WHERE o.status NOT IN ('closed','lost_closed','cancelled')
+       GROUP BY o.end_customer_id ORDER BY total_amount DESC`
+    )
+    .all();
+  const commissionMismatches = db
+    .prepare(
+      `SELECT o.id, o.order_id, o.project_name, o.total_amount, o.commission_amount,
+        ROUND(o.total_amount * 0.01, 4) AS expected_commission,
+        ABS(o.commission_amount - o.total_amount * 0.01) AS diff_amount
+       FROM orders o
+       WHERE o.status = 'closed' AND o.commission_amount > 0 AND o.total_amount > 0
+       ORDER BY diff_amount DESC LIMIT 10`
+    )
+    .all();
   const statusDistribution = db.prepare('SELECT status, COUNT(*) AS count FROM orders GROUP BY status ORDER BY count DESC').all();
   const recentOrders = db
     .prepare(
       `SELECT o.id, o.order_id, o.project_name, o.status, o.total_amount, ec.customer_name AS end_customer_name
        FROM orders o LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
-       ORDER BY o.id DESC LIMIT 10`
+       ORDER BY o.order_id DESC LIMIT 10`
     )
     .all();
   const recentTodos = db
@@ -36,6 +75,12 @@ router.get('/', (req, res) => {
     inProgress,
     closedCount: closed,
     totalAmount,
+    totalOrderAmount,
+    totalCommission,
+    customerTotals,
+    inProgressByTime,
+    inProgressByCustomer,
+    commissionMismatches,
     statusDistribution,
     recentOrders,
     recentTodos,

@@ -267,7 +267,7 @@ export default function TodoList() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [todoRes, orderRes] = await Promise.all([api.get('/todos', { params: { limit: 500 } }), api.get('/orders', { params: { limit: 100 } })]);
+      const [todoRes, orderRes] = await Promise.all([api.get('/todos', { params: { limit: 500 } }), api.get('/orders', { params: { limit: 100, scope: 'active' } })]);
       setTodos(todoRes.data.items || []);
       setOrders(orderRes.data.items || []);
       setError('');
@@ -434,13 +434,30 @@ export default function TodoList() {
               </Select>
             </FormControl>
             <TextField size="small" label="截止日期" type="date" value={quick.due_date} onChange={(e) => setQuick((prev) => ({ ...prev, due_date: e.target.value }))} InputLabelProps={{ shrink: true }} />
-            <FormControl size="small" sx={{ minWidth: 200 }}>
+            <FormControl size="small" sx={{ minWidth: 220 }}>
               <InputLabel>关联销售机会</InputLabel>
-              <Select value={quick.order_ref} label="关联销售机会" onChange={(e) => setQuick((prev) => ({ ...prev, order_ref: e.target.value }))}>
+              <Select
+                value={quick.order_ref}
+                label="关联销售机会"
+                onChange={(e) => setQuick((prev) => ({ ...prev, order_ref: e.target.value }))}
+                sx={{
+                  borderRadius: 2.5,
+                  '& .MuiInputBase-input': { fontSize: 14, fontWeight: 500 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' }
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      borderRadius: 2.5,
+                      '& .MuiMenuItem-root': { fontSize: 14, minHeight: 42, fontWeight: 500 }
+                    }
+                  }
+                }}
+              >
                 <MenuItem value="">不关联</MenuItem>
                 {orders.map((order) => (
                   <MenuItem key={order.id} value={order.id}>
-                    {order.order_id} · {order.project_name}
+                    {order.order_id} · {order.project_name || '-'}
                   </MenuItem>
                 ))}
               </Select>

@@ -69,19 +69,6 @@ function StatCard({ label, value, accent, badge, icon }) {
   );
 }
 
-const STATUS_ICONS = {
-  customer_info: <PersonIcon sx={{ fontSize: 16 }} />,
-  proposal: <DescriptionIcon sx={{ fontSize: 16 }} />,
-  quotation: <RequestQuoteIcon sx={{ fontSize: 16 }} />,
-  approval_pending: <FactCheckIcon sx={{ fontSize: 16 }} />,
-  bid_decision: <EmojiEventsIcon sx={{ fontSize: 16 }} />,
-  finance: <AccountBalanceIcon sx={{ fontSize: 16 }} />,
-  shipping_invoicing: <LocalShippingIcon sx={{ fontSize: 16 }} />,
-  commission: <PaidIcon sx={{ fontSize: 16 }} />,
-  closed: <LockIcon sx={{ fontSize: 16 }} />,
-  lost_closed: <CancelIcon sx={{ fontSize: 16 }} />
-};
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const { t } = useFieldLabels();
@@ -137,9 +124,6 @@ export default function Dashboard() {
   }
   if (!data) return null;
 
-  const maxStatus = Math.max(1, ...(data.statusDistribution || []).map((row) => row.count));
-  const statusMap = new Map((data.statusDistribution || []).map((row) => [row.status, row.count]));
-
   return (
     <Stack spacing={3} useFlexGap>
       <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1.5} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
@@ -158,17 +142,26 @@ export default function Dashboard() {
       </Stack>
 
       <Grid container spacing={2} sx={{ mx: -2 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={4}>
           <StatCard label="总项目数" value={data.totalOrders ?? 0} accent="#1976D2" icon={<AssignmentIcon />} />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={4}>
           <StatCard label="进行中" value={data.inProgress ?? 0} accent="#F57C00" badge={data.overdueCount} icon={<AutoGraphIcon />} />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={4}>
           <StatCard label="已闭环" value={data.closedCount ?? 0} accent="#2E7D32" icon={<CheckCircleOutlineIcon />} />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+      </Grid>
+
+      <Grid container spacing={2} sx={{ mx: -2 }}>
+        <Grid item xs={12} sm={6} md={4}>
+          <StatCard label="订单总金额" value={`¥ ${fmtMoney(data.totalOrderAmount)}`} accent="#00897B" icon={<AccountBalanceIcon />} />
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
           <StatCard label="闭环总金额" value={`¥ ${fmtMoney(data.totalAmount)}`} accent="#004E9A" icon={<PaymentsOutlinedIcon />} />
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <StatCard label="佣金总金额" value={`¥ ${fmtMoney(data.totalCommission)}`} accent="#C9A227" icon={<PaidIcon />} />
         </Grid>
       </Grid>
 
@@ -179,37 +172,42 @@ export default function Dashboard() {
             <CardContent>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
                 <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
-                <Typography variant="h6">状态汇总</Typography>
+                <Typography variant="h6">进行中汇总</Typography>
               </Stack>
-              <Stack spacing={1.25}>
-                {[...statusMap.entries()].length === 0 && (
-                  <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-                    暂无数据
-                  </Typography>
-                )}
-                {[...statusMap.entries()]
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([status, count]) => (
-                    <Box key={status}>
-                      <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.25 }}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Box sx={{ width: 26, height: 26, borderRadius: 1.5, bgcolor: `${STATUS_COLORS[status] || '#78909C'}22`, color: STATUS_COLORS[status] || '#78909C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {STATUS_ICONS[status] || <AutoGraphIcon sx={{ fontSize: 16 }} />}
-                          </Box>
-                          <Typography variant="body2">{STATUS_LABELS[status] || status}</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.75 }}>
+                按最终客户
+              </Typography>
+              {(data.inProgressByCustomer || []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 1, textAlign: 'center' }}>
+                  暂无进行中机会
+                </Typography>
+              ) : (
+                <Stack spacing={1}>
+                  {(data.inProgressByCustomer || []).map((row, index) => {
+                    const maxCustomer = Math.max(1, ...(data.inProgressByCustomer || []).map((r) => Number(r.count)));
+                    return (
+                      <Box key={row.customer_name || `customer-${index}`}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.25, gap: 1 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                            {row.customer_name || '未分配客户'}
+                          </Typography>
+                          <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexShrink: 0 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 800, color: '#00897B', whiteSpace: 'nowrap' }}>
+                              ¥ {fmtMoney(row.total_amount)}
+                            </Typography>
+                            <Chip size="small" label={`${row.count} 个`} variant="outlined" color="primary" sx={{ fontWeight: 700 }} />
+                          </Stack>
                         </Stack>
-                        <Typography variant="body2" fontWeight={700}>
-                          {count}
-                        </Typography>
-                      </Stack>
-                      <LinearProgress
-                        variant="determinate"
-                        value={(count / maxStatus) * 100}
-                        sx={{ height: 8, borderRadius: 2, bgcolor: `${STATUS_COLORS[status] || '#78909C'}22`, '& .MuiLinearProgress-bar': { bgcolor: STATUS_COLORS[status] || '#78909C' } }}
-                      />
-                    </Box>
-                  ))}
-              </Stack>
+                        <LinearProgress
+                          variant="determinate"
+                          value={(Number(row.count) / maxCustomer) * 100}
+                          sx={{ height: 7, borderRadius: 2, bgcolor: 'rgba(0,137,123,0.12)', '& .MuiLinearProgress-bar': { bgcolor: '#00897B' } }}
+                        />
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -277,57 +275,108 @@ export default function Dashboard() {
       <Grid container spacing={2} sx={{ mx: -2 }}>
         <Grid item xs={12}>
           <Card>
-            <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
+            <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: '#C9A227' }} />
             <CardContent>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
-              <Typography variant="h6">最新机会</Typography>
-            </Stack>
-            <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/orders')}>
-              全部销售机会
-            </Button>
-          </Stack>
-          {(data.recentOrders || []).length === 0 ? (
-            <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-              暂无数据
-            </Typography>
-          ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                  <TableCell>{t('order_id')}</TableCell>
-                  <TableCell>{t('project_name')}</TableCell>
-                  <TableCell>{t('end_customer')}</TableCell>
-                  <TableCell>{t('status')}</TableCell>
-                  <TableCell align="right">{t('amount')}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {(data.recentOrders || []).slice(0, 10).map((order) => (
-                  <TableRow
-                    key={order.id}
-                    hover
-                    sx={{ cursor: 'pointer', transition: 'background-color 0.15s ease', '&:hover': { bgcolor: 'action.hover' } }}
-                    onClick={() => navigate(`/orders/${order.id}`)}
-                  >
-                    <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{order.order_id}</TableCell>
-                    <TableCell>{order.project_name || '-'}</TableCell>
-                    <TableCell>{order.end_customer_name || '-'}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={STATUS_LABELS[order.status] || order.status}
-                        icon={<Box component="span" sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: STATUS_COLORS[order.status] || '#78909C' }} />}
-                        sx={{ bgcolor: `${STATUS_COLORS[order.status] || '#78909C'}22`, color: STATUS_COLORS[order.status] || '#78909C' }}
-                      />
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtMoney(order.total_amount)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: '#C9A227' }} />
+                  <Typography variant="h6">最终客户金额排行</Typography>
+                </Stack>
+              </Stack>
+              {(data.customerTotals || []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+                  暂无数据
+                </Typography>
+              ) : (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                      <TableCell sx={{ width: 70 }}>排名</TableCell>
+                      <TableCell>最终客户</TableCell>
+                      <TableCell align="right">订单数</TableCell>
+                      <TableCell align="right">总金额</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(data.customerTotals || []).map((item, index) => (
+                      <TableRow key={item.customer_name || `customer-${index}`} hover>
+                        <TableCell>
+                          <Box
+                            sx={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 1.5,
+                              bgcolor: index === 0 ? '#C9A227' : '#C9A22733',
+                              color: index === 0 ? '#fff' : '#8A6D00',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 800,
+                              fontSize: 13
+                            }}
+                          >
+                            {index === 0 ? <EmojiEventsIcon sx={{ fontSize: 16 }} /> : index + 1}
+                          </Box>
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: index === 0 ? 800 : 600, color: index === 0 ? '#8A6D00' : 'text.primary' }}>
+                          {item.customer_name || '未分配客户'}
+                        </TableCell>
+                        <TableCell align="right">{item.order_count} 个</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 800, whiteSpace: 'nowrap', color: index === 0 ? '#8A6D00' : 'text.primary' }}>
+                          ¥ {fmtMoney(item.total_amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+      <Grid container spacing={2} sx={{ mx: -2 }}>
+        <Grid item xs={12}>
+          <Card>
+            <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'error.main' }} />
+            <CardContent>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+                <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'error.main' }} />
+                <Typography variant="h6">佣金偏差金额 TOP10</Typography>
+              </Stack>
+              {(data.commissionMismatches || []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+                  暂无数据
+                </Typography>
+              ) : (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                      <TableCell sx={{ width: 64 }}>排名</TableCell>
+                      <TableCell>机会号</TableCell>
+                      <TableCell>项目名称</TableCell>
+                      <TableCell align="right">订单金额</TableCell>
+                      <TableCell align="right">期望佣金（1%）</TableCell>
+                      <TableCell align="right">实际佣金</TableCell>
+                      <TableCell align="right">偏差金额</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(data.commissionMismatches || []).map((item, index) => (
+                      <TableRow key={item.id} hover>
+                        <TableCell sx={{ fontWeight: 800, color: index === 0 ? 'error.main' : 'text.secondary' }}>{index + 1}</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{item.order_id}</TableCell>
+                        <TableCell sx={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.project_name || '-'}</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{fmtMoney(item.total_amount)}</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{fmtMoney(item.expected_commission)}</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{fmtMoney(item.commission_amount)}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 800, color: 'error.main', whiteSpace: 'nowrap' }}>
+                          ¥ {fmtMoney(item.diff_amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </Grid>

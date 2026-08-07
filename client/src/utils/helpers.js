@@ -66,7 +66,7 @@ export function daysSinceDate(dateStr) {
 
 export function isStepReadOnly(order, stepKey) {
   if (!order) return true;
-  if (['closed', 'lost_closed'].includes(order.status)) return true;
+  if (['closed', 'lost_closed', 'cancelled'].includes(order.status)) return true;
   if (order.status === 'shipping_invoicing') {
     if (stepKey === 'shipping' || stepKey === 'invoicing') return false;
     const doneSteps = ['customer_info', 'proposal', 'quotation', 'approval_pending', 'bid_decision', 'finance'];

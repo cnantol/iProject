@@ -89,6 +89,45 @@ export function initDb(dir) {
   ensureShortName('end_customers');
   ensureShortName('contract_customers');
 
+  const ensureOrdersTotalNonNegative = () => {
+    const ddlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get();
+    const ddl = ddlRow && ddlRow.sql ? String(ddlRow.sql) : '';
+    if (ddl.includes('total_amount >= 0') && ddl.includes('commission_amount >= 0')) return;
+    const indexSqls = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'orders' AND sql IS NOT NULL")
+      .all()
+      .map((row) => row.sql);
+    const triggerSqls = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'orders' AND sql IS NOT NULL")
+      .all()
+      .map((row) => row.sql);
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec('BEGIN');
+    try {
+      const newDdl = ddl
+        .replace('total_amount > 0', 'total_amount >= 0')
+        .replace('commission_amount > 0', 'commission_amount >= 0')
+        .replace(/CREATE TABLE "?orders"?/, 'CREATE TABLE orders_migrated');
+      db.exec(newDdl);
+      db.exec('INSERT INTO orders_migrated SELECT * FROM orders');
+      db.exec('DROP TABLE orders');
+      db.exec('ALTER TABLE orders_migrated RENAME TO orders');
+      for (const sql of indexSqls) db.exec(sql);
+      for (const sql of triggerSqls) db.exec(sql);
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+    const issues = db.pragma('foreign_key_check');
+    if (issues.length > 0) {
+      throw new Error('orders 表迁移后外键校验失败');
+    }
+  };
+  ensureOrdersTotalNonNegative();
+
   const importLogColumns = db.prepare('PRAGMA table_info(import_logs)').all();
   if (!importLogColumns.some((col) => col.name === 'detail')) {
     db.exec('ALTER TABLE import_logs ADD COLUMN detail TEXT');
@@ -124,7 +163,8 @@ export function seedWorkflow(database) {
     ['shipping_invoicing', '发货+开票', 7],
     ['commission', '佣金结算', 8],
     ['closed', '项目闭环', 9],
-    ['lost_closed', '未中标关闭', 10]
+    ['lost_closed', '未中标关闭', 10],
+    ['cancelled', '合同取消', 11]
   ];
   const count = database.prepare('SELECT COUNT(*) AS c FROM workflow_steps').get().c;
   if (count === 0) {
@@ -145,6 +185,7 @@ export function seedWorkflow(database) {
       ['approval_pending', 'quotation', 'system_auto', 'approval rejected'],
       ['bid_decision', 'finance', 'user_action', 'bid_result=won'],
       ['bid_decision', 'lost_closed', 'user_action', 'bid_result=lost'],
+      ['bid_decision', 'cancelled', 'user_action', 'bid_result=cancelled'],
       ['finance', 'shipping_invoicing', 'user_action', 'sales_order,total_amount,customer_pos'],
       ['shipping_invoicing', 'commission', 'condition_met', 'delivered=1,invoiced=1'],
       ['commission', 'closed', 'system_auto', 'commission_matched=1']
@@ -154,5 +195,16 @@ export function seedWorkflow(database) {
       for (const row of list) insert.run(...row);
     });
     tx(rows);
+  }
+  database
+    .prepare("INSERT OR IGNORE INTO workflow_steps (step_key, step_name, sort_order, is_active) VALUES ('cancelled','合同取消',11,1)")
+    .run();
+  const hasCancelTransition = database
+    .prepare("SELECT 1 FROM workflow_transitions WHERE from_step = 'bid_decision' AND to_step = 'cancelled' LIMIT 1")
+    .get();
+  if (!hasCancelTransition) {
+    database
+      .prepare("INSERT INTO workflow_transitions (from_step, to_step, condition_type, condition_field) VALUES ('bid_decision','cancelled','user_action','bid_result=cancelled')")
+      .run();
   }
 }

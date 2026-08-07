@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import xlsx from 'xlsx';
 import { getDb, getDataDir, getUploadDir, closeDb, initDb, seedWorkflow, rotateJwtSecret } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
-import { nowUtc, badRequest, notFound, isMoney, isBool, isValidDate, normalizeDate, normalizeSo, writeAudit } from '../utils.js';
+import { nowUtc, badRequest, notFound, isMoney, isBool, isValidDate, isNonNegativeNumber, normalizeDate, normalizeSo, writeAudit } from '../utils.js';
 import { loadOrderDetail, checkSalesOrderUnique } from './orders.js';
 import { buildQuotationPdf } from './quotations.js';
 
@@ -478,7 +478,7 @@ function importHistoryRow(db, headers, row) {
   if (year === null || String(year).trim() === '') return '年份必填';
   if (month === null || String(month).trim() === '') return '月份必填';
   const status = value('状态') ? String(value('状态')) : 'customer_info';
-  const statuses = ['customer_info', 'proposal', 'quotation', 'approval_pending', 'bid_decision', 'finance', 'shipping_invoicing', 'commission', 'closed', 'lost_closed'];
+  const statuses = ['customer_info', 'proposal', 'quotation', 'approval_pending', 'bid_decision', 'finance', 'shipping_invoicing', 'commission', 'closed', 'lost_closed', 'cancelled'];
   if (!statuses.includes(status)) return '状态值非法';
   const endName = value('最终客户');
   const contractName = value('合同客户');
@@ -499,7 +499,7 @@ function importHistoryRow(db, headers, row) {
   const totalAmountRaw = value('总金额');
   let totalAmount = null;
   if (totalAmountRaw !== null && totalAmountRaw !== '') {
-    if (!isMoney(totalAmountRaw)) return '总金额必须大于 0';
+    if (!isNonNegativeNumber(totalAmountRaw)) return '总金额不能小于 0';
     totalAmount = Number(totalAmountRaw);
   }
   const delivered = parseBool(value('是否发货'));
@@ -508,17 +508,22 @@ function importHistoryRow(db, headers, row) {
   const commissionAmountRaw = value('佣金金额');
   let commissionAmount = null;
   if (commissionAmountRaw !== null && commissionAmountRaw !== '') {
-    if (!isMoney(commissionAmountRaw)) return '佣金金额必须大于 0';
-    commissionAmount = Number(commissionAmountRaw);
+    if (Number(commissionAmountRaw) === 0) {
+      commissionAmount = 0;
+    } else if (!isMoney(commissionAmountRaw)) {
+      return '佣金金额必须大于 0';
+    } else {
+      commissionAmount = Number(commissionAmountRaw);
+    }
   }
   const deliveredDateRaw = value('发货日期');
   const deliveredDate = deliveredDateRaw === null || deliveredDateRaw === undefined || deliveredDateRaw === '' ? null : normalizeDate(deliveredDateRaw);
   const invoicedDateRaw = value('开票日期');
   const invoicedDate = invoicedDateRaw === null || invoicedDateRaw === undefined || invoicedDateRaw === '' ? null : normalizeDate(invoicedDateRaw);
   if (delivered === 1 && !deliveredDate) return 'delivered=1 必须同时提供发货日期';
-  if (commissionMatched === 1 && !isMoney(commissionAmount)) return '已闭环销售机会缺少佣金金额';
-  if (status === 'closed' && (delivered !== 1 || invoiced !== 1 || !isMoney(commissionAmount))) {
-    return 'closed 销售机会必须 delivered=1 且 invoiced=1 且有佣金金额';
+  if (commissionMatched === 1 && !isMoney(commissionAmount)) return '佣金匹配时必须提供大于 0 的佣金金额';
+  if (status === 'closed' && (delivered !== 1 || invoiced !== 1)) {
+    return 'closed 销售机会必须 delivered=1 且 invoiced=1';
   }
   if (deliveredDateRaw !== null && deliveredDateRaw !== undefined && deliveredDateRaw !== '' && !deliveredDate) {
     return '发货日期格式无效，支持 YYYY-MM-DD、YYYY/MM/DD、YYYY.MM.DD、YYYY年M月D日或 Excel 日期';
@@ -563,7 +568,7 @@ function importHistoryRow(db, headers, row) {
         status,
         0,
         0,
-        ['closed', 'lost_closed'].includes(status) ? ts : null,
+        ['closed', 'lost_closed', 'cancelled'].includes(status) ? ts : null,
         ts,
         ts
       );
@@ -586,16 +591,16 @@ router.get('/import-logs', (req, res) => {
 });
 
 const IMPORT_UNDO_CHILD_TABLES = [
-  'proposal_versions',
-  'quotations',
-  'approval_records',
-  'customer_pos',
-  'order_attachments',
-  'shipping_batches',
-  'invoice_records',
-  'commission_manual_records',
-  'order_custom_fields',
-  'todos'
+  { table: 'proposal_versions', column: 'order_id' },
+  { table: 'quotations', column: 'order_id' },
+  { table: 'approval_records', column: 'order_id' },
+  { table: 'customer_pos', column: 'order_id' },
+  { table: 'order_attachments', column: 'order_id' },
+  { table: 'shipping_batches', column: 'order_id' },
+  { table: 'invoice_records', column: 'order_id' },
+  { table: 'commission_manual_records', column: 'order_id' },
+  { table: 'order_custom_fields', column: 'order_id' },
+  { table: 'todos', column: 'order_ref' }
 ];
 
 router.post('/import/:id/undo', (req, res) => {
@@ -619,9 +624,9 @@ router.post('/import/:id/undo', (req, res) => {
     if (log.target_type === 'history') {
       const orderIds = toIds('order');
       if (orderIds.length === 0) return { deleted, skipped };
-      for (const table of IMPORT_UNDO_CHILD_TABLES) {
+      for (const { table, column } of IMPORT_UNDO_CHILD_TABLES) {
         const placeholders = orderIds.map(() => '?').join(',');
-        const count = db.prepare(`SELECT COUNT(*) AS c FROM ${table} WHERE order_id IN (${placeholders})`).get(...orderIds).c;
+        const count = db.prepare(`SELECT COUNT(*) AS c FROM ${table} WHERE ${column} IN (${placeholders})`).get(...orderIds).c;
         if (count > 0) throw new Error(`导入的销售机会已存在关联数据（${table}），为安全起见已阻止撤回`);
       }
       const info = db.prepare(`DELETE FROM orders WHERE id IN (${orderIds.map(() => '?').join(',')})`).run(...orderIds);
@@ -1071,23 +1076,41 @@ router.get('/backup/:filename/download', (req, res) => {
   return res.download(filePath, filename);
 });
 
-router.post('/restore', upload.single('file'), (req, res) => {
-  if (!req.file) return badRequest(res, '请上传备份文件');
+router.get('/backups', (req, res) => {
+  const backupDir = path.join(getDataDir(), 'backups');
+  fs.mkdirSync(backupDir, { recursive: true });
+  const items = fs
+    .readdirSync(backupDir)
+    .filter((name) => /^iproject-backup-[\d]{14}\.zip$/.test(name))
+    .map((name) => {
+      const stat = fs.statSync(path.join(backupDir, name));
+      return {
+        filename: name,
+        size: stat.size,
+        modified_at: stat.mtime.toISOString().replace('T', ' ').slice(0, 19),
+        downloadUrl: `/api/settings/backup/${name}/download`
+      };
+    })
+    .sort((a, b) => b.modified_at.localeCompare(a.modified_at));
+  return res.json({ items });
+});
+
+function performRestore(zipPath, displayName, userId) {
   const dataDir = getDataDir();
   const tmpDir = path.join(dataDir, 'restore-tmp');
   fs.rmSync(tmpDir, { recursive: true, force: true });
   fs.mkdirSync(tmpDir, { recursive: true });
   try {
-    const zip = new AdmZip(req.file.path);
+    const zip = new AdmZip(zipPath);
     for (const entry of zip.getEntries()) {
       const name = String(entry.entryName || '');
       if (name.startsWith('/') || name.split(/[\\/]/).some((part) => part === '..')) {
-        return badRequest(res, '备份文件包含非法路径');
+        throw new Error('备份文件包含非法路径');
       }
     }
     zip.extractAllTo(tmpDir, true);
     const dbFile = path.join(tmpDir, 'database.sqlite');
-    if (!fs.existsSync(dbFile)) return badRequest(res, '备份文件缺少 database.sqlite');
+    if (!fs.existsSync(dbFile)) throw new Error('备份文件缺少 database.sqlite');
     const uploadsZip = path.join(tmpDir, 'uploads');
     const stagedDb = path.join(dataDir, 'database.sqlite.restore');
     fs.copyFileSync(dbFile, stagedDb);
@@ -1106,11 +1129,33 @@ router.post('/restore', upload.single('file'), (req, res) => {
     const logoZip = path.join(tmpDir, 'app-logo.json');
     if (fs.existsSync(logoZip)) fs.copyFileSync(logoZip, appLogoFile());
     initDb(dataDir);
-    writeAudit(getDb(), { userId: req.user.id, action: 'other', entityType: 'settings', detail: { event: 'restore', filename: req.file.originalname } });
+    writeAudit(getDb(), { userId, action: 'other', entityType: 'settings', detail: { event: 'restore', filename: displayName } });
     return res.json({ message: '还原成功' });
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
-    fs.unlinkSync(req.file.path);
+  }
+}
+
+router.post('/restore', upload.single('file'), (req, res) => {
+  if (!req.file) return badRequest(res, '请上传备份文件');
+  try {
+    return performRestore(req.file.path, req.file.originalname, req.user.id);
+  } catch (err) {
+    return badRequest(res, err.message || '还原失败');
+  } finally {
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+  }
+});
+
+router.post('/restore/:filename', (req, res) => {
+  const filename = String(req.params.filename);
+  if (!/^iproject-backup-[\d]{14}\.zip$/.test(filename)) return badRequest(res, '备份文件名无效');
+  const filePath = path.join(getDataDir(), 'backups', filename);
+  if (!fs.existsSync(filePath)) return notFound(res, '备份文件不存在');
+  try {
+    return performRestore(filePath, filename, req.user.id);
+  } catch (err) {
+    return badRequest(res, err.message || '还原失败');
   }
 });
 
@@ -1143,7 +1188,7 @@ router.put('/correct-order-data', (req, res) => {
   const validTargets = ['shipping_invoicing', 'finance', 'commission', 'bid_decision', 'quotation'];
   if (target && !validTargets.includes(target)) return badRequest(res, '回退目标状态无效');
   if (target && target === 'commission' && !['closed'].includes(order.status)) return badRequest(res, '仅 closed 销售机会可回退至 commission');
-  if (target && target !== 'commission' && !['closed', 'lost_closed', 'commission'].includes(order.status)) {
+  if (target && target !== 'commission' && !['closed', 'lost_closed', 'cancelled', 'commission'].includes(order.status)) {
     return badRequest(res, '当前状态不支持回退');
   }
 
@@ -1172,7 +1217,7 @@ router.put('/correct-order-data', (req, res) => {
     next.invoiced_date = date;
   }
   if (changes.total_amount !== undefined && changes.total_amount !== null && changes.total_amount !== '') {
-    if (!isMoney(changes.total_amount)) return badRequest(res, '总金额必须大于 0');
+    if (!isNonNegativeNumber(changes.total_amount)) return badRequest(res, '总金额不能小于 0');
     next.total_amount = Number(changes.total_amount);
   } else if (changes.total_amount !== undefined) {
     next.total_amount = null;
@@ -1210,7 +1255,7 @@ router.put('/correct-order-data', (req, res) => {
       next.sales_order = null;
       next.total_amount = null;
       db.prepare('DELETE FROM customer_pos WHERE order_id = ?').run(order.id);
-      if (order.status === 'lost_closed') {
+      if (['lost_closed', 'cancelled'].includes(order.status)) {
         next.bid_result = null;
         next.closed_at = null;
       }
