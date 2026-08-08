@@ -181,6 +181,29 @@ export function initDb(dir) {
   };
   ensureCommissionManualNonNegative();
 
+  const padOrderIds = () => {
+    const rows = db.prepare("SELECT id, order_id FROM orders WHERE order_id LIKE 'OPP-%'").all();
+    const updates = [];
+    const seen = new Set();
+    for (const row of rows) {
+      const m = String(row.order_id).match(/^(OPP-.*?)(\d+)$/);
+      if (!m) continue;
+      const padded = `${m[1]}${m[2].padStart(4, '0')}`;
+      if (padded === row.order_id) continue;
+      if (seen.has(padded)) throw new Error(`订单编号补零冲突: ${padded}`);
+      seen.add(padded);
+      updates.push([row.id, padded]);
+    }
+    if (updates.length === 0) return;
+    const update = db.prepare('UPDATE orders SET order_id = ? WHERE id = ?');
+    const tx = db.transaction((pairs) => {
+      for (const [id, orderId] of pairs) update.run(orderId, id);
+    });
+    tx(updates);
+    console.log(`订单编号补零迁移：已更新 ${updates.length} 条历史订单`);
+  };
+  padOrderIds();
+
   const importLogColumns = db.prepare('PRAGMA table_info(import_logs)').all();
   if (!importLogColumns.some((col) => col.name === 'detail')) {
     db.exec('ALTER TABLE import_logs ADD COLUMN detail TEXT');

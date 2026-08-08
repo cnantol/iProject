@@ -1846,7 +1846,7 @@ function SystemManager({ onError, onNotice, onConfirm }) {
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [backupInfo, setBackupInfo] = useState(null);
   const [backups, setBackups] = useState([]);
-  const [schedule, setSchedule] = useState({ enabled: false, hour: 2, minute: 0 });
+  const [schedule, setSchedule] = useState({ enabled: false, hour: 2, minute: 0, keep: 0 });
   const [resetType, setResetType] = useState(null);
   const [password, setPassword] = useState('');
   const [auditLogs, setAuditLogs] = useState([]);
@@ -1948,6 +1948,7 @@ function SystemManager({ onError, onNotice, onConfirm }) {
     try {
       const { data } = await api.put('/settings/backup-schedule', schedule);
       setSchedule(data);
+      loadBackups();
       onError('');
       onNotice('定时备份配置已保存');
     } catch (err) {
@@ -2287,12 +2288,21 @@ function SystemManager({ onError, onNotice, onConfirm }) {
                   inputProps={{ min: 0, max: 59 }}
                   sx={{ width: 110 }}
                 />
+                <TextField
+                  size="small"
+                  label="保留份数 (0=不清理)"
+                  type="number"
+                  value={schedule.keep}
+                  onChange={(e) => setSchedule((prev) => ({ ...prev, keep: Number(e.target.value) }))}
+                  inputProps={{ min: 0, max: 100 }}
+                  sx={{ width: 150 }}
+                />
                 <Button size="small" variant="outlined" onClick={saveSchedule}>
                   保存配置
                 </Button>
               </Stack>
               <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
-                应用内定时任务每分钟检查一次；也可继续使用 deploy/scripts/backup.sh 的系统 cron 方式。
+                应用内定时任务每分钟检查一次。每次备份（手动或定时）后自动只保留最近 N 份，更早的自动删除；设为 1 即自动覆盖，0 表示不清理（默认）。
               </Typography>
             </Box>
           </Box>

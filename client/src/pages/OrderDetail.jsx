@@ -145,6 +145,13 @@ export default function OrderDetail() {
   const readOnly = isStepReadOnly(order, activeKey);
   const showShippingTabs = order.status === 'shipping_invoicing' && ['shipping', 'invoicing', 'shipping_invoicing'].includes(activeKey);
   const canDelete = ['customer_info', 'proposal', 'quotation'].includes(order.status);
+  const handleStepSelect = (key) => {
+    if (key === 'shipping_invoicing' && order.status === 'shipping_invoicing') {
+      setActiveKey('shipping');
+    } else {
+      setActiveKey(key);
+    }
+  };
 
   const renderStep = () => {
     const key = activeKey;
@@ -290,7 +297,7 @@ export default function OrderDetail() {
             <InfoTile label="创建时间" value={fmtDateTime(order.created_at)} color="#5E6F80" darkColor="#A7B6C6" />
           </Grid>
         </Grid>
-        <OrderStepper order={order} activeKey={activeKey} onSelect={setActiveKey} />
+        <OrderStepper order={order} activeKey={activeKey} onSelect={handleStepSelect} />
       </Card>
 
       {showShippingTabs && (

@@ -35,6 +35,20 @@ import HandshakeIcon from '@mui/icons-material/Handshake';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import PriceCheckIcon from '@mui/icons-material/PriceCheck';
 import InboxIcon from '@mui/icons-material/Inbox';
+import BusinessIcon from '@mui/icons-material/Business';
+import LabelIcon from '@mui/icons-material/Label';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import PersonIcon from '@mui/icons-material/Person';
+import PhoneIcon from '@mui/icons-material/Phone';
+import EmailIcon from '@mui/icons-material/Email';
+import NoteIcon from '@mui/icons-material/Note';
+import DescriptionIcon from '@mui/icons-material/Description';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import StraightenIcon from '@mui/icons-material/Straighten';
+import ArticleIcon from '@mui/icons-material/Article';
+import EventIcon from '@mui/icons-material/Event';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
 import api, { errorMessage } from '../api';
 import { useConfirm } from '../components/ConfirmDialog';
 import { fmtMoney } from '../utils/helpers';
@@ -131,6 +145,9 @@ export default function MaterialList() {
 
   const openCreate = () => setEditor({});
   const openEdit = (row) => setEditor({ ...row });
+
+
+  const fullWidthFields = ['remark', 'description', 'parent_customer_id'];
 
   const saveEditor = async () => {
     setError('');
@@ -433,13 +450,14 @@ export default function MaterialList() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={Boolean(editor)} onClose={() => setEditor(null)} maxWidth="sm" fullWidth>
-        <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
-        <DialogTitle>{editor?.id ? '编辑' : '新增'}</DialogTitle>
+            <Dialog open={Boolean(editor)} onClose={() => setEditor(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ pb: 1, pt: 2.5, fontWeight: 700 }}>
+          {editor?.id ? `编辑${TABS.find((t) => t.key === tab)?.label || ''}` : `新增${TABS.find((t) => t.key === tab)?.label || ''}`}
+        </DialogTitle>
         <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+          <Grid container spacing={2} sx={{ pt: 1 }}>
             {tabDef[tab].fields.map((field) => (
-              <Grid item xs={12} sm={6} key={field}>
+              <Grid item xs={12} sm={fullWidthFields.includes(field) ? 12 : 6} key={field}>
                 {field === 'end_customer_id' ? (
                   <TextField
                     select
@@ -486,8 +504,10 @@ export default function MaterialList() {
             ))}
           </Grid>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditor(null)}>取消</Button>
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1.5 }}>
+          <Button onClick={() => setEditor(null)} color="inherit">
+            取消
+          </Button>
           <Button variant="contained" onClick={saveEditor}>
             保存
           </Button>

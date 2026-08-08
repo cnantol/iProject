@@ -34,14 +34,16 @@ router.get('/', (req, res) => {
        GROUP BY o.end_customer_id ORDER BY total_amount DESC`
     )
     .all();
-  const commissionMismatches = db
+  const invoiceAging = db
     .prepare(
-      `SELECT o.id, o.order_id, o.project_name, o.total_amount, o.commission_amount,
-        ROUND(o.total_amount * 0.01, 4) AS expected_commission,
-        ABS(o.commission_amount - o.total_amount * 0.01) AS diff_amount
+      `SELECT o.id, o.order_id, o.order_type, o.project_name, o.total_amount, o.invoiced_date,
+              ec.customer_name AS end_customer_name
        FROM orders o
-       WHERE o.status = 'closed' AND o.commission_amount > 0 AND o.total_amount > 0
-       ORDER BY diff_amount DESC LIMIT 10`
+       LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
+       WHERE o.status NOT IN ('closed','lost_closed','cancelled')
+         AND o.invoiced = 1 AND o.invoiced_date IS NOT NULL
+       ORDER BY julianday(o.invoiced_date) ASC
+       LIMIT 10`
     )
     .all();
   const recentTodos = db
@@ -64,7 +66,7 @@ router.get('/', (req, res) => {
     totalCommission,
     customerTotals,
     inProgressByCustomer,
-    commissionMismatches,
+    invoiceAging,
     recentTodos,
     overdueCount
   });

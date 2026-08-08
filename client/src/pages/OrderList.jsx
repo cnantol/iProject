@@ -186,105 +186,131 @@ export default function OrderList() {
           新建销售机会
         </Button>
       </Stack>
-      <Card sx={{ px: 1.75, py: 1.25, borderRadius: 2.5, border: 1, borderColor: 'divider' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'nowrap', width: '100%' }}>
-          <TextField
-            select
-            size="small"
-            label="年份"
-            value={year}
-            onChange={(e) => {
-              setYear(e.target.value);
-              setPage(1);
-            }}
-            sx={{ width: 110, ...filterInputSx }}
-            SelectProps={{
-              MenuProps: {
-                PaperProps: {
-                  sx: {
-                    borderRadius: 2.5,
-                    '& .MuiMenuItem-root': { fontSize: 15, minHeight: 44, fontWeight: 500 }
-                  }
-                }
-              }
-            }}
-          >
-            <MenuItem value="">全部</MenuItem>
-            {Array.from({ length: 16 }, (_, i) => String(2021 + i)).map((y) => (
-              <MenuItem key={y} value={y}>
-                {y} 年
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            size="small"
-            label="月份"
-            value={month}
-            onChange={(e) => {
-              setMonth(e.target.value);
-              setPage(1);
-            }}
-            sx={{ width: 110, ...filterInputSx }}
-            SelectProps={{
-              MenuProps: {
-                PaperProps: {
-                  sx: {
-                    borderRadius: 2.5,
-                    '& .MuiMenuItem-root': { fontSize: 15, minHeight: 44, fontWeight: 500 }
-                  }
-                }
-              }
-            }}
-          >
-            <MenuItem value="">全部</MenuItem>
-            {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((m) => (
-              <MenuItem key={m} value={m}>
-                {m} 月
-              </MenuItem>
-            ))}
-          </TextField>
-          <Autocomplete
-            size="small"
-            freeSolo
-            options={customerOptions}
-            value={customer}
-            onInputChange={(_, value) => {
-              setCustomer(value || '');
-              setPage(1);
-            }}
-            onChange={(_, value) => {
-              setCustomer(typeof value === 'string' ? value || '' : value?.customer_name || '');
-              setPage(1);
-            }}
-            sx={{ width: 240 }}
-            ListboxProps={{
-              sx: {
-                '& .MuiAutocomplete-option': { fontSize: 14, minHeight: 40, fontWeight: 500 }
-              }
-            }}
-            renderInput={(params) => <TextField {...params} label="客户（最终/合同）" sx={filterInputSx} />}
-          />
-          <TextField
-            size="small"
-            label="项目号 / PO / SO"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            sx={{ flex: 1, minWidth: 180, ...filterInputSx }}
-            InputProps={{ startAdornment: <InputAdornment position="start" sx={{ mr: 0.4 }}><SearchIcon fontSize="small" /></InputAdornment> }}
-          />
-          <Button size="small" variant="outlined" onClick={resetFilters} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-            清除筛选
-          </Button>
-          <IconButton onClick={() => load()} title="刷新" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, flexShrink: 0 }}>
-            <RefreshIcon />
-          </IconButton>
-        </Box>
-      </Card>
       <Card>
+            <Box sx={{ 
+              display: 'flex', alignItems: 'center', 
+              borderBottom: 1, borderColor: 'divider',
+              minHeight: 46
+            }}>
+              <Tabs
+                value={scope}
+                onChange={(_, value) => {
+                  setScope(value);
+                  setPage(1);
+                }}
+                sx={{
+                  px: 1.5,
+                  minHeight: 46,
+                  '& .MuiTabs-indicator': { height: 3, borderRadius: 2 },
+                  '& .MuiTab-root': { minHeight: 46, fontWeight: 700, textTransform: 'none', py: 0 }
+                }}
+              >
+                <Tab label={`进行中${data ? `（${data.activeCount ?? 0}）` : ''}`} value="active" />
+                <Tab label={`存档${data ? `（${data.archivedCount ?? 0}）` : ''}`} value="archived" />
+              </Tabs>
+              <Box sx={{ 
+                flex: 1, px: 1.5, py: 0.75,
+                display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'nowrap',
+                overflow: 'hidden'
+              }}>
+                <TextField
+                  select
+                  size="small"
+                  label="年份"
+                  value={year}
+                  onChange={(e) => {
+                    setYear(e.target.value);
+                    setPage(1);
+                  }}
+                  sx={{ width: 85, ...filterInputSx }}
+                  SelectProps={{
+                    MenuProps: {
+                      PaperProps: {
+                        sx: {
+                          borderRadius: 2.5,
+                          '& .MuiMenuItem-root': { fontSize: 14, minHeight: 40, fontWeight: 500 }
+                        }
+                      }
+                    }
+                  }}
+                >
+                  <MenuItem value="">全部</MenuItem>
+{Array.from({ length: 7 }, (_, i) => String(new Date().getFullYear() - 3 + i)).map((y) => (
+                    <MenuItem key={y} value={y}>
+                      {y} 年
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  select
+                  size="small"
+                  label="月份"
+                  value={month}
+                  onChange={(e) => {
+                    setMonth(e.target.value);
+                    setPage(1);
+                  }}
+                  sx={{ width: 85, ...filterInputSx }}
+                  SelectProps={{
+                    MenuProps: {
+                      PaperProps: {
+                        sx: {
+                          borderRadius: 2.5,
+                          '& .MuiMenuItem-root': { fontSize: 14, minHeight: 40, fontWeight: 500 }
+                        }
+                      }
+                    }
+                  }}
+                >
+                  <MenuItem value="">全部</MenuItem>
+                  {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((m) => (
+                    <MenuItem key={m} value={m}>
+                      {m} 月
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <Autocomplete
+                  size="small"
+                  freeSolo
+                  options={customerOptions}
+                  value={customer}
+                  onInputChange={(_, value) => {
+                    setCustomer(value || '');
+                    setPage(1);
+                  }}
+                  onChange={(_, value) => {
+                    setCustomer(typeof value === 'string' ? value || '' : value?.customer_name || '');
+                    setPage(1);
+                  }}
+                  sx={{ width: 180, flexShrink: 0 }}
+                  ListboxProps={{
+                    sx: {
+                      '& .MuiAutocomplete-option': { fontSize: 14, minHeight: 36, fontWeight: 500 }
+                    }
+                  }}
+                  renderInput={(params) => <TextField {...params} label="客户" sx={filterInputSx} />}
+                />
+                <TextField
+                  size="small"
+                  placeholder="项目号 / PO / SO"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
+                  sx={{ flex: 1, minWidth: 140, ...filterInputSx }}
+                  InputProps={{ startAdornment: <InputAdornment position="start" sx={{ mr: 0.2 }}><SearchIcon sx={{ fontSize: 18 }} /></InputAdornment> }}
+                />
+                <Button size="small" variant="text" onClick={resetFilters} sx={{ whiteSpace: 'nowrap', flexShrink: 0, fontWeight: 600, color: 'text.secondary', fontSize: 13, minWidth: 48, '&:hover': { color: 'error.main' } }}>
+                  清除
+                </Button>
+                <IconButton onClick={() => load()} title="刷新" size="small" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, flexShrink: 0 }}>
+                  <RefreshIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            </Box>
+
+
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
             <CircularProgress />
@@ -294,24 +320,8 @@ export default function OrderList() {
             {error}
           </Alert>
         ) : (
+
           <>
-            <Tabs
-              value={scope}
-              onChange={(_, value) => {
-                setScope(value);
-                setPage(1);
-              }}
-              sx={{
-                px: 2,
-                minHeight: 46,
-                borderBottom: 1,
-                borderColor: 'divider',
-                '& .MuiTab-root': { minHeight: 46, fontWeight: 700, textTransform: 'none' }
-              }}
-            >
-              <Tab label={`进行中${data ? `（${data.activeCount ?? 0}）` : ''}`} value="active" />
-              <Tab label={`存档${data ? `（${data.archivedCount ?? 0}）` : ''}`} value="archived" />
-            </Tabs>
             <Box sx={{ overflowX: 'auto' }}>
               <Table size="small" sx={{ minWidth: 1080 }}>
                 <TableHead>
@@ -332,10 +342,18 @@ export default function OrderList() {
                     <TableCell sx={{ width: 56 }} />
                   <TableCell>机会编号</TableCell>
                     <TableCell>客户信息</TableCell>
-                    <TableCell>{t('project_name')}</TableCell>
-                    <TableCell>项目号</TableCell>
-                    <TableCell>PO</TableCell>
-                    <TableCell>{t('sales_order')}</TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={0.75} alignItems="center">
+                        <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13 }}>项目信息</Typography>
+                        <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>类型/编号/名称</Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      <Stack spacing={0.25}>
+                        <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'primary.main' }}>PO</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>SO</Typography>
+                      </Stack>
+                    </TableCell>
                     <TableCell>{t('status')}</TableCell>
                     <TableCell align="right">{t('amount')}</TableCell>
                     <TableCell align="right" sx={{ width: 80 }}>操作</TableCell>
@@ -344,7 +362,7 @@ export default function OrderList() {
                 <TableBody>
                   {(data?.items || []).length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={10} align="center" sx={{ py: 8, color: 'text.secondary' }}>
+                      <TableCell colSpan={8} align="center" sx={{ py: 8, color: 'text.secondary' }}>
                         <Stack spacing={1} alignItems="center">
                           <InboxIcon sx={{ fontSize: 56, color: 'text.disabled' }} />
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -421,10 +439,41 @@ export default function OrderList() {
                             </Typography>
                           </Stack>
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.project_name || '-'}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.project_no || '-'}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.po_numbers || '-'}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{order.sales_order || '-'}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Stack direction="row" spacing={0.75} alignItems="center">
+                            {order.order_type && (
+                              <Box sx={{
+                                width: 24, height: 24, borderRadius: 1,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontWeight: 800, fontSize: 12,
+                                color: { A: '#1976D2', B: '#2E7D32', C: '#C9A227' }[order.order_type] || '#78909C',
+                                bgcolor: ({ A: '#1976D2', B: '#2E7D32', C: '#C9A227' }[order.order_type] || '#78909C') + '1F',
+                                border: '1px solid ' + ({ A: '#1976D2', B: '#2E7D32', C: '#C9A227' }[order.order_type] || '#78909C') + '66',
+                                flexShrink: 0,
+                              }}>
+                                {order.order_type}
+                              </Box>
+                            )}
+                            <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+                              <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>
+                                {order.project_no || '-'}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
+                                {order.project_name || '-'}
+                              </Typography>
+                            </Stack>
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Stack spacing={0.25}>
+                            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'primary.main' }}>
+                              {order.po_numbers || '-'}
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>
+                              {order.sales_order || '-'}
+                            </Typography>
+                          </Stack>
+                        </TableCell>
                         <TableCell>
                           <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
                             <StatusTag

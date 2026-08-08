@@ -200,14 +200,19 @@ function upsertCustomValues(db, orderId, customValues) {
 function generateOrderId(db, tryInsert, shortName = null) {
   const datePart = todayLocal().replace(/-/g, '');
   const prefix = shortName ? `OPP-${shortName}-${datePart}-` : `OPP-${datePart}-`;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const last = db.prepare('SELECT order_id FROM orders WHERE order_id LIKE ? ORDER BY order_id DESC LIMIT 1').get(`${prefix}%`);
-    let seq = 1;
-    if (last) {
-      const parsed = parseInt(String(last.order_id).slice(prefix.length), 10);
-      if (Number.isFinite(parsed)) seq = parsed + 1;
+  const maxSeq = () => {
+    const rows = db.prepare("SELECT order_id FROM orders WHERE order_id LIKE 'OPP-%'").all();
+    let max = 0;
+    for (const row of rows) {
+      const m = String(row.order_id).match(/(\d+)$/);
+      if (!m) continue;
+      const parsed = Number(m[1]);
+      if (Number.isFinite(parsed) && parsed > max) max = parsed;
     }
-    const orderId = `${prefix}${String(seq).padStart(4, '0')}`;
+    return max;
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const orderId = `${prefix}${String(maxSeq() + 1).padStart(4, '0')}`;
     try {
       const result = tryInsert(orderId);
       if (result) return result;
@@ -232,9 +237,9 @@ router.get('/', (req, res) => {
   if (search) {
     const like = `%${String(search).trim()}%`;
     base.push(
-      '(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ? OR o.project_no LIKE ? OR EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?))'
+      '(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ? OR o.project_no LIKE ? OR EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?) OR EXISTS (SELECT 1 FROM end_customers ec WHERE ec.id = o.end_customer_id AND ec.customer_name LIKE ?) OR EXISTS (SELECT 1 FROM contract_customers cc WHERE cc.id = o.contract_customer_id AND cc.customer_name LIKE ?))'
     );
-    baseParams.push(like, like, like, like, like, like);
+    baseParams.push(like, like, like, like, like, like, like, like);
   }
   if (so) {
     base.push('o.sales_order LIKE ?');

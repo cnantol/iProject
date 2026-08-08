@@ -18,60 +18,131 @@ function readWorkbook(filePath) {
 function findColumn(headers, label) {
   const target = String(label || '').trim().toLowerCase();
   if (!target) return -1;
-  return headers.findIndex((header) => String(header == null ? '' : header).trim().toLowerCase() === target);
+  let idx = headers.findIndex((header) => String(header == null ? '' : header).trim().toLowerCase() === target);
+  if (idx >= 0) return idx;
+  // 尝试将 label 解析为列字母（A=0, B=1, ..., Z=25, AA=26, ...）
+  if (/^[a-z]+$/i.test(target)) {
+    const s = target.toUpperCase();
+    if (s.length === 1) idx = s.charCodeAt(0) - 65;
+    else idx = (s.charCodeAt(0) - 64) * 26 + (s.charCodeAt(1) - 65);
+    if (idx >= 0 && idx < headers.length) return idx;
+  }
+  return -1;
 }
 
-router.post('/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return badRequest(res, '请上传佣金 Excel 文件');
-  const soColumn = String(req.body.soColumn || '');
-  const amountColumn = String(req.body.amountColumn || '');
-  if (!amountColumn) return badRequest(res, '请选择佣金金额列');
+router.post('/upload', upload.fields([{ name: 'file', maxCount: 1 }]), (req, res) => {
+  const file = req.files?.file?.[0];
+  if (!file) return badRequest(res, '请上传佣金 Excel 文件');
+  const soColumn = String(req.body.soColumn || '').trim();
+  let amountColumns = [];
+  if (Array.isArray(req.body.amountColumns)) {
+    amountColumns = req.body.amountColumns.map((item) => String(item || '').trim()).filter(Boolean);
+  } else if (req.body.amountColumns != null) {
+    const value = String(req.body.amountColumns).trim();
+    if (value) amountColumns = value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  if (amountColumns.length === 0) return badRequest(res, '请选择佣金金额列');
   if (!soColumn) return badRequest(res, '请选择 SO 号列');
 
-  let rows;
+  let sheets;
   try {
-    rows = readWorkbook(req.file.path);
+    sheets = JSON.parse(req.body.sheets || '[]');
   } catch {
-    fs.unlinkSync(req.file.path);
+    sheets = [];
+  }
+  if (!Array.isArray(sheets) || sheets.length === 0) {
+    return badRequest(res, '至少需要一个工作表');
+  }
+
+  // 读取所有需要的 sheet 数据，然后删除文件
+  let workbook;
+  try {
+    workbook = xlsx.read(fs.readFileSync(file.path), { type: 'buffer' });
+  } catch {
+    fs.unlinkSync(file.path);
     return badRequest(res, 'Excel 解析失败');
   }
-  fs.unlinkSync(req.file.path);
-  if (!rows || rows.length < 2) return badRequest(res, 'Excel 无有效数据');
+  fs.unlinkSync(file.path);
 
-  const headers = rows[0] || [];
-  const soIndex = findColumn(headers, soColumn);
-  const amountIndex = findColumn(headers, amountColumn);
-  if (soIndex < 0 || amountIndex < 0) return badRequest(res, '无法匹配所选列名，请确认表头');
-
-  const db = getDb();
-  const amountMap = new Map();
-  const seen = new Set();
-  let failRows = 0;
-  let duplicateSoCount = 0;
-  const totalRows = rows.length - 1;
-
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const amountCell = row[amountIndex];
-    const numeric = Number(amountCell);
-    if (amountCell === null || amountCell === undefined || amountCell === '' || !Number.isFinite(numeric) || numeric <= 0) {
-      failRows += 1;
-      continue;
+  const sheetDataMap = {};
+  for (const s of sheets) {
+    if (workbook.SheetNames.includes(s.sheetName)) {
+      sheetDataMap[s.sheetName] = xlsx.utils.sheet_to_json(workbook.Sheets[s.sheetName], { header: 1, defval: null, raw: true });
     }
-    const so = normalizeSo(row[soIndex]);
-    if (!so) {
-      failRows += 1;
-      continue;
-    }
-    if (seen.has(so)) {
-      duplicateSoCount += 1;
-      failRows += 1;
-      continue;
-    }
-    seen.add(so);
-    amountMap.set(so, numeric);
   }
 
+  // 对每个 sheet 计算列索引，聚合 SO→金额
+  const amountMap = new Map();
+  let totalExcelRows = 0;
+  let totalFailRows = 0;
+  let totalDuplicateSo = 0;
+  const sheetResults = [];
+
+  for (const sheet of sheets) {
+    const sheetRows = sheetDataMap[sheet.sheetName];
+    if (!sheetRows || sheetRows.length < 2) {
+      sheetResults.push({ sheetName: sheet.sheetName, totalRows: 0, matchedSo: 0, failRows: 0, duplicateSo: 0, status: '无数据' });
+      continue;
+    }
+
+    const headerRowIdx = Math.max(0, Math.min(sheet.headerRowIdx || 0, sheetRows.length - 2));
+    const headers = (sheetRows[headerRowIdx] || []).map((cell) => String(cell ?? '').trim());
+    const dataStartIdx = headerRowIdx + 1;
+    const totalRows = sheetRows.length - dataStartIdx;
+    totalExcelRows += totalRows;
+
+    const soIndex = findColumn(headers, soColumn);
+    const amountIndices = amountColumns.map((column) => findColumn(headers, column)).filter((idx) => idx >= 0);
+
+    if (soIndex < 0 || amountIndices.length === 0) {
+      sheetResults.push({ sheetName: sheet.sheetName, totalRows, matchedSo: 0, failRows: totalRows, duplicateSo: 0, status: '列未匹配' });
+      totalFailRows += totalRows;
+      continue;
+    }
+
+    let failRows = 0;
+    let duplicateSo = 0;
+    let matchedSo = 0;
+
+    for (let i = dataStartIdx; i < sheetRows.length; i++) {
+      const row = sheetRows[i];
+      const so = normalizeSo(row[soIndex]);
+      if (!so) {
+        failRows += 1;
+        continue;
+      }
+      let rowSum = 0;
+      let rowHasNumber = false;
+      for (const amountIndex of amountIndices) {
+        const amountCell = row[amountIndex];
+        if (amountCell === null || amountCell === undefined || amountCell === '') continue;
+        if (typeof amountCell === 'string' && amountCell.trim() === '') continue;
+        const numeric = Number(amountCell);
+        if (!Number.isFinite(numeric)) continue;
+        rowSum += numeric;
+        rowHasNumber = true;
+      }
+      if (!rowHasNumber || !Number.isFinite(rowSum)) {
+        failRows += 1;
+        continue;
+      }
+      const previous = amountMap.get(so);
+      if (previous !== undefined) {
+        duplicateSo += 1;
+        amountMap.set(so, previous + rowSum);
+        continue;
+      }
+      amountMap.set(so, rowSum);
+      matchedSo += 1;
+    }
+
+    totalFailRows += failRows;
+    totalDuplicateSo += duplicateSo;
+    sheetResults.push({ sheetName: sheet.sheetName, totalRows, matchedSo, failRows, duplicateSo, status: '已处理' });
+  }
+
+  // 匹配订单
+  const db = getDb();
   let matchedCount = 0;
   let unmatchedCount = 0;
   let skippedMatchedCount = 0;
@@ -105,33 +176,16 @@ router.post('/upload', upload.single('file'), (req, res) => {
     }
 
     const extraSoCount = [...amountMap.keys()].filter((so) => !matchedSoSet.has(so)).length;
-    const logInfo = db
-      .prepare(
-        'INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, created_at) VALUES (?,?,?,?,?,?)'
-      )
-      .run(
-        'commission',
-        req.file.originalname,
-        totalRows,
-        matchedCount,
-        failRows,
-        ts
-      );
+    const logInfo = db.prepare(
+      'INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, created_at) VALUES (?,?,?,?,?,?)'
+    ).run('commission', file.originalname, totalExcelRows, matchedCount, totalFailRows, ts);
+
     writeAudit(db, {
       userId: req.user.id,
       action: 'other',
       entityType: 'settings',
       entityId: logInfo.lastInsertRowid,
-      detail: {
-        event: 'commission_import',
-        total_rows: totalRows,
-        matched: matchedCount,
-        unmatched: unmatchedCount,
-        fail_rows: failRows,
-        extra_so_count: extraSoCount,
-        duplicate_so_count: duplicateSoCount,
-        skipped_matched_count: skippedMatchedCount
-      }
+      detail: { event: 'commission_import', total_sheets: sheets.length, sheets: sheetResults }
     });
     return logInfo.lastInsertRowid;
   });
@@ -139,11 +193,13 @@ router.post('/upload', upload.single('file'), (req, res) => {
   const logId = process();
   return res.json({
     import_log_id: logId,
-    total_excel_rows: totalRows,
+    total_excel_rows: totalExcelRows,
+    total_sheets: sheets.length,
+    sheet_results: sheetResults,
     matched: matchedCount,
     unmatched: unmatchedCount,
-    fail_rows: failRows,
-    duplicate_so_count: duplicateSoCount,
+    fail_rows: totalFailRows,
+    duplicate_so_count: totalDuplicateSo,
     extra_so_count: [...amountMap.keys()].filter((so) => !matchedSoSet.has(so)).length,
     skipped_matched_count: skippedMatchedCount
   });
@@ -151,7 +207,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
 
 router.get('/waiting', (req, res) => {
   const db = getDb();
-  const items = db
+  const orders = db
     .prepare(
       `SELECT o.*, ec.customer_name AS end_customer_name, cc.customer_name AS contract_customer_name
        FROM orders o
@@ -161,7 +217,44 @@ router.get('/waiting', (req, res) => {
        ORDER BY o.id DESC`
     )
     .all();
+  
+  // Fetch PO for each order
+  const poStmt = db.prepare('SELECT po_number, po_amount FROM customer_pos WHERE order_id = ? ORDER BY id');
+  const items = orders.map(o => {
+    const pos = poStmt.all(o.id);
+    return {
+      ...o,
+      pos,
+      po_numbers: pos.map(p => p.po_number).filter(Boolean).join(', '),
+      expected_commission: o.total_amount != null ? Math.round(o.total_amount * 0.01 * 100) / 100 : null,
+    };
+  });
   return res.json({ items });
+});
+
+router.get('/deviations', (req, res) => {
+  const db = getDb();
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+  const sortField = req.query.sort === 'diff_ratio' ? 'diff_ratio' : 'diff_amount';
+  const sortDir = req.query.order === 'asc' ? 'ASC' : 'DESC';
+  const where = "o.status = 'closed' AND o.commission_amount > 0 AND o.total_amount > 0";
+  const total = db.prepare(`SELECT COUNT(*) AS c FROM orders o WHERE ${where}`).get().c;
+  const items = db
+    .prepare(
+      `SELECT o.id, o.order_id, o.order_type, o.project_name, o.total_amount, o.commission_amount,
+             ec.customer_name AS end_customer_name,
+             ROUND(o.total_amount * 0.01, 4) AS expected_commission,
+             ROUND(o.commission_amount - o.total_amount * 0.01, 4) AS diff_amount,
+             ROUND((o.commission_amount - o.total_amount * 0.01) / (o.total_amount * 0.01) * 100, 2) AS diff_ratio
+      FROM orders o
+       LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
+       WHERE ${where}
+       ORDER BY ${sortField} ${sortDir}, o.id ${sortDir}
+       LIMIT ? OFFSET ?`
+    )
+    .all(limit, (page - 1) * limit);
+  return res.json({ items, total, page, limit });
 });
 
 router.get('/imports', (req, res) => {

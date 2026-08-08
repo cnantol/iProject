@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
 import Drawer from '@mui/material/Drawer';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -28,6 +29,9 @@ import DarkModeIcon from '@mui/icons-material/DarkMode';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MenuOpenIcon from '@mui/icons-material/MenuOpen';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SearchIcon from '@mui/icons-material/Search';
 import { useAuth } from '../context/AuthContext';
 import { useThemeMode } from '../context/ThemeContext';
 import { useAppLogo } from '../context/AppLogoContext';
@@ -37,14 +41,28 @@ const NAV_ITEMS = [
   { path: '/todos', label: '待办事项', icon: <CheckCircleIcon /> },
   { path: '/orders', label: '销售机会', icon: <ListAltIcon /> },
   { path: '/sales-history', label: '历史销售', icon: <HistoryIcon /> },
-  { path: '/commission', label: '佣金结算', icon: <PaymentsIcon /> },
+  { path: '/commission', label: '佣金相关', icon: <PaymentsIcon /> },
   { path: '/materials', label: '基础数据', icon: <StorageIcon /> },
   { path: '/settings', label: '系统设置', icon: <SettingsIcon /> }
 ];
 
 const DRAWER_WIDTH = 232;
+const DRAWER_COLLAPSED = 64;
+const SIDEBAR_KEY = 'iproject_sidebar_collapsed_v1';
 
 export default function AppLayout() {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return sessionStorage.getItem(SIDEBAR_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+    } catch {}
+  }, [collapsed]);
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const navigate = useNavigate();
@@ -60,10 +78,54 @@ export default function AppLayout() {
 
   const drawerContent = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', px: 2.25, py: 2 }}>
-        <Box component="img" src={logo} alt="iProject" onError={() => setLogoFailed(true)} sx={{ height: 56, maxWidth: 180, width: 'auto', objectFit: 'contain' }} />
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          gap: collapsed ? 0 : 1.25,
+          px: collapsed ? 1 : 2.25,
+          py: 2,
+          minHeight: 72,
+          cursor: 'pointer',
+          borderBottom: 1,
+          borderColor: 'divider',
+          transition: 'background-color 0.2s ease',
+          '&:hover': { bgcolor: 'rgba(25,118,210,0.06)' }
+        }}
+        onClick={() => {
+          navigate('/');
+          setMobileOpen(false);
+        }}
+        title="返回首页看板"
+      >
+        {collapsed ? (
+          <Box
+            sx={{
+              width: 48,
+              height: 48,
+              borderRadius: 2.5,
+              overflow: 'hidden',
+              flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(0, 78, 154, 0.22)',
+              background: '#004E9A',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <Box component="img" src="/favicon.svg" alt="iProject" sx={{ width: 44, height: 44 }} />
+          </Box>
+        ) : (
+          <Box
+            component="img"
+            src={logo}
+            alt="iProject"
+            onError={() => setLogoFailed(true)}
+            sx={{ height: 56, maxWidth: 180, width: 'auto', objectFit: 'contain', flexShrink: 0 }}
+          />
+        )}
       </Box>
-      <Divider />
       <List sx={{ flex: 1, px: 1, pt: 1 }}>
         {NAV_ITEMS.map((item) => {
           const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
@@ -75,24 +137,105 @@ export default function AppLayout() {
                 navigate(item.path);
                 setMobileOpen(false);
               }}
-              sx={{ borderRadius: 1.5, mb: 0.5 }}
+              sx={{
+                borderRadius: 1.5,
+                mb: 0.5,
+                px: collapsed ? 1 : 2,
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                '& .MuiListItemIcon-root': { mr: collapsed ? 0 : 2 },
+                '& .MuiListItemText-root': collapsed ? { display: 'none' } : { display: 'block' }
+              }}
+              title={collapsed ? item.label : undefined}
             >
-              <ListItemIcon sx={{ minWidth: 40, color: active ? 'primary.main' : 'inherit' }}>{item.icon}</ListItemIcon>
+              <ListItemIcon sx={{ minWidth: 0, color: active ? 'primary.main' : 'inherit' }}>{item.icon}</ListItemIcon>
               <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14, fontWeight: active ? 700 : 500 }} />
             </ListItemButton>
           );
         })}
       </List>
       <Divider />
-      <Box sx={{ px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <AccountCircleIcon color="primary" />
-        <Box>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {user?.username || 'admin'}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            管理员
-          </Typography>
+      <Box
+        sx={{
+          borderTop: 1,
+          borderColor: 'divider',
+          background: 'linear-gradient(180deg, transparent 0%, rgba(25,118,210,0.06) 100%)',
+          p: 1.25,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1
+        }}
+      >
+        <Tooltip title={collapsed ? '展开侧边栏' : '收起侧边栏'} placement="right">
+          <IconButton
+            onClick={() => setCollapsed((v) => !v)}
+            sx={{
+              alignSelf: collapsed ? 'center' : 'flex-end',
+              border: 1.5,
+              borderColor: 'divider',
+              borderRadius: 2,
+              bgcolor: 'background.paper',
+              width: 44,
+              height: 36,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                bgcolor: 'primary.main',
+                color: '#fff',
+                borderColor: 'primary.main',
+                transform: 'translateY(-1px)',
+                boxShadow: '0 4px 10px rgba(25,118,210,0.3)'
+              }
+            }}
+          >
+            {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+          </IconButton>
+        </Tooltip>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.25,
+            p: collapsed ? 0.5 : 1,
+            borderRadius: 2,
+            bgcolor: collapsed ? 'transparent' : 'rgba(255,255,255,0.5)',
+            border: '1px solid',
+            borderColor: collapsed ? 'transparent' : 'divider',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            transition: 'all 0.2s ease',
+            '&:hover': {
+              bgcolor: 'rgba(25,118,210,0.06)',
+              borderColor: 'primary.main'
+            }
+          }}
+        >
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg,#1976D2,#0D47A1)',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              fontWeight: 800,
+              fontSize: 14,
+              boxShadow: '0 2px 6px rgba(25,118,210,0.3)'
+            }}
+          >
+            {(user?.username || 'A').charAt(0).toUpperCase()}
+          </Box>
+          {!collapsed && (
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }} noWrap>
+                {user?.username || 'admin'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2 }} noWrap>
+                管理员
+              </Typography>
+            </Box>
+          )}
         </Box>
       </Box>
     </Box>
@@ -103,7 +246,17 @@ export default function AppLayout() {
       {isDesktop ? (
         <Drawer
           variant="permanent"
-          sx={{ width: DRAWER_WIDTH, flexShrink: 0, '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box' } }}
+          sx={{
+            width: collapsed ? DRAWER_COLLAPSED : DRAWER_WIDTH,
+            flexShrink: 0,
+            transition: 'width 0.25s ease',
+            '& .MuiDrawer-paper': {
+              width: collapsed ? DRAWER_COLLAPSED : DRAWER_WIDTH,
+              boxSizing: 'border-box',
+              transition: 'width 0.25s ease',
+              overflowX: 'hidden'
+            }
+          }}
         >
           {drawerContent}
         </Drawer>

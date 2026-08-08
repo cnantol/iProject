@@ -790,7 +790,42 @@ function createBackup() {
   }
   const zipPath = path.join(backupDir, filename);
   fs.writeFileSync(zipPath, zip.toBuffer());
+  enforceBackupRetention();
   return { filename, size: fs.statSync(zipPath).size, downloadUrl: `/api/settings/backup/${filename}/download` };
+}
+
+function listBackupFiles() {
+  const backupDir = path.join(getDataDir(), 'backups');
+  fs.mkdirSync(backupDir, { recursive: true });
+  return fs
+    .readdirSync(backupDir)
+    .filter((name) => BACKUP_NAME_RE.test(name))
+    .map((name) => {
+      const stat = fs.statSync(path.join(backupDir, name));
+      return { name, mtimeMs: stat.mtimeMs };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+function enforceBackupRetention(userId = null) {
+  const schedule = readBackupSchedule();
+  const keep = Math.floor(Number(schedule.keep));
+  if (!Number.isFinite(keep) || keep <= 0) return { keep, deleted: [] };
+  const files = listBackupFiles();
+  const deleted = [];
+  for (const file of files.slice(keep)) {
+    try {
+      fs.unlinkSync(path.join(getDataDir(), 'backups', file.name));
+      deleted.push(file.name);
+    } catch (err) {
+      console.error('清理旧备份失败:', file.name, err);
+    }
+  }
+  if (deleted.length > 0) {
+    console.log(`备份保留策略：保留最近 ${keep} 份，已清理 ${deleted.length} 份`);
+    writeAudit(getDb(), { userId, action: 'other', entityType: 'settings', detail: { event: 'backup_retention', keep, deleted } });
+  }
+  return { keep, deleted };
 }
 
 router.post('/backup', (req, res) => {
@@ -1123,7 +1158,7 @@ function readBackupSchedule() {
   try {
     return JSON.parse(fs.readFileSync(backupScheduleFile(), 'utf8'));
   } catch {
-    return { enabled: false, hour: 2, minute: 0 };
+    return { enabled: false, hour: 2, minute: 0, keep: 0 };
   }
 }
 
@@ -1132,14 +1167,19 @@ router.get('/backup-schedule', (req, res) => {
 });
 
 router.put('/backup-schedule', (req, res) => {
-  const { enabled, hour, minute } = req.body || {};
+  const { enabled, hour, minute, keep } = req.body || {};
+  let keepCount = Math.floor(Number(keep));
+  if (!Number.isFinite(keepCount) || keepCount < 0) keepCount = 0;
+  keepCount = Math.min(100, keepCount);
   const schedule = {
     enabled: Number(enabled) === 1,
     hour: Math.min(23, Math.max(0, Number(hour) || 0)),
-    minute: Math.min(59, Math.max(0, Number(minute) || 0))
+    minute: Math.min(59, Math.max(0, Number(minute) || 0)),
+    keep: keepCount
   };
   fs.writeFileSync(backupScheduleFile(), JSON.stringify(schedule, null, 2));
-  return res.json(schedule);
+  const retention = enforceBackupRetention(req.user ? req.user.id : null);
+  return res.json({ ...schedule, deleted: retention.deleted });
 });
 
 let backupTimer = null;

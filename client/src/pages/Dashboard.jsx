@@ -30,7 +30,7 @@ import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import PaidIcon from '@mui/icons-material/Paid';
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import api from '../api';
-import { fmtMoney, fmtDate } from '../utils/helpers';
+import { fmtMoney, fmtDate, daysSinceDate } from '../utils/helpers';
 import { useFieldLabels } from '../utils/fieldLabels';
 
 function StatCard({ label, value, accent, badge, icon }) {
@@ -329,15 +329,16 @@ export default function Dashboard() {
       <Grid container spacing={2} sx={{ mx: -2 }}>
         <Grid item xs={12}>
           <Card>
-            <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'error.main' }} />
+            <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'warning.main' }} />
             <CardContent>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
-                <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'error.main' }} />
-                <Typography variant="h6">佣金偏差金额 TOP10</Typography>
+                <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'warning.main' }} />
+                <Typography variant="h6">进行中的机会 · 开票时长 TOP10</Typography>
+                <Typography variant="caption" color="text.secondary">按发票开具后天数从长到短排列，点击行查看详情</Typography>
               </Stack>
-              {(data.commissionMismatches || []).length === 0 ? (
+              {(data.invoiceAging || []).length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                  暂无数据
+                  暂无进行中的已开票机会
                 </Typography>
               ) : (
                 <Table size="small">
@@ -345,27 +346,69 @@ export default function Dashboard() {
                     <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
                       <TableCell sx={{ width: 64 }}>排名</TableCell>
                       <TableCell>机会号</TableCell>
+                      <TableCell>最终客户</TableCell>
+                      <TableCell align="center" sx={{ width: 76 }}>项目类型</TableCell>
                       <TableCell>项目名称</TableCell>
                       <TableCell align="right">订单金额</TableCell>
-                      <TableCell align="right">期望佣金（1%）</TableCell>
-                      <TableCell align="right">实际佣金</TableCell>
-                      <TableCell align="right">偏差金额</TableCell>
+                      <TableCell align="right">开票日期</TableCell>
+                      <TableCell align="right">开票后</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {(data.commissionMismatches || []).map((item, index) => (
-                      <TableRow key={item.id} hover>
-                        <TableCell sx={{ fontWeight: 800, color: index === 0 ? 'error.main' : 'text.secondary' }}>{index + 1}</TableCell>
-                        <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{item.order_id}</TableCell>
-                        <TableCell sx={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.project_name || '-'}</TableCell>
-                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{fmtMoney(item.total_amount)}</TableCell>
-                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{fmtMoney(item.expected_commission)}</TableCell>
-                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{fmtMoney(item.commission_amount)}</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800, color: 'error.main', whiteSpace: 'nowrap' }}>
-                          ¥ {fmtMoney(item.diff_amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {(data.invoiceAging || []).map((item, index) => {
+                      const days = daysSinceDate(item.invoiced_date);
+                      const urgent = days !== null && days >= 100;
+                      return (
+                        <TableRow key={item.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/orders/${item.id}`)}>
+                          <TableCell sx={{ fontWeight: 800, color: index === 0 ? 'warning.main' : 'text.secondary' }}>
+                            {index === 0 ? <EmojiEventsIcon sx={{ fontSize: 16, verticalAlign: 'middle' }} /> : index + 1}
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{item.order_id}</TableCell>
+                          <TableCell sx={{ whiteSpace: 'nowrap', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <Stack direction="row" spacing={0.75} alignItems="center">
+                              <Box
+                                sx={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: '50%',
+                                  bgcolor: index === 0 ? 'warning.main' : 'primary.light',
+                                  flexShrink: 0
+                                }}
+                              />
+                              <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>
+                                {item.end_customer_name || '未分配客户'}
+                              </Typography>
+                            </Stack>
+                          </TableCell>
+                          <TableCell align="center">
+                            {item.order_type ? (
+                              <Chip
+                                size="small"
+                                label={item.order_type}
+                                sx={{
+                                  height: 22,
+                                  minWidth: 32,
+                                  borderRadius: 1.5,
+                                  fontWeight: 800,
+                                  fontSize: 12,
+                                  color: { A: '#1976D2', B: '#2E7D32', C: '#C9A227' }[item.order_type] || 'text.secondary',
+                                  bgcolor: ({ A: '#1976D2', B: '#2E7D32', C: '#C9A227' }[item.order_type] || '#78909C') + '1F',
+                                  border: '1px solid ' + ({ A: '#1976D2', B: '#2E7D32', C: '#C9A227' }[item.order_type] || '#78909C') + '66'
+                                }}
+                              />
+                            ) : (
+                              '-'
+                            )}
+                          </TableCell>
+                          <TableCell sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.project_name || '-'}</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{fmtMoney(item.total_amount)}</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{fmtDate(item.invoiced_date)}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 800, whiteSpace: 'nowrap', color: urgent ? 'error.main' : 'warning.main' }}>
+                            {days} 天
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
