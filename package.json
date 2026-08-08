@@ -9,6 +9,16 @@
     "start": "node server/index.js",
     "dev:server": "node server/index.js",
     "dev:client": "cd client && pnpm dev",
-    "smoke": "node server/scripts/smoke-test.mjs"
+    "smoke": "node server/scripts/smoke-test.mjs",
+    "lint:page-structure": "node scripts/check-page-structure.mjs",
+    "prebuild": "pnpm lint:page-structure && pnpm lint",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^15.15.0"
   }
 }

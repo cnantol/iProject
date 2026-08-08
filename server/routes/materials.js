@@ -223,6 +223,7 @@ router.put('/:id', (req, res) => {
         nowUtc(),
         row.id
       );
+    recomputeOrderFrameworkFlags(getDb());
     return res.json(getDb().prepare('SELECT * FROM materials WHERE id = ?').get(row.id));
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) return badRequest(res, '该客户+物料号+生效日期已存在');
@@ -234,8 +235,23 @@ router.delete('/:id', (req, res) => {
   const row = getDb().prepare('SELECT * FROM materials WHERE id = ?').get(req.params.id);
   if (!row) return notFound(res);
   getDb().prepare('DELETE FROM materials WHERE id = ?').run(row.id);
+  recomputeOrderFrameworkFlags(getDb());
   return res.json({ message: '删除成功' });
 });
 
 export default router;
+
+export function recomputeOrderFrameworkFlags(db) {
+  if (!db) db = getDb();
+  const orders = db.prepare('SELECT id, end_customer_id FROM orders').all();
+  const update = db.prepare('UPDATE orders SET has_framework = ?, updated_at = ? WHERE id = ?');
+  const ts = nowUtc();
+  const tx = db.transaction((list) => {
+    for (const order of list) {
+      update.run(hasFrameworkForCustomer(order.end_customer_id) ? 1 : 0, ts, order.id);
+    }
+  });
+  tx(orders);
+}
+
 export { hasFrameworkForCustomer, frameworkCustomerIds, latestFramework, frameworkSourceCustomer };

@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useAuth } from './context/AuthContext';
 import AppLayout from './components/AppLayout';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider } from './components/ConfirmDialog';
 
 const Login = lazy(() => import('./pages/Login'));
@@ -34,6 +35,7 @@ export default function App() {
           </Box>
         }
       >
+        <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route element={<PrivateRoute />}>
@@ -49,6 +51,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
+        </ErrorBoundary>
       </Suspense>
     </ConfirmProvider>
   );

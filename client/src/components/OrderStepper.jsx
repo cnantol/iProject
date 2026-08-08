@@ -15,7 +15,7 @@ import PaidIcon from '@mui/icons-material/Paid';
 import PersonIcon from '@mui/icons-material/Person';
 import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import { STEP_ORDER, STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
-import { STEP_KEY_INDEX } from '../utils/helpers';
+import { STEP_KEY_INDEX, isClosedStatus } from '../utils/orderStatus';
 
 const pulse = keyframes({
   '0%': { boxShadow: '0 0 0 0 rgba(0,78,154,0.34)' },
@@ -48,7 +48,7 @@ const STEP_ICONS = {
 
 export default function OrderStepper({ order, activeKey, onSelect }) {
   const currentIndex = STEP_KEY_INDEX[order?.status];
-  const isClosed = ['closed', 'lost_closed', 'cancelled'].includes(order?.status);
+  const isClosed = isClosedStatus(order?.status);
   const activeIndex = isClosed ? -1 : STEP_KEY_INDEX[activeKey];
   const statusColor = STATUS_COLORS[order?.status] || '#78909C';
 

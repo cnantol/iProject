@@ -246,19 +246,23 @@ try {
   ok('开票自动标记、超开审计与并行推进');
 
   // 佣金 Excel 匹配
-  const form = new FormData();
-  form.append('file', new Blob([makeCommissionWorkbook()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'commission.xlsx');
-  form.append('soColumn', 'SO号');
-  form.append('amountColumn', '金额');
-  const commission = must(await call('POST', '/api/commission/upload', { token, form }), 200, '佣金匹配');
+  const buildCommissionForm = () => {
+    const form = new FormData();
+    form.append('file', new Blob([makeCommissionWorkbook()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'commission.xlsx');
+    form.append('soColumn', 'SO号');
+    form.append('amountColumns', '金额');
+    form.append('sheets', JSON.stringify([{ sheetName: 'Sheet1', headerRowIdx: 0 }]));
+    return form;
+  };
+  const commission = must(await call('POST', '/api/commission/upload', { token, form: buildCommissionForm() }), 200, '佣金匹配');
   assert.strictEqual(commission.matched, 1);
   assert.strictEqual(commission.duplicate_so_count, 1);
   detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情3');
   assert.strictEqual(detail.order.status, 'closed');
-  assert.strictEqual(Number(detail.order.commission_amount), 500);
+  assert.strictEqual(Number(detail.order.commission_amount), 1499);
   ok('佣金匹配闭环（含重复 SO 计数）');
 
-  const secondUpload = must(await call('POST', '/api/commission/upload', { token, form }), 200, '重复上传');
+  const secondUpload = must(await call('POST', '/api/commission/upload', { token, form: buildCommissionForm() }), 200, '重复上传');
   assert.strictEqual(secondUpload.matched, 0);
   assert.strictEqual(secondUpload.skipped_matched_count, 1);
   const logs = must(await call('GET', '/api/commission/imports', { token }), 200, '佣金导入日志');

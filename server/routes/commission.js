@@ -3,17 +3,9 @@ import fs from 'node:fs';
 import xlsx from 'xlsx';
 import { getDb } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
-import { nowUtc, badRequest, notFound, conflict, normalizeSo, isNonNegativeNumber, writeAudit } from '../utils.js';
+import { nowUtc, badRequest, notFound, normalizeSo, isNonNegativeNumber, writeAudit } from '../utils.js';
 
 const router = Router();
-
-function readWorkbook(filePath) {
-  const workbook = xlsx.read(fs.readFileSync(filePath), { type: 'buffer' });
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) return null;
-  const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: null, raw: true });
-  return rows;
-}
 
 function findColumn(headers, label) {
   const target = String(label || '').trim().toLowerCase();
@@ -175,7 +167,6 @@ router.post('/upload', upload.fields([{ name: 'file', maxCount: 1 }]), (req, res
       if (already) skippedMatchedCount += 1;
     }
 
-    const extraSoCount = [...amountMap.keys()].filter((so) => !matchedSoSet.has(so)).length;
     const logInfo = db.prepare(
       'INSERT INTO import_logs (target_type, file_name, total_rows, success_rows, fail_rows, created_at) VALUES (?,?,?,?,?,?)'
     ).run('commission', file.originalname, totalExcelRows, matchedCount, totalFailRows, ts);

@@ -77,6 +77,7 @@ export function createApp() {
   );
   app.use((req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     const indexFile = path.join(distDir, 'index.html');
     if (!fs.existsSync(indexFile)) return res.status(503).json({ error: '前端尚未构建，请先执行 pnpm --filter iproject-client build' });
     if (req.path.includes('assets/') || path.extname(req.path)) {
@@ -91,7 +92,7 @@ export function createApp() {
     res.status(404).json({ error: '接口不存在' });
   });
 
-  app.use((err, req, res, next) => {
+  app.use((err, req, res, _next) => {
     if (err && err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ error: '文件大小不能超过 20MB' });
     }
@@ -113,7 +114,7 @@ if (isDirectRun) {
   startBackupScheduler();
   const distIndex = path.join(path.resolve(__dirname, '..', 'client', 'dist'), 'index.html');
   if (!fs.existsSync(distIndex)) {
-    console.warn('[警告] 前端构建产物不存在，请先执行 pnpm --filter iproject-client build');
+    console.warn('[警告] 前端构建产物不存在，请先在项目根目录执行 `pnpm build`');
   }
   const port = Number(process.env.PORT) || 3001;
   const app = createApp();

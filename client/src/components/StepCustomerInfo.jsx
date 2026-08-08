@@ -32,7 +32,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 15 }, (_, i) => String(CURRENT_YEAR - 5 + i));
 const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1));
 
-export default function StepCustomerInfo({ order, readOnly, onChanged, onAdvance }) {
+export default function StepCustomerInfo({ order, readOnly, onChanged }) {
   const { t } = useFieldLabels();
   const [form, setForm] = useState(null);
   const [customValues, setCustomValues] = useState({});

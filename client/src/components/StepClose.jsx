@@ -13,7 +13,6 @@ export default function StepClose({ order }) {
   const closed = order.status === 'closed';
   const lostClosed = order.status === 'lost_closed';
   const cancelled = order.status === 'cancelled';
-  const notClosed = !closed && !lostClosed && !cancelled;
   const subtitle = closed
     ? '中标销售机会已闭环，全步骤只读'
     : lostClosed

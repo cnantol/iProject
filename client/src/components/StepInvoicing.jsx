@@ -38,7 +38,7 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
   const [invoiced, setInvoiced] = useState(Number(order.invoiced) === 1);
   const [invoicedDate, setInvoicedDate] = useState(order.invoiced_date || '');
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pendingToggle, setPendingToggle] = useState(false);
+  const [_pendingToggle, setPendingToggle] = useState(false);
   const [error, setError] = useState('');
   const editable = !readOnly && order.status === 'shipping_invoicing';
 

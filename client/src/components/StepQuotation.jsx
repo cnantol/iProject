@@ -61,7 +61,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
   const [pasteText, setPasteText] = useState('');
   const [syncVersionId, setSyncVersionId] = useState(null);
   const [syncState, setSyncState] = useState('idle');
-  const [busy, setBusy] = useState(false);
+  const [busy, _setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 

@@ -13,8 +13,6 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -96,14 +94,13 @@ export default function OrderDetail() {
   }, [load]);
 
   useEffect(() => {
-    if (detail) {
-      setActiveKey((prev) => {
-        const status = detail.order.status;
-        if (status === 'shipping_invoicing' && (prev === 'shipping' || prev === 'invoicing')) return prev;
-        return status === 'shipping_invoicing' ? 'shipping' : status;
-      });
-    }
-  }, [detail?.order.status]);
+    if (!detail) return;
+    setActiveKey((prev) => {
+      const status = detail.order.status;
+      if (status === 'shipping_invoicing' && (prev === 'shipping' || prev === 'invoicing')) return prev;
+      return status === 'shipping_invoicing' ? 'shipping' : status;
+    });
+  }, [detail]);
 
   const removeOrder = async () => {
     try {
@@ -142,7 +139,6 @@ export default function OrderDetail() {
     invoiceTotal: detail.invoiceTotal,
     batchPercentSum: detail.batchPercentSum
   };
-  const readOnly = isStepReadOnly(order, activeKey);
   const showShippingTabs = order.status === 'shipping_invoicing' && ['shipping', 'invoicing', 'shipping_invoicing'].includes(activeKey);
   const canDelete = ['customer_info', 'proposal', 'quotation'].includes(order.status);
   const handleStepSelect = (key) => {

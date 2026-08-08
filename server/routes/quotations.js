@@ -19,7 +19,9 @@ import {
   isMoney,
   isQty,
   isPct,
-  writeAudit
+  writeAudit,
+  headerIndex,
+  cell
 } from '../utils.js';
 
 const router = Router();
@@ -103,11 +105,13 @@ function findCjkFont(family = 'sans') {
   const serif = [
     process.env.CJK_SERIF_FONT_PATH,
     path.join(process.cwd(), 'assets', 'fonts', 'NotoSerifCJK-Regular.ttc'),
+    path.join(process.cwd(), 'assets', 'fonts', 'NotoSerifSC-Regular.otf'),
+    path.join(process.cwd(), 'assets', 'fonts', 'NotoSerifSC-Regular.ttf'),
     '/app/assets/fonts/NotoSerifCJK-Regular.ttc',
-    '/System/Library/Fonts/Supplemental/Songti.ttc',
-    '/System/Library/Fonts/Supplemental/STSong.ttf',
+    '/app/assets/fonts/NotoSerifSC-Regular.otf',
     '/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc',
-    '/usr/share/fonts/noto-cjk/NotoSerifCJK-Regular.ttc'
+    '/usr/share/fonts/noto-cjk/NotoSerifCJK-Regular.ttc',
+    '/usr/share/fonts/noto-cjk/NotoSerifSC-Regular.otf'
   ].filter(Boolean);
   const mono = [
     process.env.CJK_MONO_FONT_PATH,
@@ -141,7 +145,7 @@ function resolveQuoteNo(db, order, round, style, quoteShort, datePart) {
   let seq = 0;
   while (db.prepare('SELECT id FROM quotations WHERE quote_no = ? AND id <> ? LIMIT 1').get(quoteNo, round.id)) {
     seq += 1;
-    quoteNo = `${base}-${seq === 1 ? order.order_id : seq}`;
+    quoteNo = `${base}-${seq}`;
   }
   const row = db.prepare('SELECT quote_no FROM quotations WHERE id = ?').get(round.id);
   if (!row || row.quote_no !== quoteNo) {
@@ -170,11 +174,23 @@ function buildQuotationPdf(order, round, items, customerNames, styleOverride = n
   const quoteShort = customerNames.endShort || customerNames.contractShort || null;
   const quoteDatePart = todayLocal().replace(/-/g, '');
   const quoteNo = resolveQuoteNo(getDb(), order, round, style, quoteShort, quoteDatePart);
-  const fontFile = findCjkFont(style.font_family) || findCjkFont('sans');
-  if (fontFile) doc.registerFont('cjk', fontFile);
+  let fontFile = findCjkFont(style.font_family) || findCjkFont('sans');
+  let fontReady = false;
+  if (fontFile) {
+    try {
+      doc.registerFont('cjk', fontFile);
+      fontReady = true;
+    } catch {
+      // .ttc (TrueType Collection) 在 pdfkit 0.15.x 上不支持，
+      // 字体加载失败时降级到 latin 字体，不影响英文/数字渲染。
+      fontFile = null;
+    }
+  }
   const latinFallback = style.font_family === 'serif' ? 'Times-Roman' : style.font_family === 'mono' ? 'Courier' : 'Helvetica';
-  const font = (bold = false) => (fontFile ? 'cjk' : bold ? 'Helvetica-Bold' : latinFallback);
+  const font = (bold = false) => (fontReady ? 'cjk' : bold ? 'Helvetica-Bold' : latinFallback);
   const fitFontSize = (text, maxWidth, maxSize = 9, minSize = 6.5) => {
+    // doc.widthOfString(text) 不传 size 时走 doc._fontSize,因此每次迭代需同步设置 fontSize,
+    // 才能正确测宽。size 减半步后再调用 widthOfString 测一次;返回的 size 由调用方 doc.fontSize() 应用。
     let size = maxSize;
     doc.fontSize(size);
     while (size > minSize && doc.widthOfString(String(text)) > maxWidth) {
@@ -345,7 +361,7 @@ router.post('/:orderId/quotations', (req, res) => {
   return res.status(201).json({ ...round, items });
 });
 
-router.get('/:orderId/quotations/:roundId/pdf', authenticateDownload, (req, res) => {
+router.get('/:orderId/quotations/:roundId/pdf', authenticateDownload, (req, res, next) => {
   const db = getDb();
   const order = loadOrder(db, req.params.orderId);
   if (!order) return notFound(res);
@@ -354,11 +370,16 @@ router.get('/:orderId/quotations/:roundId/pdf', authenticateDownload, (req, res)
   const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id').all(round.id);
   const ec = db.prepare('SELECT customer_name, short_name FROM end_customers WHERE id = ?').get(order.end_customer_id);
   const cc = db.prepare('SELECT customer_name, short_name FROM contract_customers WHERE id = ?').get(order.contract_customer_id);
-  const doc = buildQuotationPdf(order, round, items, { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '', endShort: ec?.short_name || null, contractShort: cc?.short_name || null });
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="quotation-${order.order_id}-R${round.round_no}.pdf"`);
-  res.setHeader('Cache-Control', 'no-store');
-  doc.pipe(res);
+  try {
+    const doc = buildQuotationPdf(order, round, items, { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '', endShort: ec?.short_name || null, contractShort: cc?.short_name || null });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="quotation-${order.order_id}-R${round.round_no}.pdf"`);
+    res.setHeader('Cache-Control', 'no-store');
+    doc.on('error', next);
+    doc.pipe(res);
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.post('/:orderId/quotations/:roundId/pdf', (req, res) => {
@@ -367,9 +388,6 @@ router.post('/:orderId/quotations/:roundId/pdf', (req, res) => {
   if (!order) return notFound(res);
   const round = db.prepare('SELECT * FROM quotations WHERE id = ? AND order_id = ?').get(Number(req.params.roundId), order.id);
   if (!round) return notFound(res);
-  const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id').all(round.id);
-  const ec = db.prepare('SELECT customer_name, short_name FROM end_customers WHERE id = ?').get(order.end_customer_id);
-  const cc = db.prepare('SELECT customer_name, short_name FROM contract_customers WHERE id = ?').get(order.contract_customer_id);
   const filename = `quotation-${order.order_id}-R${round.round_no}.pdf`;
   return res.json({ url: `/api/orders/${order.id}/quotations/${round.id}/pdf`, filename });
 });
@@ -557,21 +575,6 @@ router.delete('/:orderId/quotations/:roundId', (req, res) => {
   });
   return res.json({ message: '报价轮次已删除' });
 });
-
-function headerIndex(headers, ...names) {
-  const map = new Map(headers.map((h, i) => [String(h == null ? '' : h).trim().toLowerCase(), i]));
-  for (const name of names) {
-    const idx = map.get(String(name).trim().toLowerCase());
-    if (idx !== undefined) return idx;
-  }
-  return -1;
-}
-
-function cell(row, idx) {
-  if (idx < 0 || !row) return null;
-  const value = row[idx];
-  return value === undefined ? null : value;
-}
 
 function insertBulkItems(db, order, roundId, materialNos) {
   const insert = db.prepare(

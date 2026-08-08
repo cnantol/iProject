@@ -5,7 +5,7 @@ import xlsx from 'xlsx';
 import { getDb, getUploadDir } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
 import { frameworkCustomerIds } from './materials.js';
-import { nowUtc, badRequest, notFound, pick, isQty } from '../utils.js';
+import { nowUtc, badRequest, notFound, pick, isQty, headerIndex, cell } from '../utils.js';
 
 const router = Router();
 const VERSION_FIELDS = ['version_label', 'remark'];
@@ -89,21 +89,6 @@ router.get('/versions/:versionId/selections', (req, res) => {
   const items = db.prepare('SELECT * FROM proposal_selections WHERE proposal_version_id = ? ORDER BY sort_order, id').all(version.id);
   return res.json({ items });
 });
-
-function headerIndex(headers, ...names) {
-  const map = new Map(headers.map((h, i) => [String(h == null ? '' : h).trim().toLowerCase(), i]));
-  for (const name of names) {
-    const idx = map.get(String(name).trim().toLowerCase());
-    if (idx !== undefined) return idx;
-  }
-  return -1;
-}
-
-function cell(row, idx) {
-  if (idx < 0 || !row) return null;
-  const value = row[idx];
-  return value === undefined ? null : value;
-}
 
 router.post('/:orderId/versions/:versionId/selections/import', upload.single('file'), (req, res) => {
   if (!req.file) return badRequest(res, '请上传 Excel 文件');

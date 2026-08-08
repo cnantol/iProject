@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
@@ -187,7 +187,7 @@ export default function Settings() {
   );
 }
 
-function FlowFieldManager({ onError, onNotice, onConfirm }) {
+const FlowFieldManager = memo(function FlowFieldManager({ onError, onNotice, onConfirm }) {
   const [steps, setSteps] = useState([]);
   const [allFields, setAllFields] = useState([]);
   const [bindings, setBindings] = useState({});
@@ -673,7 +673,8 @@ function FlowFieldManager({ onError, onNotice, onConfirm }) {
       </CardContent>
     </Card>
   );
-}
+});
+
 
 const IMPORT_TARGETS = ['end_customer', 'contract_customer', 'material', 'guide_price', 'history'];
 const IMPORT_TARGET_META = {
@@ -684,7 +685,7 @@ const IMPORT_TARGET_META = {
   history: { color: '#7B1FA2', desc: '导入历史销售机会与闭环数据' }
 };
 
-function ImportManager({ onError, onNotice, onConfirm }) {
+const ImportManager = memo(function ImportManager({ onError, onConfirm }) {
   const [result, setResult] = useState(null);
   const [logs, setLogs] = useState([]);
   const [progressOpen, setProgressOpen] = useState(false);
@@ -765,7 +766,7 @@ function ImportManager({ onError, onNotice, onConfirm }) {
       const standardFields = meta?.headers || [];
       setMappingColumns(columns);
       setMappingValues(buildAutoMapping(standardFields, columns));
-    } catch (err) {
+    } catch {
       onError('Excel 文件解析失败，请确认文件格式正确');
       setMappingOpen(false);
     } finally {
@@ -1189,7 +1190,8 @@ function ImportManager({ onError, onNotice, onConfirm }) {
       </CardContent>
     </Card>
   );
-}
+});
+
 
 const QUOTE_META_FIELDS = [
   { key: 'quote_no', label: '报价单编号', switchKey: 'quote_no' },
@@ -1229,7 +1231,7 @@ function normalizeQuoteStyleForClient(data = {}) {
   };
 }
 
-function QuoteStyle({ onError, onNotice, onConfirm }) {
+const QuoteStyle = memo(function QuoteStyle({ onError, onNotice }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [style, setStyle] = useState(null);
@@ -1355,28 +1357,6 @@ function QuoteStyle({ onError, onNotice, onConfirm }) {
   };
   const cell = { px: 1, py: 0.75, textAlign: 'left', verticalAlign: 'middle' };
   const headerCell = { ...cell, color: '#ffffff', fontWeight: 700, whiteSpace: 'nowrap' };
-  const sectionHeader = (icon, title, meta = null) => (
-    <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
-      <Box
-        sx={{
-          width: 34,
-          height: 34,
-          borderRadius: 2.5,
-          bgcolor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,78,154,0.10)',
-          color: isDark ? '#8FB8E8' : '#004E9A',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0
-        }}
-      >
-        {icon}
-      </Box>
-      <Typography variant="subtitle2" sx={{ fontWeight: 800, flex: 1 }}>{title}</Typography>
-      {meta}
-    </Stack>
-  );
-
   const sectionCard = (content, icon = null, title = '', meta = null) => (
     <Box
       sx={{
@@ -1670,8 +1650,8 @@ function QuoteStyle({ onError, onNotice, onConfirm }) {
                             fullWidth
                             value={currentLabels[item.key]}
                             onChange={(e) => setLabel(item.key, e.target.value)}
-                            disabled={Boolean(item.switchKey) && !Boolean(style.field_visibility[item.switchKey])}
-                            sx={{ opacity: Boolean(item.switchKey) && !Boolean(style.field_visibility[item.switchKey]) ? 0.55 : 1 }}
+                            disabled={!!item.switchKey && !style.field_visibility[item.switchKey]}
+                            sx={{ opacity: !!item.switchKey && !style.field_visibility[item.switchKey] ? 0.55 : 1 }}
                           />
                           {item.switchKey && (
                             <FormControlLabel
@@ -1710,8 +1690,8 @@ function QuoteStyle({ onError, onNotice, onConfirm }) {
                           fullWidth
                           value={currentLabels[item.key]}
                           onChange={(e) => setLabel(item.key, e.target.value)}
-                          disabled={!Boolean(style.field_visibility[item.key])}
-                          sx={{ opacity: Boolean(style.field_visibility[item.key]) ? 1 : 0.55 }}
+                          disabled={!style.field_visibility[item.key]}
+                          sx={{ opacity: style.field_visibility[item.key] ? 1 : 0.55 }}
                         />
                         <FormControlLabel
                           control={<Switch size="small" checked={Boolean(style.field_visibility[item.key])} onChange={() => toggleVisibility(item.key)} />}
@@ -1835,9 +1815,10 @@ function QuoteStyle({ onError, onNotice, onConfirm }) {
       </CardContent>
     </Card>
   );
-}
+});
 
-function SystemManager({ onError, onNotice, onConfirm }) {
+
+const SystemManager = memo(function SystemManager({ onError, onNotice, onConfirm }) {
   const { updateUser } = useAuth();
   const { setLogo, resetLogo } = useAppLogo();
   const [orderOptions, setOrderOptions] = useState([]);
@@ -2583,4 +2564,5 @@ function SystemManager({ onError, onNotice, onConfirm }) {
       </CardContent>
     </Card>
   );
-}
+});
+

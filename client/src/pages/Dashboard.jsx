@@ -31,7 +31,6 @@ import PaidIcon from '@mui/icons-material/Paid';
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import api from '../api';
 import { fmtMoney, fmtDate, daysSinceDate } from '../utils/helpers';
-import { useFieldLabels } from '../utils/fieldLabels';
 
 function StatCard({ label, value, accent, badge, icon }) {
   return (
@@ -63,7 +62,6 @@ function StatCard({ label, value, accent, badge, icon }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { t } = useFieldLabels();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);

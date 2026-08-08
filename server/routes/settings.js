@@ -8,7 +8,7 @@ import xlsx from 'xlsx';
 import { getDb, getDataDir, getUploadDir, closeDb, initDb, seedWorkflow, rotateJwtSecret } from '../db/init.js';
 import { upload, uploadRestore, RESTORE_MAX_FILE_SIZE } from '../middleware/upload.js';
 import { authenticateDownload } from '../middleware/auth.js';
-import { nowUtc, badRequest, notFound, isMoney, isBool, isValidDate, isNonNegativeNumber, normalizeDate, normalizeSo, writeAudit } from '../utils.js';
+import { nowUtc, badRequest, notFound, isMoney, isBool, isValidDate, isNonNegativeNumber, normalizeDate, normalizeSo, writeAudit, headerIndex, cell } from '../utils.js';
 import { loadOrderDetail, checkSalesOrderUnique } from './orders.js';
 import { buildQuotationPdf } from './quotations.js';
 import { hasFrameworkForCustomer } from './materials.js';
@@ -170,21 +170,6 @@ const IMPORT_TARGETS = {
     required: ['销售机会编号', '年份', '月份']
   }
 };
-
-function headerIndex(headers, ...names) {
-  const map = new Map(headers.map((h, i) => [String(h == null ? '' : h).trim().toLowerCase(), i]));
-  for (const name of names) {
-    const idx = map.get(String(name).trim().toLowerCase());
-    if (idx !== undefined) return idx;
-  }
-  return -1;
-}
-
-function cell(row, idx) {
-  if (idx < 0 || !row) return null;
-  const value = row[idx];
-  return value === undefined ? null : value;
-}
 
 router.get('/import-meta', (req, res) => {
   const items = Object.entries(IMPORT_TARGETS).map(([key, value]) => ({
@@ -790,7 +775,10 @@ function createBackup() {
   }
   const zipPath = path.join(backupDir, filename);
   fs.writeFileSync(zipPath, zip.toBuffer());
-  enforceBackupRetention();
+  // 异步触发清理,避免阻塞响应
+  setImmediate(() => {
+    try { enforceBackupRetention(); } catch (err) { console.error('备份保留清理失败:', err); }
+  });
   return { filename, size: fs.statSync(zipPath).size, downloadUrl: `/api/settings/backup/${filename}/download` };
 }
 
@@ -1015,40 +1003,45 @@ router.put('/quote-style', (req, res) => {
   return res.json(style);
 });
 
-router.post('/quote-style/test-pdf', (req, res) => {
-  const style = normalizeQuoteStyle(req.body?.style || readQuoteStyle());
-  const sampleOrder = { order_id: 'OPP-2026-TEST', project_name: '示例项目（测试）' };
-  const sampleRound = { round_no: 1, total_amount: 128500.5 };
-  const sampleItems = [
-    {
-      material_no: 'AC-1001',
-      description: '压缩机组示例',
-      material_type: 'standard',
-      price_source: 'guide_price',
-      unit_price_ex_vat: 128500.5,
-      qty: 1,
-      line_amount: 128500.5
-    },
-    {
-      material_no: 'AC-1002',
-      description: '备件套件示例',
-      material_type: 'non_standard',
-      price_source: 'manual',
-      unit_price_ex_vat: 0,
-      qty: 1,
-      line_amount: 0
-    }
-  ];
-  const customerNames = { end: '示例最终客户', contract: '示例合同客户', endShort: 'AC', contractShort: null };
-  const doc = buildQuotationPdf(sampleOrder, sampleRound, sampleItems, customerNames, style);
-  const chunks = [];
-  doc.on('data', (chunk) => chunks.push(chunk));
-  doc.on('end', () => {
-    const buffer = Buffer.concat(chunks);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="quote-style-test.pdf"');
-    res.send(buffer);
-  });
+router.post('/quote-style/test-pdf', (req, res, next) => {
+  try {
+    const style = normalizeQuoteStyle(req.body?.style || readQuoteStyle());
+    const sampleOrder = { order_id: 'OPP-2026-TEST', project_name: '示例项目（测试）' };
+    const sampleRound = { round_no: 1, total_amount: 128500.5 };
+    const sampleItems = [
+      {
+        material_no: 'AC-1001',
+        description: '压缩机组示例',
+        material_type: 'standard',
+        price_source: 'guide_price',
+        unit_price_ex_vat: 128500.5,
+        qty: 1,
+        line_amount: 128500.5
+      },
+      {
+        material_no: 'AC-1002',
+        description: '备件套件示例',
+        material_type: 'non_standard',
+        price_source: 'manual',
+        unit_price_ex_vat: 0,
+        qty: 1,
+        line_amount: 0
+      }
+    ];
+    const customerNames = { end: '示例最终客户', contract: '示例合同客户', endShort: 'AC', contractShort: null };
+    const doc = buildQuotationPdf(sampleOrder, sampleRound, sampleItems, customerNames, style);
+    const chunks = [];
+    doc.on('error', next);
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => {
+      const buffer = Buffer.concat(chunks);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="quote-style-test.pdf"');
+      res.send(buffer);
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ---------- 字段显示名称配置 ----------
@@ -1250,10 +1243,19 @@ function performRestore(zipPath, displayName, userId) {
   fs.mkdirSync(tmpDir, { recursive: true });
   try {
     const zip = new AdmZip(zipPath);
-    for (const entry of zip.getEntries()) {
-      const name = String(entry.entryName || '');
-      if (name.startsWith('/') || name.split(/[\\/]/).some((part) => part === '..')) {
+    const entries = zip.getEntries();
+    let uncompressedSize = 0;
+    const MAX_UNCOMPRESSED_SIZE = 500 * 1024 * 1024;
+    for (const entry of entries) {
+      const rawName = String(entry.entryName || '');
+      if (!rawName) throw new Error('备份文件包含空路径');
+      const resolved = path.resolve(tmpDir, rawName);
+      if (resolved !== tmpDir && !resolved.startsWith(tmpDir + path.sep)) {
         throw new Error('备份文件包含非法路径');
+      }
+      uncompressedSize += Number(entry.header && entry.header.size) || 0;
+      if (uncompressedSize > MAX_UNCOMPRESSED_SIZE) {
+        throw new Error('备份文件解压后过大，已拒绝解压');
       }
     }
     zip.extractAllTo(tmpDir, true);

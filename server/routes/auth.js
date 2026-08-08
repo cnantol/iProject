@@ -68,13 +68,13 @@ router.post('/change-password', authenticate, (req, res) => {
   return res.json({ message: '密码修改成功，请重新登录' });
 });
 
-router.put('/profile', authenticate, (req, res) => {
+router.put('/profile', authenticate, async (req, res) => {
   const { currentPassword, username: newUsername, newPassword } = req.body || {};
   if (!currentPassword) return badRequest(res, '请输入当前密码');
   const db = getDb();
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!user) return badRequest(res, '用户不存在');
-  if (!bcrypt.compareSync(String(currentPassword), user.password)) {
+  if (!(await bcrypt.compare(String(currentPassword), user.password))) {
     return badRequest(res, '当前密码不正确');
   }
   let nextUsername = user.username;
@@ -89,7 +89,7 @@ router.put('/profile', authenticate, (req, res) => {
   let nextPassword = user.password;
   if (newPassword !== undefined && String(newPassword) !== '') {
     if (String(newPassword).length < 6) return badRequest(res, '新密码长度不能少于 6 位');
-    nextPassword = bcrypt.hashSync(String(newPassword), 10);
+    nextPassword = await bcrypt.hash(String(newPassword), 10);
   }
   db.prepare('UPDATE users SET username = ?, password = ?, updated_at = ? WHERE id = ?').run(nextUsername, nextPassword, nowUtc(), user.id);
   writeAudit(db, { userId: user.id, action: 'other', entityType: 'user', entityId: user.id, detail: { event: 'update_profile' } });

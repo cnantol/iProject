@@ -122,6 +122,9 @@ export default function Login() {
               <Button type="submit" variant="contained" size="large" startIcon={<LoginIcon />} disabled={loading} fullWidth>
                 {loading ? <CircularProgress size={22} color="inherit" /> : '登录系统'}
               </Button>
+              <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', lineHeight: 1.6 }}>
+                默认管理员账号 <strong>admin</strong> / <strong>password</strong>，首次登录后请到「系统设置 → 资料与密码」修改
+              </Typography>
             </Stack>
           </form>
         </Stack>

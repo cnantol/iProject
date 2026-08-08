@@ -1,17 +1,5 @@
-export const STEP_KEY_INDEX = {
-  customer_info: 0,
-  proposal: 1,
-  quotation: 2,
-  approval_pending: 3,
-  bid_decision: 4,
-  finance: 5,
-  shipping_invoicing: 6,
-  shipping: 6,
-  invoicing: 6,
-  commission: 7,
-  closed: 8,
-  lost_closed: 8
-};
+import { STEP_KEY_INDEX, isClosedStatus } from './orderStatus.js';
+export { ORDER_STATUS, CLOSED_STATUSES, isClosedStatus } from './orderStatus.js';
 
 export function fmtMoney(value, digits = 2) {
   const num = Number(value);
@@ -66,7 +54,7 @@ export function daysSinceDate(dateStr) {
 
 export function isStepReadOnly(order, stepKey) {
   if (!order) return true;
-  if (['closed', 'lost_closed', 'cancelled'].includes(order.status)) return true;
+  if (isClosedStatus(order.status)) return true;
   if (order.status === 'shipping_invoicing') {
     if (stepKey === 'shipping' || stepKey === 'invoicing') return false;
     const doneSteps = ['customer_info', 'proposal', 'quotation', 'approval_pending', 'bid_decision', 'finance'];
@@ -75,7 +63,9 @@ export function isStepReadOnly(order, stepKey) {
     return false;
   }
   const currentIdx = STEP_KEY_INDEX[order.status];
+  if (currentIdx == null) return true;
   const stepIdx = STEP_KEY_INDEX[stepKey];
+  if (stepIdx == null) return true;
   if (stepIdx < currentIdx) return true;
   if (stepIdx > currentIdx + 1) return true;
   return false;

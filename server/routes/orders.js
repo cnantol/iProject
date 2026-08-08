@@ -34,9 +34,9 @@ const STEP1_FIELDS = [
 const FINANCE_FIELDS = ['sales_order', 'payment_terms'];
 
 function checkSalesOrderUnique(db, salesOrder, excludeId) {
-  const row = excludeId
-    ? db.prepare('SELECT id FROM orders WHERE sales_order = ? AND id <> ?').get(salesOrder, excludeId)
-    : db.prepare('SELECT id FROM orders WHERE sales_order = ?').get(salesOrder);
+  const row = excludeId == null
+    ? db.prepare('SELECT id FROM orders WHERE sales_order = ?').get(salesOrder)
+    : db.prepare('SELECT id FROM orders WHERE sales_order = ? AND id <> ?').get(salesOrder, excludeId);
   return !row;
 }
 
@@ -287,13 +287,16 @@ router.get('/', (req, res) => {
   if (scope === 'archived') filter.push("o.status IN ('closed','lost_closed','cancelled')");
   const allWhere = [baseWhere, ...filter].filter(Boolean).join(' AND ');
   const whereSql = allWhere ? `WHERE ${allWhere}` : '';
-  const countWith = (cond) => {
-    const parts = [baseWhere, ...(status ? ['o.status = ?'] : []), cond].filter(Boolean).join(' AND ');
-    const sql = parts ? `WHERE ${parts}` : '';
-    return db.prepare(`SELECT COUNT(*) AS c FROM orders o ${sql}`).get(...(status ? [...baseParams, String(status)] : baseParams)).c;
-  };
-  const activeCount = countWith("o.status NOT IN ('closed','lost_closed','cancelled')");
-  const archivedCount = countWith("o.status IN ('closed','lost_closed','cancelled')");
+  // 一次查询同时拿到 active/archived 计数，避免连发两次 COUNT(*)。
+  // 仅基于 baseWhere（如客户/合同客户过滤），不受当前 scope/status 影响，
+  // 因为前端 Tab 角标需要的是"全集下的两个分类数"。
+  const countSql = `SELECT
+       SUM(CASE WHEN o.status NOT IN ('closed','lost_closed','cancelled') THEN 1 ELSE 0 END) AS active_count,
+       SUM(CASE WHEN o.status IN ('closed','lost_closed','cancelled') THEN 1 ELSE 0 END) AS archived_count
+     FROM orders o ${baseWhere ? `WHERE ${baseWhere}` : ''}`;
+  const counts = db.prepare(countSql).get(...baseParams);
+  const activeCount = Number(counts ? counts.active_count : 0) || 0;
+  const archivedCount = Number(counts ? counts.archived_count : 0) || 0;
   const total = db.prepare(`SELECT COUNT(*) AS c FROM orders o ${whereSql}`).get(...params).c;
   const items = db
     .prepare(

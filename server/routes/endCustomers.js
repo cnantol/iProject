@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/init.js';
-import { hasFrameworkForCustomer } from './materials.js';
+import { recomputeOrderFrameworkFlags } from './materials.js';
 import { nowUtc, badRequest, notFound, pick } from '../utils.js';
 
 const router = Router();
@@ -17,18 +17,6 @@ function wouldCreateCycle(db, customerId, parentId) {
     current = row && row.parent_customer_id ? Number(row.parent_customer_id) : null;
   }
   return false;
-}
-
-function recomputeOrderFrameworkFlags(db) {
-  const orders = db.prepare('SELECT id, end_customer_id FROM orders').all();
-  const update = db.prepare('UPDATE orders SET has_framework = ?, updated_at = ? WHERE id = ?');
-  const ts = nowUtc();
-  const tx = db.transaction((list) => {
-    for (const order of list) {
-      update.run(hasFrameworkForCustomer(order.end_customer_id) ? 1 : 0, ts, order.id);
-    }
-  });
-  tx(orders);
 }
 
 function normalizeShortName(value) {

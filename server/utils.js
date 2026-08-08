@@ -124,3 +124,18 @@ export function pick(obj, keys) {
   }
   return out;
 }
+
+export function headerIndex(headers, ...names) {
+  const map = new Map(headers.map((h, i) => [String(h == null ? '' : h).trim().toLowerCase(), i]));
+  for (const name of names) {
+    const idx = map.get(String(name).trim().toLowerCase());
+    if (idx !== undefined) return idx;
+  }
+  return -1;
+}
+
+export function cell(row, idx) {
+  if (idx < 0 || !row) return null;
+  const value = row[idx];
+  return value === undefined ? null : value;
+}

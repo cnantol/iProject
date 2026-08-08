@@ -3,7 +3,6 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -44,7 +43,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
   const [activeVersionId, setActiveVersionId] = useState(null);
   const [newVersion, setNewVersion] = useState({ version_label: '', remark: '' });
   const [rows, setRows] = useState([]);
-  const [editing, setEditing] = useState(null);
+  const [_editing] = useState(null);
   const [skipOpen, setSkipOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
