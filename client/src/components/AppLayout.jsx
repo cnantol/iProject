@@ -196,13 +196,13 @@ export default function AppLayout() {
             gap: 1.25,
             p: collapsed ? 0.5 : 1,
             borderRadius: 2,
-            bgcolor: collapsed ? 'transparent' : 'rgba(255,255,255,0.5)',
+            bgcolor: collapsed ? 'transparent' : (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.5)'),
             border: '1px solid',
-            borderColor: collapsed ? 'transparent' : 'divider',
+            borderColor: collapsed ? 'transparent' : (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'divider'),
             justifyContent: collapsed ? 'center' : 'flex-start',
             transition: 'all 0.2s ease',
             '&:hover': {
-              bgcolor: 'rgba(25,118,210,0.06)',
+              bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(25,118,210,0.18)' : 'rgba(25,118,210,0.06)'),
               borderColor: 'primary.main'
             }
           }}
