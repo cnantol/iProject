@@ -6,6 +6,7 @@ import AdmZip from 'adm-zip';
 import bcrypt from 'bcryptjs';
 import xlsx from 'xlsx';
 import { getDb, getDataDir, getUploadDir, closeDb, initDb, seedWorkflow, rotateJwtSecret } from '../db/init.js';
+import { logger } from '../logger.js';
 import { upload, uploadRestore, RESTORE_MAX_FILE_SIZE } from '../middleware/upload.js';
 import { authenticateDownload } from '../middleware/auth.js';
 import { nowUtc, badRequest, notFound, isMoney, isBool, isValidDate, isNonNegativeNumber, normalizeDate, normalizeSo, writeAudit, headerIndex, cell } from '../utils.js';
@@ -243,7 +244,7 @@ function persistImportTask(task) {
       doneAt: taskTime(task.doneAt)
     });
   } catch (err) {
-    console.error('导入任务落盘失败:', err);
+    logger.error('import', '导入任务落盘失败', { err: err?.message });
   }
 }
 
@@ -777,7 +778,7 @@ function createBackup() {
   fs.writeFileSync(zipPath, zip.toBuffer());
   // 异步触发清理,避免阻塞响应
   setImmediate(() => {
-    try { enforceBackupRetention(); } catch (err) { console.error('备份保留清理失败:', err); }
+    try { enforceBackupRetention(); } catch (err) { logger.error('backup', '备份保留清理失败', { err: err?.message }); }
   });
   return { filename, size: fs.statSync(zipPath).size, downloadUrl: `/api/settings/backup/${filename}/download` };
 }
@@ -806,11 +807,11 @@ function enforceBackupRetention(userId = null) {
       fs.unlinkSync(path.join(getDataDir(), 'backups', file.name));
       deleted.push(file.name);
     } catch (err) {
-      console.error('清理旧备份失败:', file.name, err);
+      logger.error('backup', '清理旧备份失败', { file: file.name, err: err?.message });
     }
   }
   if (deleted.length > 0) {
-    console.log(`备份保留策略：保留最近 ${keep} 份，已清理 ${deleted.length} 份`);
+    logger.info('backup', `备份保留策略:保留最近 ${keep} 份,已清理 ${deleted.length} 份`);
     writeAudit(getDb(), { userId, action: 'other', entityType: 'settings', detail: { event: 'backup_retention', keep, deleted } });
   }
   return { keep, deleted };
@@ -1192,7 +1193,7 @@ export function startBackupScheduler() {
       const result = createBackup();
       writeAudit(getDb(), { userId: null, action: 'other', entityType: 'settings', detail: { event: 'scheduled_backup', filename: result.filename } });
     } catch (err) {
-      console.error('定时备份失败:', err);
+      logger.error('schedule', '定时备份失败', { err: err?.message });
     }
   }, 60000);
 }
@@ -1490,9 +1491,10 @@ router.put('/correct-order-data', (req, res) => {
 });
 
 // ---------- 重置 ----------
-function verifyPassword(db, password) {
+async function verifyPassword(db, password) {
   const admin = db.prepare('SELECT * FROM users WHERE username = ?').get('admin');
-  return Boolean(admin && bcrypt.compareSync(String(password || ''), admin.password));
+  if (!admin) return false;
+  return await bcrypt.compare(String(password || ''), admin.password);
 }
 
 function deleteBusinessData(db) {
@@ -1532,20 +1534,20 @@ function deleteBusinessData(db) {
   fs.mkdirSync(getUploadDir(), { recursive: true });
 }
 
-router.post('/reset-business', (req, res) => {
+router.post('/reset-business', async (req, res) => {
   const db = getDb();
   const { password } = req.body || {};
-  if (!verifyPassword(db, password)) return badRequest(res, '管理员密码不正确');
+  if (!(await verifyPassword(db, password))) return badRequest(res, '管理员密码不正确');
   writeAudit(db, { userId: req.user.id, action: 'reset_business', entityType: 'settings', detail: { scope: 'business' } });
   deleteBusinessData(db);
   seedWorkflow(db);
   return res.json({ message: '业务数据已重置' });
 });
 
-router.post('/reset-factory', (req, res) => {
+router.post('/reset-factory', async (req, res) => {
   const db = getDb();
   const { password } = req.body || {};
-  if (!verifyPassword(db, password)) return badRequest(res, '管理员密码不正确');
+  if (!(await verifyPassword(db, password))) return badRequest(res, '管理员密码不正确');
   writeAudit(db, { userId: req.user.id, action: 'reset_factory', entityType: 'settings', detail: { scope: 'factory' } });
   deleteBusinessData(db);
   db.prepare('DELETE FROM login_attempts').run();

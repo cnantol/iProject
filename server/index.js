@@ -2,8 +2,10 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import crypto from 'node:crypto';
 import { initDb, closeDb, getDataDir } from './db/init.js';
 import { authenticate } from './middleware/auth.js';
+import { logger, runWithRequest } from './logger.js';
 
 import authRoutes from './routes/auth.js';
 import endCustomerRoutes from './routes/endCustomers.js';
@@ -33,6 +35,16 @@ export function createApp() {
   // 反向代理（Nginx/云负载均衡）后取真实客户端 IP，避免所有用户共享网关 IP 导致登录锁
   const trustProxy = process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) : 1;
   app.set('trust proxy', trustProxy);
+
+  // 请求追踪 ID:从 header 透传(否则生成新 ID),通过 AsyncLocalStorage 注入。
+  // 所有 logger.* 自动附带 requestId,响应 header X-Request-Id 也回传给前端。
+  app.use((req, res, next) => {
+    const incoming = req.get('x-request-id');
+    const requestId = (incoming && /^[a-zA-Z0-9_-]{4,128}$/.test(incoming)) ? incoming : crypto.randomBytes(6).toString('hex');
+    res.setHeader('X-Request-Id', requestId);
+    runWithRequest({ requestId }, () => next());
+  });
+
   app.use(express.json({ limit: '10mb' }));
 
   app.use('/api/auth', authRoutes);
@@ -99,7 +111,7 @@ export function createApp() {
     if (err && err.message && (err.message.includes('仅支持') || err.message.includes('Unexpected field'))) {
       return res.status(400).json({ error: err.message.includes('仅支持') ? err.message : '上传字段无效' });
     }
-    console.error(err);
+    logger.error('http', '未捕获异常', { err: err?.message, stack: err?.stack });
     return res.status(500).json({ error: '服务器内部错误' });
   });
 
@@ -114,12 +126,12 @@ if (isDirectRun) {
   startBackupScheduler();
   const distIndex = path.join(path.resolve(__dirname, '..', 'client', 'dist'), 'index.html');
   if (!fs.existsSync(distIndex)) {
-    console.warn('[警告] 前端构建产物不存在，请先在项目根目录执行 `pnpm build`');
+    logger.warn('bootstrap', '前端构建产物不存在，请先在项目根目录执行 `pnpm build`');
   }
   const port = Number(process.env.PORT) || 3001;
   const app = createApp();
   const server = app.listen(port, () => {
-    console.log(`iProject 全链路项目管理专家已启动：http://localhost:${port}`);
+    logger.info('bootstrap', `服务已启动 http://localhost:${port}`);
   });
   const shutdown = () => {
     server.close(() => {

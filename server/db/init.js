@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import { nowUtc } from '../utils.js';
+import { logger } from '../logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -99,6 +100,20 @@ export function initDb(dir) {
     db.exec('ALTER TABLE end_customers ADD COLUMN parent_customer_id INTEGER REFERENCES end_customers(id)');
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_end_customers_parent ON end_customers(parent_customer_id)');
+
+  // 性能索引:覆盖全站高频查询路径
+  // - login_attempts.lock_key: 登录失败计数查询(每次登录)
+  // - users.username: 登录 / 唯一性检查
+  // - materials.(end_customer_id, material_no): 报价价格匹配(联合索引,覆盖 WHERE 两字段)
+  // - guide_prices.material_no: 通用价格查询
+  // - orders.sales_order: 佣金匹配 + 销售机会唯一性
+  // - orders.(status, commission_matched): 佣金待匹配批次扫描
+  db.exec('CREATE INDEX IF NOT EXISTS idx_login_attempts_key ON login_attempts(lock_key)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_materials_customer_material ON materials(end_customer_id, material_no)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_guide_prices_material ON guide_prices(material_no)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_orders_sales_order ON orders(sales_order)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_orders_status_commission ON orders(status, commission_matched)');
 
   const ensureOrdersTotalNonNegative = () => {
     const ddlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get();
@@ -200,7 +215,7 @@ export function initDb(dir) {
       for (const [id, orderId] of pairs) update.run(orderId, id);
     });
     tx(updates);
-    console.log(`订单编号补零迁移：已更新 ${updates.length} 条历史订单`);
+    logger.info('migrate', `订单编号补零迁移:已更新 ${updates.length} 条历史订单`);
   };
   padOrderIds();
 

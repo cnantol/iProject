@@ -17,7 +17,7 @@ function cleanupLoginAttempts(db, now) {
   db.prepare('DELETE FROM login_attempts WHERE lock_until IS NOT NULL AND lock_until < ?').run(now - LOGIN_LOCK_MS);
 }
 
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return badRequest(res, '请输入用户名和密码');
   const db = getDb();
@@ -29,7 +29,7 @@ router.post('/login', (req, res) => {
     return res.status(429).json({ error: '尝试次数过多，请 15 分钟后再试' });
   }
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(String(username).trim());
-  if (!user || !bcrypt.compareSync(String(password), user.password)) {
+  if (!user || !(await bcrypt.compare(String(password), user.password))) {
     const count = Number(attempt ? attempt.fail_count : 0) + 1;
     const lockUntil = count >= MAX_LOGIN_ATTEMPTS ? now + LOGIN_LOCK_MS : null;
     db.prepare(
@@ -53,15 +53,15 @@ router.post('/download-token', authenticate, (req, res) => {
   return res.json({ token });
 });
 
-router.post('/change-password', authenticate, (req, res) => {
+router.post('/change-password', authenticate, async (req, res) => {
   const { oldPassword, newPassword } = req.body || {};
   if (!oldPassword || !newPassword) return badRequest(res, '请输入原密码和新密码');
   if (String(newPassword).length < 6) return badRequest(res, '新密码长度不能少于 6 位');
   const user = getDb().prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-  if (!bcrypt.compareSync(String(oldPassword), user.password)) {
+  if (!(await bcrypt.compare(String(oldPassword), user.password))) {
     return badRequest(res, '原密码不正确');
   }
-  const hash = bcrypt.hashSync(String(newPassword), 10);
+  const hash = await bcrypt.hash(String(newPassword), 10);
   getDb().prepare('UPDATE users SET password = ?, updated_at = ? WHERE id = ?').run(hash, nowUtc(), req.user.id);
   writeAudit(getDb(), { userId: req.user.id, action: 'other', entityType: 'user', entityId: req.user.id, detail: { event: 'change_password' } });
   rotateJwtSecret();
