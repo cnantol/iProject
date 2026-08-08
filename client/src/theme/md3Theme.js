@@ -54,3 +54,19 @@ export function buildTheme(mode) {
     }
   });
 }
+
+// 共享表头调色板 token。
+// 全站 4 处列表页(OrderList/SalesHistory/CommissionPage/MUI 默认)统一使用同一套值。
+// 用法:sx={(theme) => ({ bgcolor: tableHeadTokens[theme.palette.mode].bg, ... })}
+export const tableHeadTokens = {
+  light: {
+    bg: 'rgba(22,48,78,0.03)',
+    color: '#5E6F80',
+    border: '#DDE7F3'
+  },
+  dark: {
+    bg: 'rgba(168,190,214,0.05)',
+    color: '#A7B6C6',
+    border: 'rgba(255,255,255,0.12)'
+  }
+};

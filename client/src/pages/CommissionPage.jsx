@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTheme } from '@mui/material/styles';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -34,10 +33,9 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { fmtDateTime, fmtMoney } from '../utils/helpers';
 import { useFieldLabels } from '../utils/fieldLabels';
+import { tableHeadTokens } from '../theme/md3Theme';
 
 export default function CommissionPage() {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
   const [waiting, setWaiting] = useState([]);
   const [imports, setImports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -237,14 +235,18 @@ export default function CommissionPage() {
       </Box>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)}
-        sx={{ minHeight: 48,
-          bgcolor: isDark ? 'grey.900' : '#f8fafc',
-          borderRadius: 1.5,
-          '& .MuiTabs-indicator': { height: 3, borderRadius: 2, bottom: 4 },
-          '& .MuiTab-root': { minHeight: 48, fontWeight: 700, textTransform: 'none', fontSize: 14, px: 3,
-            borderRadius: 1.5, mx: 0.5,
-            '&.Mui-selected': { bgcolor: isDark ? 'rgba(59,130,246,0.15)' : '#eff6ff' }
-          }
+        sx={(theme) => {
+          const tk = tableHeadTokens[theme.palette.mode];
+          return {
+            minHeight: 48,
+            bgcolor: tk.bg,
+            borderRadius: 1.5,
+            '& .MuiTabs-indicator': { height: 3, borderRadius: 2, bottom: 4 },
+            '& .MuiTab-root': { minHeight: 48, fontWeight: 700, textTransform: 'none', fontSize: 14, px: 3,
+              borderRadius: 1.5, mx: 0.5,
+              '&.Mui-selected': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(59,130,246,0.15)' : '#eff6ff' }
+            }
+          };
         }}>
         <Tab icon={<PaymentsIcon />} iconPosition="start" label="佣金结算" />
         <Tab icon={<WarningAmberIcon />} iconPosition="start" label="佣金偏差" />
@@ -301,8 +303,8 @@ export default function CommissionPage() {
               {result.sheet_results && result.sheet_results.length > 0 && (
                 <Card sx={{ borderRadius: 2, overflow: 'hidden' }}>
                   <CardContent sx={{ p: 0 }}>
-                    <Typography variant="body1" fontWeight={800} sx={{ px: 2.5, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: isDark ? 'grey.900' : '#f8fafc' }}>分工作表明细</Typography>
-                    <Table size="small" sx={{ '& .MuiTableCell-head': { fontWeight: 800, bgcolor: isDark ? 'grey.900' : '#f8fafc' } }}>
+                    <Typography variant="body1" fontWeight={800} sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { px: 2.5, py: 1.5, borderBottom: '1px solid', borderColor: tk.border, bgcolor: tk.bg }; }}>分工作表明细</Typography>
+                    <Table size="small" sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { '& .MuiTableCell-head': { fontWeight: 800, bgcolor: tk.bg, color: tk.color } }; }}>
                       <TableHead>
                         <TableRow>
                           <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>工作表</TableCell>
@@ -352,11 +354,11 @@ export default function CommissionPage() {
               <Box component="label" sx={{
                 display: 'block', mt: 2, p: 3,
                 border: '2px dashed',
-                borderColor: file ? 'success.main' : (isDark ? 'grey.600' : 'grey.300'),
+                borderColor: (theme) => (file ? 'success.main' : (theme.palette.mode === 'dark' ? 'grey.600' : 'grey.300')),
                 borderRadius: 2.5, cursor: 'pointer', textAlign: 'center',
                 transition: 'all 0.2s',
-                bgcolor: file ? (isDark ? 'rgba(16,185,129,0.08)' : '#f0fdf4') : 'transparent',
-                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc', borderColor: 'primary.main' }
+                bgcolor: (theme) => (file ? (theme.palette.mode === 'dark' ? 'rgba(16,185,129,0.08)' : '#f0fdf4') : 'transparent'),
+                '&:hover': { bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#f8fafc'), borderColor: 'primary.main' }
               }}>
                 {file ? (
                   <>
@@ -448,13 +450,13 @@ export default function CommissionPage() {
                                     minWidth: 120,
                                     cursor: s.totalRows === 0 ? 'not-allowed' : 'pointer',
                                     opacity: s.totalRows === 0 ? 0.4 : 1,
-                                    borderColor: s.enabled ? (isDark ? '#60a5fa' : '#3b82f6') : 'divider',
+                                    borderColor: (theme) => (s.enabled ? (theme.palette.mode === 'dark' ? '#60a5fa' : '#3b82f6') : 'divider'),
                                     borderWidth: s.enabled ? 2 : 1,
-                                    bgcolor: s.enabled ? (isDark ? 'rgba(59,130,246,0.12)' : '#eff6ff') : 'transparent',
+                                    bgcolor: (theme) => (s.enabled ? (theme.palette.mode === 'dark' ? 'rgba(59,130,246,0.12)' : '#eff6ff') : 'transparent'),
                                     transition: 'all 0.15s',
                                     '&:hover': s.totalRows > 0 ? {
-                                      borderColor: isDark ? '#60a5fa' : '#3b82f6',
-                                      bgcolor: isDark ? 'rgba(59,130,246,0.18)' : '#dbeafe',
+                                      borderColor: (theme) => (theme.palette.mode === 'dark' ? '#60a5fa' : '#3b82f6'),
+                                      bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(59,130,246,0.18)' : '#dbeafe'),
                                     } : {},
                                   }}
                                 >
@@ -588,7 +590,7 @@ export default function CommissionPage() {
               ) : (
                 <Table size="small" sx={{ '& .MuiTableCell-head': { fontWeight: 800 } }}>
                   <TableHead>
-                    <TableRow sx={{ '& .MuiTableCell-head': { bgcolor: isDark ? 'grey.800' : '#f8f9fb' } }}>
+                    <TableRow sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { '& .MuiTableCell-head': { bgcolor: tk.bg, color: tk.color } }; }}>
                       <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>机会号</TableCell>
                       <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>最终客户</TableCell>
                       <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>SO</TableCell>
@@ -598,14 +600,14 @@ export default function CommissionPage() {
                       <TableCell align="center" sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>操作</TableCell>
                     </TableRow>
                     {/* 汇总行 - 直接在表头下方，对齐列 */}
-                    <TableRow sx={{ '& .MuiTableCell-head': { bgcolor: isDark ? '#1a3a1a' : '#f0fdf4', borderBottom: '2px solid ' + (isDark ? '#4ade80' : '#22c55e') } }}>
-                      <TableCell sx={{ fontWeight: 800, color: isDark ? '#86efac' : '#15803d', py: 0.75 }} colSpan={4}>
+                    <TableRow sx={(theme) => ({ '& .MuiTableCell-head': { bgcolor: theme.palette.mode === 'dark' ? '#1a3a1a' : '#f0fdf4', borderBottom: '2px solid ' + (theme.palette.mode === 'dark' ? '#4ade80' : '#22c55e') } })}>
+                      <TableCell sx={(theme) => ({ fontWeight: 800, color: theme.palette.mode === 'dark' ? '#86efac' : '#15803d', py: 0.75 })} colSpan={4}>
                         合计：{waiting.length} 条
                       </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 800, color: isDark ? '#86efac' : '#15803d', py: 0.75, whiteSpace: 'nowrap' }}>
+                      <TableCell align="right" sx={(theme) => ({ fontWeight: 800, color: theme.palette.mode === 'dark' ? '#86efac' : '#15803d', py: 0.75, whiteSpace: 'nowrap' })}>
                         {fmtMoney(waiting.reduce((s, i) => s + (i.total_amount || 0), 0))}
                       </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 800, color: isDark ? '#86efac' : '#15803d', py: 0.75, whiteSpace: 'nowrap' }}>
+                      <TableCell align="right" sx={(theme) => ({ fontWeight: 800, color: theme.palette.mode === 'dark' ? '#86efac' : '#15803d', py: 0.75, whiteSpace: 'nowrap' })}>
                         {fmtMoney(waiting.reduce((s, i) => s + (i.expected_commission || 0), 0))}
                       </TableCell>
                       <TableCell sx={{ py: 0.75 }} />
@@ -613,7 +615,7 @@ export default function CommissionPage() {
                   </TableHead>
                     <TableBody>
                       {waiting.slice(0, 200).map((item) => (
-                        <TableRow key={item.id} hover sx={{ '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : '#fafbfd' } }}>
+                        <TableRow key={item.id} hover sx={(theme) => ({ '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#fafbfd' } })}>
                           <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{item.order_id}</TableCell>
                           <TableCell sx={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {item.end_customer_name || '-'}
@@ -655,7 +657,7 @@ export default function CommissionPage() {
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>暂无匹配历史</Typography>
               ) : (
                 <Box sx={{ maxHeight: 420, overflow: 'auto' }}>
-                  <Table size="small" stickyHeader sx={{ '& .MuiTableCell-head': { bgcolor: isDark ? 'grey.800' : '#fafafa' } }}>
+                  <Table size="small" stickyHeader sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { '& .MuiTableCell-head': { bgcolor: tk.bg, color: tk.color } }; }}>
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>文件名</TableCell>

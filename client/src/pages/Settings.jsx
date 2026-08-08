@@ -22,7 +22,6 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
-import { useTheme } from '@mui/material/styles';
 import Switch from '@mui/material/Switch';
 import Tab from '@mui/material/Tab';
 import Table from '@mui/material/Table';
@@ -1232,8 +1231,6 @@ function normalizeQuoteStyleForClient(data = {}) {
 }
 
 const QuoteStyle = memo(function QuoteStyle({ onError, onNotice }) {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
   const [style, setStyle] = useState(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -1362,8 +1359,8 @@ const QuoteStyle = memo(function QuoteStyle({ onError, onNotice }) {
       sx={{
         borderRadius: 3,
         border: 1,
-        borderColor: isDark ? 'rgba(255,255,255,0.12)' : '#DDE7F3',
-        bgcolor: isDark ? 'rgba(255,255,255,0.045)' : '#F8FAFC',
+        borderColor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.12)' : '#DDE7F3'),
+        bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.045)' : '#F8FAFC'),
         p: 2,
         position: 'relative',
         overflow: 'hidden'
@@ -1396,8 +1393,8 @@ const QuoteStyle = memo(function QuoteStyle({ onError, onNotice }) {
               width: 32,
               height: 32,
               borderRadius: 2,
-              bgcolor: isDark ? 'rgba(0,78,154,0.35)' : 'rgba(0,78,154,0.12)',
-              color: isDark ? '#8FB8E8' : '#004E9A',
+              bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(0,78,154,0.35)' : 'rgba(0,78,154,0.12)'),
+              color: (theme) => (theme.palette.mode === 'dark' ? '#8FB8E8' : '#004E9A'),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1417,7 +1414,7 @@ const QuoteStyle = memo(function QuoteStyle({ onError, onNotice }) {
   return (
     <Card sx={{ overflow: 'visible' }}>
       <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'secondary.main' }} />
-      <Box sx={{ px: { xs: 2, md: 3 }, pt: 2.5, pb: 2, bgcolor: isDark ? 'rgba(0,78,154,0.22)' : 'rgba(0,78,154,0.07)' }}>
+      <Box sx={(theme) => ({ px: { xs: 2, md: 3 }, pt: 2.5, pb: 2, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,78,154,0.22)' : 'rgba(0,78,154,0.07)' })}>
         <Stack direction={{ xs: 'column', lg: 'row' }} alignItems={{ xs: 'stretch', lg: 'center' }} justifyContent="space-between" spacing={1.5}>
           <Stack direction="row" spacing={1.5} alignItems="center">
             <Box
@@ -1425,13 +1422,13 @@ const QuoteStyle = memo(function QuoteStyle({ onError, onNotice }) {
                 width: 46,
                 height: 46,
                 borderRadius: 2,
-                bgcolor: isDark ? 'rgba(0,78,154,0.35)' : 'primary.main',
+                bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(0,78,154,0.35)' : 'primary.main'),
                 color: '#FFFFFF',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
-                boxShadow: isDark ? 'none' : '0 8px 20px rgba(0,78,154,0.22)'
+                boxShadow: (theme) => (theme.palette.mode === 'dark' ? 'none' : '0 8px 20px rgba(0,78,154,0.22)')
               }}
             >
               <RequestQuoteIcon sx={{ fontSize: 25 }} />
@@ -1523,7 +1520,7 @@ const QuoteStyle = memo(function QuoteStyle({ onError, onNotice }) {
                       </Select>
                     </FormControl>
                   </Stack>
-                  <Box sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#FFFFFF' }}>
+                  <Box sx={(theme) => ({ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : '#FFFFFF' })}>
                     <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
                       {style.logo ? (
                         <img src={style.logo} alt="Logo" style={{ maxWidth: 130, maxHeight: 54, objectFit: 'contain' }} />
@@ -1716,14 +1713,14 @@ const QuoteStyle = memo(function QuoteStyle({ onError, onNotice }) {
                 top: 84,
                 borderRadius: 3,
                 border: 1,
-                borderColor: isDark ? 'rgba(255,255,255,0.14)' : '#D8E2F0',
-                bgcolor: isDark ? 'rgba(15,23,42,0.55)' : '#EEF3FA',
+                borderColor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.14)' : '#D8E2F0'),
+                bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(15,23,42,0.55)' : '#EEF3FA'),
                 overflow: 'hidden'
               }}
             >
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 2, py: 1.4, bgcolor: isDark ? 'rgba(0,78,154,0.32)' : '#FFFFFF', borderBottom: 1, borderColor: 'divider' }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={(theme) => ({ px: 2, py: 1.4, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,78,154,0.32)' : '#FFFFFF', borderBottom: 1, borderColor: 'divider' })}>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: isDark ? 'rgba(0,78,154,0.35)' : 'rgba(0,78,154,0.12)', color: isDark ? '#8FB8E8' : '#004E9A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Box sx={(theme) => ({ width: 30, height: 30, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,78,154,0.35)' : 'rgba(0,78,154,0.12)', color: theme.palette.mode === 'dark' ? '#8FB8E8' : '#004E9A', display: 'flex', alignItems: 'center', justifyContent: 'center' })}>
                     <RequestQuoteIcon sx={{ fontSize: 18 }} />
                   </Box>
                   <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>报价单实时预览</Typography>
@@ -1734,7 +1731,7 @@ const QuoteStyle = memo(function QuoteStyle({ onError, onNotice }) {
                 </Stack>
               </Stack>
               <Box sx={{ p: { xs: 1.5, sm: 2.5 } }}>
-                <Box sx={{ maxWidth: 760, mx: 'auto', bgcolor: '#ffffff', borderRadius: 2, boxShadow: isDark ? '0 24px 50px rgba(0,0,0,0.42)' : '0 24px 50px rgba(15,23,42,0.14)', p: { xs: 2, sm: 2.5 }, color: '#1f2937', fontFamily: previewFont, border: '1px solid #D8E2F0' }}>
+                <Box sx={(theme) => ({ maxWidth: 760, mx: 'auto', bgcolor: '#ffffff', borderRadius: 2, boxShadow: theme.palette.mode === 'dark' ? '0 24px 50px rgba(0,0,0,0.42)' : '0 24px 50px rgba(15,23,42,0.14)', p: { xs: 2, sm: 2.5 }, color: '#1f2937', fontFamily: previewFont, border: '1px solid #D8E2F0' })}>
                   {style.header_text && (
                     <Box sx={{ textAlign: style.header_alignment, fontSize: 12, color: '#555555', mb: 0.75 }}>
                       {style.header_text}
@@ -1799,7 +1796,7 @@ const QuoteStyle = memo(function QuoteStyle({ onError, onNotice }) {
                     <Box sx={{ textAlign: style.footer_alignment, mt: 0.5, fontSize: 11, color: '#94a3b8' }}>{style.footer_text}</Box>
                   )}
                 </Box>
-                <Box sx={{ mt: 1.5, px: 1.5, py: 1, borderRadius: 1.5, bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.7)', border: 1, borderColor: 'divider', display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                <Box sx={(theme) => ({ mt: 1.5, px: 1.5, py: 1, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.7)', border: 1, borderColor: 'divider', display: 'flex', flexWrap: 'wrap', gap: 0.75 })}>
                   <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>当前设置概览</Typography>
                   <Chip size="small" variant="outlined" label={`语言：${style.language === 'en' ? 'English' : '中文'}`} />
                   <Chip size="small" variant="outlined" label={`字体：${style.font_family === 'serif' ? '衬线' : style.font_family === 'mono' ? '等宽' : '无衬线'}`} />

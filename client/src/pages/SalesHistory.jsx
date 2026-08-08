@@ -13,7 +13,6 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
 import InboxIcon from '@mui/icons-material/Inbox';
 import InventoryIcon from '@mui/icons-material/Inventory';
@@ -22,16 +21,35 @@ import BalanceIcon from '@mui/icons-material/Balance';
 import api from '../api';
 import { fmtMoney } from '../utils/helpers';
 import { useFieldLabels } from '../utils/fieldLabels';
+import { tableHeadTokens } from '../theme/md3Theme';
 
 export default function SalesHistory() {
   const { t } = useFieldLabels();
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
   const [search, setSearch] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // sx 回调按 theme.mode 取值,避免顶层读取 theme.palette.mode 抛错导致白屏
+  const cardSx = (theme) => ({
+    flex: 1, minWidth: 180, borderRadius: 2,
+    bgcolor: theme.palette.mode === 'dark' ? 'grey.900' : '#fff',
+    border: '1px solid', borderColor: 'divider'
+  });
+  const tableHeadSx = (theme) => {
+    const tk = tableHeadTokens[theme.palette.mode];
+    return {
+      bgcolor: tk.bg,
+      color: tk.color,
+      fontWeight: 800,
+      borderBottom: '2px solid',
+      borderColor: tk.border
+    };
+  };
+  const rowHoverSx = (theme) => ({
+    '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : '#f8fafc' }
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -76,7 +94,7 @@ export default function SalesHistory() {
       {/* 统计卡片 */}
       {!loading && !error && items.length > 0 && (
         <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
-          <Card sx={{ flex: 1, minWidth: 180, borderRadius: 2, bgcolor: isDark ? 'grey.900' : '#fff', border: '1px solid', borderColor: 'divider' }}>
+          <Card sx={cardSx}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
                 <InventoryIcon sx={{ fontSize: 18, color: '#0ea5e9' }} />
@@ -85,7 +103,7 @@ export default function SalesHistory() {
               <Typography variant="h5" fontWeight={800} color="#0ea5e9">{orderIds.size}</Typography>
             </CardContent>
           </Card>
-          <Card sx={{ flex: 1, minWidth: 180, borderRadius: 2, bgcolor: isDark ? 'grey.900' : '#fff', border: '1px solid', borderColor: 'divider' }}>
+          <Card sx={cardSx}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
                 <AttachMoneyIcon sx={{ fontSize: 18, color: '#0891b2' }} />
@@ -94,7 +112,7 @@ export default function SalesHistory() {
               <Typography variant="h5" fontWeight={800} color="#0891b2">{fmtMoney(totalSales)}</Typography>
             </CardContent>
           </Card>
-          <Card sx={{ flex: 1, minWidth: 180, borderRadius: 2, bgcolor: isDark ? 'grey.900' : '#fff', border: '1px solid', borderColor: 'divider' }}>
+          <Card sx={cardSx}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
                 <BalanceIcon sx={{ fontSize: 18, color: difference === 0 ? '#10b981' : '#f59e0b' }} />
@@ -111,9 +129,9 @@ export default function SalesHistory() {
         </Stack>
       )}
 
-      <Card sx={{ borderRadius: 2, overflow: 'hidden' }}>
+      <Card sx={{ borderRadius: 2, overflow: 'hidden', bgcolor: 'transparent', border: '1px solid', borderColor: 'divider' }}>
         {/* 搜索栏 */}
-        <Box sx={{ p: 2.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: isDark ? 'grey.900' : '#f8fafc' }}>
+        <Box sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { p: 2.5, borderBottom: '1px solid', borderColor: tk.border, bgcolor: tk.bg }; }}>
           <TextField
             size="small"
             placeholder={`搜索：${t('end_customer')} / 物料号 / 描述 / ${t('order_id')}`}
@@ -146,22 +164,22 @@ export default function SalesHistory() {
             <Table size="small" sx={{ minWidth: 1100 }}>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>{t('order_id')}</TableCell>
-                  <TableCell sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>{t('end_customer')}</TableCell>
-                  <TableCell sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>{t('contract_customer')}</TableCell>
-                  <TableCell sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>
+                  <TableCell sx={tableHeadSx}>{t('order_id')}</TableCell>
+                  <TableCell sx={tableHeadSx}>{t('end_customer')}</TableCell>
+                  <TableCell sx={tableHeadSx}>{t('contract_customer')}</TableCell>
+                  <TableCell sx={tableHeadSx}>
                     <Stack spacing={0.25}>
                       <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'primary.main' }}>PO</Typography>
                       <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>SO</Typography>
                     </Stack>
                   </TableCell>
-                  <TableCell sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>物料号</TableCell>
-                  <TableCell sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>描述</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>数量</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>销售单价</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>历史销售总价</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>{t('amount')}（修正后）</TableCell>
-                  <TableCell align="right" sx={{ bgcolor: isDark ? 'grey.900' : '#f8fafc', fontWeight: 800, borderBottom: '2px solid', borderColor: isDark ? 'grey.700' : '#e2e8f0' }}>金额差异</TableCell>
+                  <TableCell sx={tableHeadSx}>物料号</TableCell>
+                  <TableCell sx={tableHeadSx}>描述</TableCell>
+                  <TableCell align="right" sx={tableHeadSx}>数量</TableCell>
+                  <TableCell align="right" sx={tableHeadSx}>销售单价</TableCell>
+                  <TableCell align="right" sx={tableHeadSx}>历史销售总价</TableCell>
+                  <TableCell align="right" sx={tableHeadSx}>{t('amount')}（修正后）</TableCell>
+                  <TableCell align="right" sx={tableHeadSx}>金额差异</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -177,7 +195,7 @@ export default function SalesHistory() {
                   </TableRow>
                 )}
                 {items.map((row) => (
-                  <TableRow key={row.id} hover sx={{ '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc' } }}>
+                  <TableRow key={row.id} hover sx={rowHoverSx}>
                     <TableCell sx={{ fontWeight: 800, color: 'primary.main', whiteSpace: 'nowrap' }}>{row.order_id}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap', minWidth: 100 }}>{row.end_customer_name || '-'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap', minWidth: 100 }}>{row.contract_customer_name || '-'}</TableCell>

@@ -19,7 +19,6 @@ import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
-import { useTheme } from '@mui/material/styles';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import AddIcon from '@mui/icons-material/Add';
@@ -37,6 +36,7 @@ import { useConfirm } from '../components/ConfirmDialog';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { daysSinceDate, fmtMoney } from '../utils/helpers';
 import { useFieldLabels } from '../utils/fieldLabels';
+import { tableHeadTokens } from '../theme/md3Theme';
 
 const STORAGE_KEY = 'iproject_order_list_v1';
 
@@ -72,7 +72,6 @@ function StatusTag({ label, color, icon }) {
 
 export default function OrderList() {
   const navigate = useNavigate();
-  const theme = useTheme();
   const confirm = useConfirm();
   const { t } = useFieldLabels();
   const saved = loadSaved();
@@ -88,13 +87,18 @@ export default function OrderList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
-  const isDark = theme.palette.mode === 'dark';
+  // 状态调色板:通过 theme 回调按 mode 返回对应色值,避免顶层 isDark 取值时机不当导致白屏
   const BLOCK = {
-    closed: { bg: isDark ? 'rgba(129, 199, 132, 0.16)' : 'rgba(46, 125, 50, 0.12)', color: isDark ? '#81C784' : '#2E7D32' },
-    cancelled: { bg: isDark ? 'rgba(176, 190, 197, 0.16)' : 'rgba(120, 144, 156, 0.14)', color: isDark ? '#B0BEC5' : '#607D8B' },
-    amber: { bg: isDark ? 'rgba(255, 213, 79, 0.16)' : 'rgba(249, 168, 37, 0.14)', color: isDark ? '#FFD54F' : '#B26A00' },
-    urgent: { bg: isDark ? 'rgba(255, 138, 128, 0.16)' : 'rgba(211, 47, 47, 0.12)', color: isDark ? '#FF8A80' : '#C62828' },
-    none: { bg: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(120, 144, 156, 0.12)', color: isDark ? '#90A4AE' : '#78909C' }
+    closed:    { darkBg: 'rgba(129, 199, 132, 0.16)', lightBg: 'rgba(46, 125, 50, 0.12)',  darkColor: '#81C784', lightColor: '#2E7D32' },
+    cancelled: { darkBg: 'rgba(176, 190, 197, 0.16)', lightBg: 'rgba(120, 144, 156, 0.14)', darkColor: '#B0BEC5', lightColor: '#607D8B' },
+    amber:     { darkBg: 'rgba(255, 213, 79, 0.16)',  lightBg: 'rgba(249, 168, 37, 0.14)',  darkColor: '#FFD54F', lightColor: '#B26A00' },
+    urgent:    { darkBg: 'rgba(255, 138, 128, 0.16)', lightBg: 'rgba(211, 47, 47, 0.12)',   darkColor: '#FF8A80', lightColor: '#C62828' },
+    none:      { darkBg: 'rgba(255, 255, 255, 0.08)', lightBg: 'rgba(120, 144, 156, 0.12)', darkColor: '#90A4AE', lightColor: '#78909C' }
+  };
+  const blockFor = (key, theme) => {
+    const p = BLOCK[key];
+    const dark = theme.palette.mode === 'dark';
+    return { bg: dark ? p.darkBg : p.lightBg, color: dark ? p.darkColor : p.lightColor };
   };
   const filterInputSx = {
     '& .MuiOutlinedInput-root': { borderRadius: 2.5, bgcolor: 'background.paper' },
@@ -326,17 +330,20 @@ export default function OrderList() {
               <Table size="small" sx={{ minWidth: 1080 }}>
                 <TableHead>
                 <TableRow
-                  sx={{
-                    '& th': {
-                      bgcolor: isDark ? 'rgba(255,255,255,0.06)' : '#EEF3FA',
-                      color: isDark ? '#E0E6EF' : '#1A2B4A',
-                      fontWeight: 800,
-                      fontSize: 13,
-                      whiteSpace: 'nowrap',
-                      borderBottom: '2px solid',
-                      borderColor: isDark ? 'rgba(255,255,255,0.14)' : '#C7D6E8',
-                      py: 1.25
-                    }
+                  sx={(theme) => {
+                    const tk = tableHeadTokens[theme.palette.mode];
+                    return {
+                      '& th': {
+                        bgcolor: tk.bg,
+                        color: tk.color,
+                        fontWeight: 800,
+                        fontSize: 13,
+                        whiteSpace: 'nowrap',
+                        borderBottom: '2px solid',
+                        borderColor: tk.border,
+                        py: 1.25
+                      }
+                    };
                   }}
                 >
                     <TableCell sx={{ width: 56 }} />
@@ -377,15 +384,23 @@ export default function OrderList() {
                     const isClosed = ['closed', 'lost_closed', 'cancelled'].includes(order.status);
                     const invoicedDays = Number(order.invoiced) === 1 ? daysSinceDate(order.invoiced_date) : null;
                     const urgent = invoicedDays !== null && invoicedDays >= 100 && !isClosed;
-                    const block = order.status === 'cancelled'
-                      ? { ...BLOCK.cancelled, icon: <CancelIcon sx={{ fontSize: 15 }} />, text: '', title: '合同取消' }
+                    // 先确定状态 key,具体色值由 blockFor(key, theme) 在 sx 回调里按 mode 取值
+                    const blockKey = order.status === 'cancelled'
+                      ? 'cancelled'
                       : isClosed && invoicedDays !== null
-                        ? { ...BLOCK.closed, icon: <CheckCircleRoundedIcon sx={{ fontSize: 15 }} />, text: '', title: `开票日期：${String(order.invoiced_date).slice(0, 10)}` }
+                        ? 'closed'
                         : urgent
-                          ? { ...BLOCK.urgent, icon: <WarningAmberRoundedIcon sx={{ fontSize: 15 }} />, text: `${invoicedDays}`, title: `开票后 ${invoicedDays} 天` }
+                          ? 'urgent'
                           : invoicedDays !== null
-                            ? { ...BLOCK.amber, icon: <ReceiptLongIcon sx={{ fontSize: 15 }} />, text: `${invoicedDays}`, title: `开票后 ${invoicedDays} 天` }
-                            : { ...BLOCK.none, icon: <ReceiptLongIcon sx={{ fontSize: 15 }} />, text: '—', title: '未开票' };
+                            ? 'amber'
+                            : 'none';
+                    const blockMeta = {
+                      cancelled: { icon: <CancelIcon sx={{ fontSize: 15 }} />, text: '', title: '合同取消' },
+                      closed:    { icon: <CheckCircleRoundedIcon sx={{ fontSize: 15 }} />, text: '', title: `开票日期：${String(order.invoiced_date).slice(0, 10)}` },
+                      urgent:    { icon: <WarningAmberRoundedIcon sx={{ fontSize: 15 }} />, text: `${invoicedDays}`, title: `开票后 ${invoicedDays} 天` },
+                      amber:     { icon: <ReceiptLongIcon sx={{ fontSize: 15 }} />, text: `${invoicedDays}`, title: `开票后 ${invoicedDays} 天` },
+                      none:      { icon: <ReceiptLongIcon sx={{ fontSize: 15 }} />, text: '—', title: '未开票' }
+                    };
                     return (
                       <TableRow
                         key={order.id}
@@ -396,27 +411,30 @@ export default function OrderList() {
                         <TableCell sx={{ width: 56, p: 0.5, textAlign: 'center', verticalAlign: 'middle' }}>
                           <Box
                             component="span"
-                            title={block.title}
-                            sx={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '4px',
-                              minWidth: 36,
-                              height: 24,
-                              px: block.text ? 0.75 : 0.4,
-                              borderRadius: 1,
-                              bgcolor: block.bg,
-                              color: block.color,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              lineHeight: 1,
-                              whiteSpace: 'nowrap',
-                              userSelect: 'none'
+                            title={blockMeta[blockKey].title}
+                            sx={(theme) => {
+                              const c = blockFor(blockKey, theme);
+                              return {
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px',
+                                minWidth: 36,
+                                height: 24,
+                                px: blockMeta[blockKey].text ? 0.75 : 0.4,
+                                borderRadius: 1,
+                                bgcolor: c.bg,
+                                color: c.color,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                lineHeight: 1,
+                                whiteSpace: 'nowrap',
+                                userSelect: 'none'
+                              };
                             }}
                           >
-                            {block.icon}
-                            {block.text ? <Box component="span">{block.text}</Box> : null}
+                            {blockMeta[blockKey].icon}
+                            {blockMeta[blockKey].text ? <Box component="span">{blockMeta[blockKey].text}</Box> : null}
                           </Box>
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
