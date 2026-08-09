@@ -10,6 +10,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import ToggleButton from '@mui/material/ToggleButton';
+import Tooltip from '@mui/material/Tooltip';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
@@ -212,9 +213,20 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
     formData.append('reference_id', String(activeVersion.id));
     try {
       await api.post(`/orders/${order.id}/attachments`, formData);
+      event.target.value = '';
       onChanged();
     } catch (err) {
+      event.target.value = '';
       setError(errorMessage(err, '上传失败'));
+    }
+  };
+
+  const deleteAttachment = async (attachmentId) => {
+    try {
+      await api.delete(`/orders/${order.id}/attachments/${attachmentId}`);
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err, '删除失败'));
     }
   };
 
@@ -392,6 +404,17 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
               placeholder={metaForm.order_type === 'A' ? '项目类型 A 无需编号' : ''}
             />
           </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField label="版本标签" value={newVersion.version_label} onChange={(e) => setNewVersion((prev) => ({ ...prev, version_label: e.target.value }))} fullWidth disabled={readOnly} size="small" placeholder="如 V1.0" />
+          </Grid>
+          <Grid item xs={12} sm={5}>
+            <TextField label="备注" value={newVersion.remark} onChange={(e) => setNewVersion((prev) => ({ ...prev, remark: e.target.value }))} fullWidth disabled={readOnly} size="small" />
+          </Grid>
+          <Grid item xs={12} sm={3} sx={{ display: 'flex', alignItems: 'center' }}>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={createVersion} disabled={readOnly || saving} fullWidth>
+              新增方案版本
+            </Button>
+          </Grid>
         </Grid>
       </Paper>
       {metaError && (
@@ -401,20 +424,6 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
           </Alert>
         </Box>
       )}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <TextField label="版本标签" value={newVersion.version_label} onChange={(e) => setNewVersion((prev) => ({ ...prev, version_label: e.target.value }))} fullWidth disabled={readOnly} placeholder="如 V1.0" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={5}>
-          <TextField label="备注" value={newVersion.remark} onChange={(e) => setNewVersion((prev) => ({ ...prev, remark: e.target.value }))} fullWidth disabled={readOnly} />
-        </Grid>
-        <Grid item xs={12} md={4} sx={{ display: 'flex', alignItems: 'center' }}>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={createVersion} disabled={readOnly || saving}>
-            新增方案版本
-          </Button>
-        </Grid>
-      </Grid>
-
       {versions.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
           尚未创建方案版本，可直接进入报价阶段（明细需手工录入）
@@ -437,29 +446,18 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
               </Select>
             </FormControl>
             {activeVersion && (
-              <Box>
-                <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} disabled={readOnly}>
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, rowGap: 1, flex: 1, minWidth: 0 }}>
+                <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} disabled={readOnly} sx={{ flexShrink: 0 }}>
                   上传方案文件
                   <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadFile} />
                 </Button>
-                {activeVersion.attachments?.map((file) => (
-                  <Chip
-                    key={file.id}
-                    size="small"
-                    icon={<DownloadIcon />}
-                    label={file.file_name}
-                    clickable
-                    onClick={() => openDownload(`/api/orders/${order.id}/attachments/${file.id}/download`)}
-                    sx={{ ml: 1 }}
-                  />
-                ))}
                 {!readOnly && (
                   <IconButton
                     size="small"
                     color="error"
                     onClick={() => deleteVersion(activeVersion.id)}
                     title="删除方案版本"
-                    sx={{ ml: 1 }}
+                    sx={{ flexShrink: 0 }}
                   >
                     <DeleteIcon />
                   </IconButton>
@@ -467,6 +465,48 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
               </Box>
             )}
           </Stack>
+
+          {activeVersion && (activeVersion.attachments || []).length > 0 && (
+            <Paper variant="outlined" sx={{ mb: 2, borderRadius: 2, borderColor: 'divider', overflow: 'hidden' }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}>
+                <UploadFileIcon fontSize="small" color="primary" />
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                  方案文件（{(activeVersion.attachments || []).length}）
+                </Typography>
+              </Stack>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>文件名</TableCell>
+                    <TableCell sx={{ width: 160 }}>上传时间</TableCell>
+                    <TableCell sx={{ width: 120 }} align="right">操作</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(activeVersion.attachments || []).map((file) => (
+                    <TableRow key={file.id} hover>
+                      <TableCell sx={{ wordBreak: 'break-all' }}>{file.file_name}</TableCell>
+                      <TableCell>{file.uploaded_at || ''}</TableCell>
+                      <TableCell align="right">
+                        <Tooltip title="下载">
+                          <IconButton size="small" onClick={() => openDownload(`/api/orders/${order.id}/attachments/${file.id}/download`)}>
+                            <DownloadIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        {!readOnly && (
+                          <Tooltip title="删除">
+                            <IconButton size="small" color="error" onClick={() => deleteAttachment(file.id)}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Paper>
+          )}
 
           <Table size="small">
             <TableHead>
