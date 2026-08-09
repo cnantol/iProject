@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import xlsx from 'xlsx';
 import { getDb } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
-import { nowUtc, badRequest, notFound, normalizeSo, isNonNegativeNumber, writeAudit } from '../utils.js';
+import { nowUtc, badRequest, notFound, normalizeSo, isNonNegativeNumber, writeAudit, cleanupUploadedFiles } from '../utils.js';
 
 const router = Router();
 
@@ -33,8 +33,8 @@ router.post('/upload', upload.fields([{ name: 'file', maxCount: 1 }]), (req, res
     const value = String(req.body.amountColumns).trim();
     if (value) amountColumns = value.split(',').map((item) => item.trim()).filter(Boolean);
   }
-  if (amountColumns.length === 0) return badRequest(res, '请选择佣金金额列');
-  if (!soColumn) return badRequest(res, '请选择 SO 号列');
+  if (amountColumns.length === 0) { cleanupUploadedFiles([file]); return badRequest(res, '请选择佣金金额列'); }
+  if (!soColumn) { cleanupUploadedFiles([file]); return badRequest(res, '请选择 SO 号列'); }
 
   let sheets;
   try {
@@ -43,6 +43,7 @@ router.post('/upload', upload.fields([{ name: 'file', maxCount: 1 }]), (req, res
     sheets = [];
   }
   if (!Array.isArray(sheets) || sheets.length === 0) {
+    cleanupUploadedFiles([file]);
     return badRequest(res, '至少需要一个工作表');
   }
 
@@ -51,10 +52,10 @@ router.post('/upload', upload.fields([{ name: 'file', maxCount: 1 }]), (req, res
   try {
     workbook = xlsx.read(fs.readFileSync(file.path), { type: 'buffer' });
   } catch {
-    fs.unlinkSync(file.path);
+    cleanupUploadedFiles([file]);
     return badRequest(res, 'Excel 解析失败');
   }
-  fs.unlinkSync(file.path);
+  cleanupUploadedFiles([file]);
 
   const sheetDataMap = {};
   for (const s of sheets) {

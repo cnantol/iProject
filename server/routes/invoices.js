@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/init.js';
-import { nowUtc, todayLocal, badRequest, notFound, pick, isMoney, isValidDate, writeAudit } from '../utils.js';
+import { nowUtc, todayLocal, badRequest, notFound, pick, isMoney, isValidDate, writeAudit, cleanupUploadedFiles, resolveAttachmentFilePath } from '../utils.js';
 import { maybeAutoAdvance } from './orders.js';
 
 const router = Router();
@@ -116,12 +116,14 @@ router.delete('/:orderId/invoices/:invoiceId', (req, res) => {
   if (order.status !== 'shipping_invoicing') return badRequest(res, '仅发货+开票阶段可删除发票记录');
   const row = db.prepare('SELECT * FROM invoice_records WHERE id = ? AND order_id = ?').get(Number(req.params.invoiceId), order.id);
   if (!row) return notFound(res);
+  const attachmentRows = db.prepare('SELECT file_path FROM order_attachments WHERE reference_type = ? AND reference_id = ?').all('invoice_record', row.id);
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM order_attachments WHERE reference_type = ? AND reference_id = ?').run('invoice_record', row.id);
     db.prepare('DELETE FROM invoice_records WHERE id = ?').run(row.id);
     syncInvoicedFlag(db, order.id);
   });
   tx();
+  cleanupUploadedFiles(attachmentRows.map((r) => ({ path: resolveAttachmentFilePath(r) })));
   writeAudit(db, {
     userId: req.user.id,
     action: 'other',

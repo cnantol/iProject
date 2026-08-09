@@ -1,3 +1,4 @@
+import { ATTACHMENT_ACCEPT } from '../utils/constants';
 import { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -329,7 +330,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
         {!posLocked && (
           <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} sx={{ borderRadius: 2 }}>
             上传合同
-            <input type="file" hidden accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={uploadAttachment} />
+            <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadAttachment} />
           </Button>
         )}
       </Stack>

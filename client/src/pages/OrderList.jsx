@@ -291,8 +291,9 @@ export default function OrderList() {
                   }}
                 >
                     <TableCell sx={{ width: 56 }} />
-                  <TableCell>机会编号</TableCell>
-                    <TableCell>客户信息</TableCell>
+                  <TableCell align="center">机会编号</TableCell>
+                    <TableCell align="center">客户信息</TableCell>
+                    <TableCell align="center">车间/负责人</TableCell>
                     <TableCell>
                       <Stack direction="row" spacing={0.75} alignItems="center">
                         <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13 }}>项目信息</Typography>
@@ -305,8 +306,16 @@ export default function OrderList() {
                         <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>SO</Typography>
                       </Stack>
                     </TableCell>
-                    <TableCell>{t('status')}</TableCell>
-                    <TableCell align="right">{t('amount')}</TableCell>
+                    <TableCell>
+                      <Stack spacing={0.25}>
+                        <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3 }}>
+                          {t('status')}
+                        </Typography>
+                        <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary', lineHeight: 1.2 }}>
+                          {t('amount')}
+                        </Typography>
+                      </Stack>
+                    </TableCell>
                     <TableCell align="right" sx={{ width: 80 }}>操作</TableCell>
                   </TableRow>
                 </TableHead>
@@ -381,8 +390,8 @@ export default function OrderList() {
                             {blockMeta[blockKey].text ? <Box component="span">{blockMeta[blockKey].text}</Box> : null}
                           </Box>
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Stack spacing={0.25}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', textAlign: 'center', verticalAlign: 'middle' }}>
+                          <Stack spacing={0.25} alignItems="center">
                             <Typography variant="body2" sx={{ fontWeight: 800, color: 'primary.main', fontSize: 13, lineHeight: 1.3 }}>
                               {order.order_id || '-'}
                             </Typography>
@@ -391,13 +400,23 @@ export default function OrderList() {
                             </Typography>
                           </Stack>
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap', minWidth: 180 }}>
-                          <Stack spacing={0.25}>
+                        <TableCell sx={{ whiteSpace: 'nowrap', minWidth: 180, textAlign: 'center', verticalAlign: 'middle' }}>
+                          <Stack spacing={0.25} alignItems="center">
                             <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>
                               {order.end_customer_name || '-'}
                             </Typography>
                             <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2 }}>
                               {order.contract_customer_name || '-'}
+                            </Typography>
+                          </Stack>
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap', textAlign: 'center', verticalAlign: 'middle' }}>
+                          <Stack spacing={0.25} alignItems="center">
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2 }}>
+                              {order.workshop || '-'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2 }}>
+                              {order.project_owner || '-'}
                             </Typography>
                           </Stack>
                         </TableCell>
@@ -436,22 +455,26 @@ export default function OrderList() {
                             </Typography>
                           </Stack>
                         </TableCell>
-                        <TableCell>
-                          <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
-                            <StatusTag
-                              label={STATUS_LABELS[order.status] || order.status}
-                              color={STATUS_COLORS[order.status] || '#78909C'}
-                              icon={<FiberManualRecordRoundedIcon sx={{ fontSize: 15 }} />}
-                            />
-                            {order.commission_status === 'warn' && (
-                              <StatusTag label="佣金偏差" color="#D32F2F" icon={<WarningAmberRoundedIcon sx={{ fontSize: 15 }} />} />
-                            )}
-                            {order.commission_status === 'zero' && (
-                              <StatusTag label="无佣金" color="#1976D2" icon={<ReceiptLongIcon sx={{ fontSize: 15 }} />} />
-                            )}
+                        <TableCell sx={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                          <Stack spacing={0.5} alignItems="center">
+                            <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
+                              <StatusTag
+                                label={STATUS_LABELS[order.status] || order.status}
+                                color={STATUS_COLORS[order.status] || '#78909C'}
+                                icon={<FiberManualRecordRoundedIcon sx={{ fontSize: 15 }} />}
+                              />
+                              {order.commission_status === 'warn' && (
+                                <StatusTag label="佣金偏差" color="#D32F2F" icon={<WarningAmberRoundedIcon sx={{ fontSize: 15 }} />} />
+                              )}
+                              {order.commission_status === 'zero' && (
+                                <StatusTag label="无佣金" color="#1976D2" icon={<ReceiptLongIcon sx={{ fontSize: 15 }} />} />
+                              )}
+                            </Stack>
+                            <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>
+                              {fmtMoney(order.total_amount)}
+                            </Typography>
                           </Stack>
                         </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtMoney(order.total_amount)}</TableCell>
                         <TableCell align="right" sx={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
                           <IconButton
                             size="small"

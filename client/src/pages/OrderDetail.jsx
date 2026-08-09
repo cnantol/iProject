@@ -75,6 +75,7 @@ export default function OrderDetail() {
   const [error, setError] = useState('');
   const [activeKey, setActiveKey] = useState('customer_info');
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [localFramework, setLocalFramework] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,9 +90,31 @@ export default function OrderDetail() {
     }
   }, [id]);
 
+  const checkFramework = useCallback(async (customerId) => {
+    if (!customerId) {
+      setLocalFramework(false);
+      return;
+    }
+    try {
+      const { data } = await api.get('/materials/check-framework', { params: { end_customer_id: customerId } });
+      setLocalFramework(Number(data.hasFramework) === 1);
+    } catch {
+      setLocalFramework(null);
+    }
+  }, []);
+
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!detail) return;
+    const { order: dOrder } = detail;
+    if (['customer_info', 'proposal'].includes(dOrder.status)) {
+      setLocalFramework(null);
+      checkFramework(dOrder.end_customer_id);
+    }
+  }, [detail, checkFramework]);
 
   useEffect(() => {
     if (!detail) return;
@@ -152,7 +175,7 @@ export default function OrderDetail() {
   const renderStep = () => {
     const key = activeKey;
     const common = { order: stepOrder, readOnly: isStepReadOnly(order, key), onChanged: load, onAdvance: load };
-    if (key === 'customer_info') return <StepCustomerInfo {...common} />;
+    if (key === 'customer_info') return <StepCustomerInfo {...common} onFrameworkChange={setLocalFramework} />;
     if (key === 'proposal') return <StepProposal {...common} />;
     if (key === 'quotation') return <StepQuotation {...common} />;
     if (key === 'approval_pending') return <StepApproval {...common} />;
@@ -185,7 +208,7 @@ export default function OrderDetail() {
           <Typography variant="h5" sx={{ minWidth: 0 }}>{order.order_id}</Typography>
           <Tooltip
             title={
-              Number(order.has_framework) === 1
+              (localFramework !== null ? localFramework : Number(order.has_framework) === 1)
                 ? order.framework_source_customer_name
                   ? `适用${order.framework_source_customer_name}框架协议`
                   : '该客户存在框架协议价格，可自动带价'
@@ -195,49 +218,33 @@ export default function OrderDetail() {
             placement="top"
           >
             <Chip
-              icon={Number(order.has_framework) === 1 ? <WorkspacePremiumIcon /> : <CancelIcon />}
-              label={Number(order.has_framework) === 1 ? '框架协议客户' : '非框架客户'}
-              sx={(theme) => {
-                const dark = theme.palette.mode === 'dark';
-                const isFramework = Number(order.has_framework) === 1;
+              icon={(localFramework !== null ? localFramework : Number(order.has_framework) === 1) ? <WorkspacePremiumIcon /> : <CancelIcon />}
+              label={(localFramework !== null ? localFramework : Number(order.has_framework) === 1) ? '框架客户' : '非框架客户'}
+              sx={() => {
+                const isFramework = localFramework !== null ? localFramework : Number(order.has_framework) === 1;
                 return {
                   height: 34,
                   minWidth: 116,
                   pl: 1,
                   pr: 1.4,
                   borderRadius: '999px',
-                  fontWeight: 800,
+                  fontWeight: 700,
                   fontSize: 13,
                   lineHeight: 1,
                   letterSpacing: 0,
                   whiteSpace: 'nowrap',
-                  color: isFramework
-                    ? dark ? '#DDF7E8' : '#0E6B3A'
-                    : dark ? '#FFE3E0' : '#B3261E',
+                  color: '#fff',
                   background: isFramework
-                    ? dark
-                      ? 'linear-gradient(135deg, rgba(46, 188, 110, 0.36), rgba(24, 128, 78, 0.30))'
-                      : 'linear-gradient(135deg, #DDF4E6, #BFE9CE)'
-                    : dark
-                      ? 'linear-gradient(135deg, rgba(255, 102, 92, 0.28), rgba(198, 40, 40, 0.22))'
-                      : 'linear-gradient(135deg, #FDE3E1, #F6C7C4)',
-                  border: isFramework
-                    ? `1px solid ${dark ? 'rgba(83, 220, 138, 0.75)' : 'rgba(14, 107, 58, 0.30)'}`
-                    : `1px solid ${dark ? 'rgba(255, 138, 128, 0.65)' : 'rgba(179, 38, 30, 0.30)'}`,
+                    ? 'linear-gradient(135deg, #43A047 0%, #2E7D32 100%)'
+                    : 'linear-gradient(135deg, #E53935 0%, #C62828 100%)',
                   boxShadow: isFramework
-                    ? dark
-                      ? '0 8px 20px rgba(38, 173, 98, 0.20)'
-                      : '0 8px 20px rgba(14, 107, 58, 0.16)'
-                    : dark
-                      ? '0 8px 20px rgba(255, 82, 82, 0.16)'
-                      : '0 8px 20px rgba(211, 47, 47, 0.14)',
+                    ? '0 2px 8px rgba(46, 125, 50, 0.25)'
+                    : '0 2px 8px rgba(211, 47, 47, 0.25)',
                   '& .MuiChip-icon': {
                     fontSize: 18,
                     ml: 0.4,
                     mr: 0.15,
-                    color: isFramework
-                      ? dark ? '#8CE4B7' : '#15884D'
-                      : dark ? '#FF9C95' : '#C62828'
+                    color: '#fff'
                   },
                   '& .MuiChip-label': { px: 0.2, overflow: 'visible', textOverflow: 'clip' }
                 };

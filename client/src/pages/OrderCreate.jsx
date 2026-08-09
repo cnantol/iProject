@@ -5,15 +5,9 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import FormLabel from '@mui/material/FormLabel';
 import Grid from '@mui/material/Grid';
 import MenuItem from '@mui/material/MenuItem';
-import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -21,7 +15,6 @@ import Alert from '@mui/material/Alert';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SaveIcon from '@mui/icons-material/Save';
 import api, { errorMessage } from '../api';
-import { ORDER_TYPES } from '../utils/constants';
 import { useFieldLabels } from '../utils/fieldLabels';
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -36,8 +29,6 @@ export default function OrderCreate() {
     month: String(new Date().getMonth() + 1),
     end_customer_id: null,
     contract_customer_id: null,
-    order_type: 'A',
-    project_no: '',
     workshop: '',
     project_name: '',
     project_owner: '',
@@ -47,7 +38,6 @@ export default function OrderCreate() {
   const [customValues, setCustomValues] = useState({});
   const [endCustomers, setEndCustomers] = useState([]);
   const [contractCustomers, setContractCustomers] = useState([]);
-  const [hasFramework, setHasFramework] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -73,18 +63,6 @@ export default function OrderCreate() {
     loadBase();
   }, []);
 
-  const checkFramework = async (customerId) => {
-    if (!customerId) {
-      setHasFramework(false);
-      return;
-    }
-    try {
-      const { data } = await api.get('/materials/check-framework', { params: { end_customer_id: customerId } });
-      setHasFramework(Boolean(data.hasFramework));
-    } catch {
-      setHasFramework(false);
-    }
-  };
 
   const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -149,10 +127,7 @@ export default function OrderCreate() {
                   options={endCustomers}
                   getOptionLabel={(option) => option.customer_name || ''}
                   value={endCustomers.find((item) => item.id === form.end_customer_id) || null}
-                  onChange={(_, option) => {
-                    set('end_customer_id', option ? option.id : null);
-                    checkFramework(option ? option.id : null);
-                  }}
+                  onChange={(_, option) => set('end_customer_id', option ? option.id : null)}
                   renderInput={(params) => <TextField {...params} label={`${t('end_customer')}（必填）`} required />}
                   isOptionEqualToValue={(option, value) => option.id === value?.id}
                   renderOption={(props, option) => (
@@ -176,20 +151,6 @@ export default function OrderCreate() {
                     </li>
                   )}
                 />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <FormControl>
-                  <FormLabel>{t('order_type')}</FormLabel>
-                  <RadioGroup row value={form.order_type} onChange={(e) => set('order_type', e.target.value)}>
-                    {ORDER_TYPES.map((type) => (
-                      <FormControlLabel key={type} value={type} control={<Radio />} label={type} />
-                    ))}
-                  </RadioGroup>
-                </FormControl>
-                {hasFramework && <Chip size="small" color="success" label="有框架协议" sx={{ mt: 1 }} />}
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <TextField label={t('project_no')} value={form.project_no} onChange={(e) => set('project_no', e.target.value)} fullWidth />
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <TextField label={t('workshop')} value={form.workshop} onChange={(e) => set('workshop', e.target.value)} fullWidth />

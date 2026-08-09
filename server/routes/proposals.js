@@ -1,11 +1,10 @@
 import { Router } from 'express';
 import fs from 'node:fs';
-import path from 'node:path';
 import xlsx from 'xlsx';
-import { getDb, getUploadDir } from '../db/init.js';
+import { getDb } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
 import { frameworkCustomerIds } from './materials.js';
-import { nowUtc, badRequest, notFound, pick, isQty, headerIndex, cell } from '../utils.js';
+import { nowUtc, badRequest, notFound, pick, isQty, headerIndex, cell, resolveAttachmentFilePath } from '../utils.js';
 
 const router = Router();
 const VERSION_FIELDS = ['version_label', 'remark'];
@@ -72,9 +71,8 @@ router.delete('/:orderId/versions/:versionId', (req, res) => {
       version.id
     );
     for (const row of files) {
-      if (!row.file_path) continue;
-      const filePath = path.join(getUploadDir(), String(row.file_path));
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      const filePath = resolveAttachmentFilePath(row);
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
     db.prepare('DELETE FROM proposal_versions WHERE id = ?').run(version.id);
   });

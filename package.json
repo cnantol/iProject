@@ -7,8 +7,9 @@
   "scripts": {
     "build": "cd client && pnpm build",
     "start": "node server/index.js",
-    "dev:server": "node server/index.js",
-    "dev:client": "cd client && pnpm dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "node scripts/dev-server.mjs",
+    "dev:client": "node scripts/dev-client.mjs",
     "smoke": "node server/scripts/smoke-test.mjs",
     "lint:page-structure": "node scripts/check-page-structure.mjs",
     "prebuild": "pnpm lint:page-structure && pnpm lint",

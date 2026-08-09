@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import multer from 'multer';
 import { getUploadDir } from '../db/init.js';
 
-const WHITELIST = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg', 'gif', 'webp'];
+const WHITELIST = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'msg'];
 
 export const MAX_FILE_SIZE = 20 * 1024 * 1024;
 export const RESTORE_MAX_FILE_SIZE = 200 * 1024 * 1024;

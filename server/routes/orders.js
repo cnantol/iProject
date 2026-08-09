@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import fs from 'node:fs';
-import path from 'node:path';
-import { getDb, getUploadDir } from '../db/init.js';
+import { getDb } from '../db/init.js';
 import {
   nowUtc,
   todayLocal,
@@ -13,7 +12,8 @@ import {
   isNonNegativeNumber,
   isBool,
   isValidDate,
-  writeAudit
+  writeAudit,
+  resolveAttachmentFilePath
 } from '../utils.js';
 import { hasFrameworkForCustomer, frameworkSourceCustomer } from './materials.js';
 
@@ -235,7 +235,7 @@ router.get('/', (req, res) => {
     // 支持空格分词多条件搜索（AND 逻辑），每个条件在全字段中匹配
     const terms = String(search).trim().split(/\s+/).filter(Boolean);
     const termConditions = terms.map((term) => {
-      const like = `%${term}%`;
+      const _like = `%${term}%`;
       return '(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ? OR o.project_no LIKE ? OR o.year LIKE ? OR o.month LIKE ? OR EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?) OR EXISTS (SELECT 1 FROM end_customers ec WHERE ec.id = o.end_customer_id AND ec.customer_name LIKE ?) OR EXISTS (SELECT 1 FROM contract_customers cc WHERE cc.id = o.contract_customer_id AND cc.customer_name LIKE ?))';
     });
     if (termConditions.length > 0) {
@@ -310,7 +310,6 @@ router.post('/', (req, res) => {
   const data = pick(body, STEP1_FIELDS);
   if (!data.end_customer_id) return badRequest(res, '最终客户必选');
   if (!data.contract_customer_id) return badRequest(res, '合同客户必选');
-  if (!data.order_type || !['A', 'B', 'C'].includes(String(data.order_type))) return badRequest(res, '请选择有效的销售机会类型');
   if (!data.project_name || !String(data.project_name).trim()) return badRequest(res, '项目名称必填');
   if (!data.project_owner || !String(data.project_owner).trim()) return badRequest(res, '项目负责人必填');
 
@@ -332,7 +331,7 @@ router.post('/', (req, res) => {
       data.month ? String(data.month) : null,
       Number(data.end_customer_id),
       Number(data.contract_customer_id),
-      String(data.order_type),
+      String(data.order_type || 'A'),
       data.project_no ? String(data.project_no) : null,
       data.workshop ? String(data.workshop) : null,
       String(data.project_name).trim(),
@@ -422,10 +421,8 @@ router.delete('/:id', (req, res) => {
     const files = db.prepare('SELECT file_path FROM order_attachments WHERE order_id = ?').all(order.id);
     db.prepare('DELETE FROM order_attachments WHERE order_id = ?').run(order.id);
     for (const row of files) {
-      if (row.file_path) {
-        const filePath = path.join(getUploadDir(), row.file_path);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      }
+      const filePath = resolveAttachmentFilePath(row);
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
     db.prepare('DELETE FROM customer_pos WHERE order_id = ?').run(order.id);
     db.prepare('DELETE FROM quotation_items WHERE quotation_id IN (SELECT id FROM quotations WHERE order_id = ?)').run(order.id);

@@ -11,7 +11,7 @@ export const FIELD_LABEL_DEFAULTS = {
   end_customer: '最终客户',
   contract_customer: '合同客户',
   short_name: '客户简称',
-  order_type: '销售机会类型',
+  order_type: '项目类型',
   status: '状态',
   amount: '金额',
   sales_order: 'Sales Order',

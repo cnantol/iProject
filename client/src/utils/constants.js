@@ -46,6 +46,8 @@ export const PRIORITY_COLORS = { low: '#78909C', medium: '#1976D2', high: '#F57C
 export const PRICE_SOURCE_LABELS = { framework: '框架协议价', guide_price: '指导价', manual: '手工录入' };
 export const MATERIAL_TYPE_LABELS = { standard: '标准', non_standard: '非标' };
 
+export const ATTACHMENT_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.msg';
+
 export const IMPORT_TARGET_LABELS = {
   end_customer: '最终客户导入',
   contract_customer: '合同客户导入',

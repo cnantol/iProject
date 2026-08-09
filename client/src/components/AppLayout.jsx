@@ -224,24 +224,7 @@ export default function AppLayout() {
             }
           }}
         >
-          <Box
-            sx={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg,#1976D2,#0D47A1)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              fontWeight: 800,
-              fontSize: 14,
-              boxShadow: '0 2px 6px rgba(25,118,210,0.3)'
-            }}
-          >
-            {(user?.username || 'A').charAt(0).toUpperCase()}
-          </Box>
+          <AccountCircleIcon sx={{ fontSize: 36, color: 'primary.main', flexShrink: 0 }} />
           <Box
             sx={{
               minWidth: 0,

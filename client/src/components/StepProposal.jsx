@@ -9,6 +9,8 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
@@ -22,16 +24,20 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import FormLabel from '@mui/material/FormLabel';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import SaveIcon from '@mui/icons-material/Save';
 import SkipNextIcon from '@mui/icons-material/SkipNext';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import Paper from '@mui/material/Paper';
+import FolderSharedIcon from '@mui/icons-material/FolderShared';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import api, { errorMessage } from '../api';
+import { useFieldLabels } from '../utils/fieldLabels';
 import { useConfirm } from './ConfirmDialog';
-import { MATERIAL_TYPE_LABELS } from '../utils/constants';
+import { MATERIAL_TYPE_LABELS, ORDER_TYPES, ATTACHMENT_ACCEPT } from '../utils/constants';
 import { downloadFile } from '../utils/download';
 import StepWrapper from './StepWrapper';
 
@@ -39,6 +45,7 @@ const EMPTY_SELECTION = { material_no: '', description: '', material_type: 'stan
 
 export default function StepProposal({ order, readOnly, onChanged, onAdvance }) {
   const confirm = useConfirm();
+  const { t } = useFieldLabels();
   const versions = order.versions || [];
   const [activeVersionId, setActiveVersionId] = useState(null);
   const [newVersion, setNewVersion] = useState({ version_label: '', remark: '' });
@@ -50,6 +57,8 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
   const [notice, setNotice] = useState('');
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
+  const [metaForm, setMetaForm] = useState({ order_type: 'A', project_no: '' });
+  const [metaError, setMetaError] = useState('');
 
   const activeVersion = useMemo(() => versions.find((version) => version.id === activeVersionId) || versions[versions.length - 1], [versions, activeVersionId]);
 
@@ -61,6 +70,13 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
       setRows([]);
     }
   }, [activeVersion]);
+
+  useEffect(() => {
+    setMetaForm({
+      order_type: order.order_type || 'A',
+      project_no: order.project_no || ''
+    });
+  }, [order.id, order.order_type, order.project_no]);
 
   const createVersion = async () => {
     if (!newVersion.version_label.trim()) {
@@ -143,8 +159,14 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
 
   const saveAllRows = async () => {
     setError('');
-    setNotice('');
+    setMetaError('');
     setSaving(true);
+    try {
+      await persistMeta();
+    } catch {
+      setSaving(false);
+      return;
+    }
     const validRows = rows.filter((row) => row.material_no || row.qty);
     const failures = [];
     for (let i = 0; i < validRows.length; i++) {
@@ -176,7 +198,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
     if (failures.length > 0) {
       setError(`部分行保存失败：${failures.join('；')}`);
     } else {
-      setNotice(`批量保存完成：${validRows.length} 条`);
+      setNotice(`批量保存完成：${validRows.length} 条（含项目信息）`);
     }
   };
 
@@ -227,8 +249,10 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
 
   const saveAndAdvance = async () => {
     setError('');
+    setMetaError('');
     setSaving(true);
     try {
+      await persistMeta();
       await api.patch(`/orders/${order.id}/status`, { action: 'advance' });
       onAdvance();
     } catch (err) {
@@ -270,6 +294,18 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
     }
   };
 
+  const persistMeta = async () => {
+    try {
+      await api.patch(`/orders/${order.id}`, {
+        order_type: metaForm.order_type,
+        project_no: metaForm.project_no
+      });
+    } catch (err) {
+      setMetaError(errorMessage(err, '项目信息保存失败'));
+      throw err;
+    }
+  };
+
   return (
     <StepWrapper
       title="方案阶段"
@@ -286,6 +322,82 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
         <Box sx={{ mb: 2 }}>
           <Alert severity="success" onClose={() => setNotice('')}>
             {notice}
+          </Alert>
+        </Box>
+      )}
+      <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5, borderRadius: 2, borderColor: 'divider' }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+          <FolderSharedIcon fontSize="small" color="primary" />
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+            项目信息
+          </Typography>
+        </Stack>
+        <Grid container spacing={2} sx={{ alignItems: 'flex-end' }}>
+          <Grid item xs={12} sm={4}>
+            <TextField label={t('project_name')} value={order.project_name || ''} fullWidth disabled size="small" />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <FormLabel sx={{ display: 'block', mb: 0.5, fontSize: 13, fontWeight: 500, color: 'text.secondary' }}>{t('order_type')}</FormLabel>
+            <ToggleButtonGroup
+              value={metaForm.order_type}
+              exclusive
+              onChange={(_, value) => {
+                if (value === null) return;
+                setMetaForm((prev) => ({
+                  order_type: value,
+                  project_no: value === 'A' ? '' : prev.project_no
+                }));
+              }}
+              size="small"
+              fullWidth
+              sx={{
+                '& .MuiToggleButton-root': {
+                  py: 0.75,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  letterSpacing: 0.5,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 0,
+                  color: 'text.secondary',
+                  flex: 1,
+                  '&:first-of-type': { borderRadius: '8px 0 0 8px' },
+                  '&:last-of-type': { borderRadius: '0 8px 8px 0' },
+                  '&:not(:first-of-type)': { borderLeft: 'none' },
+                  '&.Mui-selected': {
+                    bgcolor: 'primary.main',
+                    color: '#fff',
+                    borderColor: 'primary.main',
+                    '&:hover': { bgcolor: 'primary.dark' }
+                  },
+                  '&:hover:not(.Mui-selected)': { bgcolor: 'action.hover' }
+                }
+              }}
+            >
+              {ORDER_TYPES.map((type) => (
+                <ToggleButton key={type} value={type}>
+                  {type}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField
+              label={t('project_no')}
+              value={metaForm.order_type === 'A' ? '' : metaForm.project_no}
+              onChange={(e) => setMetaForm((prev) => ({ ...prev, project_no: e.target.value }))}
+              fullWidth
+              disabled={readOnly || metaForm.order_type === 'A'}
+              size="small"
+              placeholder={metaForm.order_type === 'A' ? '项目类型 A 无需编号' : ''}
+            />
+          </Grid>
+        </Grid>
+      </Paper>
+      {metaError && (
+        <Box sx={{ mb: 2 }}>
+          <Alert severity="error" onClose={() => setMetaError('')}>
+            {metaError}
           </Alert>
         </Box>
       )}
@@ -328,7 +440,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
               <Box>
                 <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} disabled={readOnly}>
                   上传方案文件
-                  <input type="file" hidden accept=".pdf,.doc,.docx" onChange={uploadFile} />
+                  <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadFile} />
                 </Button>
                 {activeVersion.attachments?.map((file) => (
                   <Chip
