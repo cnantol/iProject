@@ -1368,11 +1368,18 @@ router.put('/correct-order-data', (req, res) => {
 
   const next = { ...before };
   const target = targetStatus ? String(targetStatus) : null;
-  const validTargets = ['shipping_invoicing', 'finance', 'commission', 'bid_decision', 'quotation'];
+  const validTargets = ['shipping_invoicing', 'finance', 'commission', 'bid_decision', 'quotation', 'proposal'];
   if (target && !validTargets.includes(target)) return badRequest(res, '回退目标状态无效');
   if (target && target === 'commission' && !['closed'].includes(order.status)) return badRequest(res, '仅 closed 销售机会可回退至 commission');
-  if (target && target !== 'commission' && !['closed', 'lost_closed', 'cancelled', 'commission'].includes(order.status)) {
-    return badRequest(res, '当前状态不支持回退');
+  // 中间阶段也允许向更早的步骤回退（防止越界推进）
+  const stepOrder = ['customer_info', 'proposal', 'quotation', 'approval_pending', 'bid_decision', 'finance', 'shipping_invoicing', 'commission', 'closed', 'lost_closed', 'cancelled'];
+  if (target) {
+    const targetIdx = stepOrder.indexOf(target);
+    const orderIdx = stepOrder.indexOf(order.status);
+    // 目标必须在当前阶段之前（index 更小）；等于当前阶段不允许
+    if (targetIdx === -1 || orderIdx === -1 || targetIdx >= orderIdx) {
+      return badRequest(res, '当前状态不支持回退');
+    }
   }
 
   if (changes.delivered !== undefined) {
@@ -1443,6 +1450,22 @@ router.put('/correct-order-data', (req, res) => {
         next.closed_at = null;
       }
     } else if (target === 'quotation') {
+      next.commission_matched = 0;
+      next.commission_amount = null;
+      next.commission_date = null;
+      next.delivered = 0;
+      next.delivered_date = null;
+      next.invoiced = 0;
+      next.invoiced_date = null;
+      next.sales_order = null;
+      next.total_amount = null;
+      next.selected_round_id = null;
+      next.bid_result = null;
+      next.closed_at = null;
+      db.prepare('DELETE FROM customer_pos WHERE order_id = ?').run(order.id);
+      db.prepare("UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND status IN ('pending','approved')").run(order.id);
+    } else if (target === 'proposal') {
+      // 回退到方案阶段：清空方案阶段之后产生的字段，保留 proposal_versions / 选型明细 / 报价轮次
       next.commission_matched = 0;
       next.commission_amount = null;
       next.commission_date = null;

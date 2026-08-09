@@ -2580,6 +2580,7 @@ const SystemManager = memo(function SystemManager({ onError, onNotice, onConfirm
                     <MenuItem value="commission">佣金结算</MenuItem>
                     <MenuItem value="bid_decision">中标结果</MenuItem>
                     <MenuItem value="quotation">报价阶段</MenuItem>
+                    <MenuItem value="proposal">方案阶段</MenuItem>
                   </Select>
                 </FormControl>
               </Box>
