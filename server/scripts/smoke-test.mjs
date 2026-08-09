@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import xlsx from 'xlsx';
 import { initDb, closeDb, getDb, getUploadDir } from '../db/init.js';
+import { nowUtc } from '../utils.js';
 import { createApp } from '../index.js';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'iproject-smoke-'));
@@ -358,6 +359,115 @@ try {
   assert.strictEqual(detail.order.status, 'commission');
   ok('数据修正回退清空佣金');
 
+  // 全新数据回退 API：选项、预览与执行
+  const rcMeta = must(await call('GET', `/api/order-corrections/${orderId}`, { token }), 200, '回退选项');
+  assert.ok(rcMeta.validTargets.includes('shipping_invoicing'));
+  assert.ok(rcMeta.validTargets.includes('finance'));
+  assert.ok(rcMeta.validTargets.includes('quotation'));
+  assert.ok(!rcMeta.validTargets.includes('commission'));
+  const allActiveSteps = ['customer_info', 'proposal', 'quotation', 'approval_pending', 'bid_decision', 'finance', 'shipping_invoicing', 'commission'];
+  for (const step of allActiveSteps) {
+    const expected = rcMeta.validTargets.includes(step) ? 200 : 400;
+    const planRes = await call('GET', `/api/order-corrections/${orderId}/plan?target=${step}`, { token });
+    assert.strictEqual(planRes.status, expected, `回退目标 ${step} 应与选项一致`);
+  }
+  const rcBadId = await call('GET', '/api/order-corrections/abc', { token });
+  assert.strictEqual(rcBadId.status, 404);
+  const rcBadAuditParams = await call('GET', '/api/audit-logs?page=abc&limit=abc', { token });
+  assert.strictEqual(rcBadAuditParams.status, 200);
+  const rcInvoice = getDb().prepare('SELECT id FROM invoice_records WHERE order_id = ? LIMIT 1').get(orderId);
+  getDb().prepare(
+    'INSERT INTO order_attachments (order_id, stage, file_name, file_path, file_type, reference_type, reference_id, uploaded_at) VALUES (?,?,?,?,?,?,?,?)'
+  ).run(orderId, 'invoicing', 'smoke-invoice.pdf', `${orderId}/invoicing/smoke-invoice.pdf`, 'pdf', 'invoice_record', rcInvoice.id, nowUtc());
+  const rcPlan = must(await call('GET', `/api/order-corrections/${orderId}/plan?target=finance`, { token }), 200, '回退预览');
+  assert.strictEqual(rcPlan.plan.target, 'finance');
+  assert.strictEqual(rcPlan.plan.deletions.invoices, 1);
+  assert.strictEqual(rcPlan.plan.deletions.invoiceAttachments, 1);
+  assert.strictEqual(rcPlan.plan.deletions.shippingBatches, 2);
+  assert.strictEqual(rcPlan.plan.fieldChanges.closed_at, null);
+  const rcNoConfirm = await call('PUT', `/api/order-corrections/${orderId}`, { token, body: { target: 'finance' } });
+  assert.strictEqual(rcNoConfirm.status, 400);
+  const rcWrongStatus = await call('PUT', `/api/order-corrections/${orderId}`, {
+    token,
+    body: { target: 'finance', confirm: 1, expected_status: 'closed' }
+  });
+  assert.strictEqual(rcWrongStatus.status, 400);
+  const rcFinance = must(
+    await call('PUT', `/api/order-corrections/${orderId}`, { token, body: { target: 'finance', confirm: 1, expected_status: 'commission' } }),
+    200,
+    '回退至财务'
+  );
+  assert.strictEqual(rcFinance.order.status, 'finance');
+  assert.strictEqual(rcFinance.order.bid_result, 'won');
+  assert.strictEqual(rcFinance.order.sales_order, 'SO-001');
+  assert.strictEqual(rcFinance.invoices.length, 0);
+  assert.strictEqual(rcFinance.shippingBatches.length, 0);
+  assert.strictEqual(rcFinance.pos.length, 1);
+  assert.strictEqual(
+    getDb().prepare("SELECT COUNT(*) c FROM order_attachments WHERE order_id = ? AND reference_type = 'invoice_record'").get(orderId).c,
+    0
+  );
+  const rcQuotation = must(
+    await call('PUT', `/api/order-corrections/${orderId}`, { token, body: { target: 'quotation', confirm: 1 } }),
+    200,
+    '回退至报价'
+  );
+  assert.strictEqual(rcQuotation.order.status, 'quotation');
+  assert.strictEqual(rcQuotation.order.sales_order, null);
+  assert.strictEqual(rcQuotation.order.total_amount, null);
+  assert.strictEqual(rcQuotation.order.bid_result, null);
+  assert.strictEqual(rcQuotation.pos.length, 0);
+  assert.ok(rcQuotation.approvals.length >= 2);
+  assert.ok(rcQuotation.approvals.every((item) => item.status === 'superseded'));
+  const rcAudits = must(
+    await call('GET', `/api/audit-logs?action=order_rollback&entity_type=order&entity_id=${orderId}&limit=10`, { token }),
+    200,
+    '回退审计筛选'
+  );
+  assert.ok(rcAudits.items.length >= 2);
+  const rcAuditDetail = JSON.parse(rcAudits.items[0].detail);
+  assert.strictEqual(rcAuditDetail.target_status, 'quotation');
+  assert.ok(Array.isArray(rcAuditDetail.deleted_ids.customerPos));
+  assert.strictEqual(rcAuditDetail.before.status, 'finance');
+  assert.strictEqual(rcAuditDetail.before.sales_order, 'SO-001');
+  ok('数据回退 API 预览与全步骤清理');
+
+  // 未中标终态订单仅允许回退至中标结果及更早步骤
+  const order3 = must(
+    await call('POST', '/api/orders', {
+      token,
+      body: { end_customer_id: ec.id, contract_customer_id: cc.id, order_type: 'B', project_name: '测试项目3', project_owner: '王工' }
+    }),
+    201,
+    '创建销售机会3'
+  ).order;
+  await call('PATCH', `/api/orders/${order3.id}/status`, { token, body: { action: 'advance' } });
+  await call('PATCH', `/api/orders/${order3.id}/status`, { token, body: { action: 'advance', skip: 1 } });
+  const rounds3 = must(await call('GET', `/api/orders/${order3.id}/quotations`, { token }), 200, '销售机会3报价');
+  const round3 = rounds3.items[0].id;
+  await call('POST', `/api/orders/${order3.id}/quotations/${round3}/items`, {
+    token,
+    body: { material_no: 'NON-STD-3', material_type: 'non_standard', price_source: 'manual', unit_price_ex_vat: 10, qty: 1 }
+  });
+  await call('PATCH', `/api/orders/${order3.id}/quotations/${round3}`, { token, body: { action: 'submit' } });
+  await call('PATCH', `/api/orders/${order3.id}/status`, { token, body: { action: 'submit-approval', round_id: round3 } });
+  const sf3 = must(await call('POST', `/api/orders/${order3.id}/approvals`, { token, body: { approval_type: 'sales_force' } }), 201, 'SF3 提交').id;
+  const oa3 = must(await call('POST', `/api/orders/${order3.id}/approvals`, { token, body: { approval_type: 'oa_contract' } }), 201, 'OA3 提交').id;
+  await call('PUT', `/api/orders/${order3.id}/approvals/${sf3}`, { token, body: { action: 'approve' } });
+  await call('PUT', `/api/orders/${order3.id}/approvals/${oa3}`, { token, body: { action: 'approve' } });
+  must(await call('PATCH', `/api/orders/${order3.id}/status`, { token, body: { action: 'bid', result: 'lost' } }), 200, '销售机会3 未中标');
+  const rcLostMeta = must(await call('GET', `/api/order-corrections/${order3.id}`, { token }), 200, '未中标回退选项');
+  assert.ok(rcLostMeta.validTargets.includes('bid_decision'));
+  assert.ok(!rcLostMeta.validTargets.includes('finance'));
+  assert.ok(!rcLostMeta.validTargets.includes('shipping_invoicing'));
+  assert.ok(!rcLostMeta.validTargets.includes('commission'));
+  const rcLostBlocked = await call('PUT', `/api/order-corrections/${order3.id}`, {
+    token,
+    body: { target: 'finance', confirm: 1, expected_status: 'lost_closed' }
+  });
+  assert.strictEqual(rcLostBlocked.status, 400);
+  ok('未中标订单回退范围限制');
+
   // 看板/历史销售/待办/审计
   await call('POST', '/api/todos', { token, body: { title: '跟进回款', priority: 'high', due_date: '2026-07-30' } });
   const overdue = must(await call('GET', '/api/todos/overdue-count', { token }), 200, '逾期待办');
@@ -368,7 +478,7 @@ try {
   assert.ok(history.items.length >= 1);
   const audits = must(await call('GET', '/api/audit-logs', { token }), 200, '审计日志');
   const actions = new Set(audits.items.map((row) => row.action));
-  for (const action of ['approval_submit', 'approval_approve', 'approval_reject', 'invoice_override', 'data_correct', 'commission_manual']) {
+  for (const action of ['approval_submit', 'approval_approve', 'approval_reject', 'invoice_override', 'data_correct', 'order_rollback', 'commission_manual']) {
     assert.ok(actions.has(action), `缺少审计动作 ${action}`);
   }
   ok('看板/历史销售/待办/审计日志');

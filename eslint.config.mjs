@@ -47,7 +47,7 @@ export default [
 
   // Server: Node ESM
   {
-    files: ['server/**/*.js'],
+    files: ['server/**/*.{js,mjs}'],
     languageOptions: {
       ecmaVersion: 2024,
       sourceType: 'module',

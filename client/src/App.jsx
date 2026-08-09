@@ -17,6 +17,7 @@ const CommissionPage = lazy(() => import('./pages/CommissionPage'));
 const SalesHistory = lazy(() => import('./pages/SalesHistory'));
 const TodoList = lazy(() => import('./pages/TodoList'));
 const Settings = lazy(() => import('./pages/Settings'));
+const OrderCorrection = lazy(() => import('./pages/OrderCorrection'));
 
 function PrivateRoute() {
   const { isAuthenticated } = useAuth();
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="/commission" element={<CommissionPage />} />
             <Route path="/sales-history" element={<SalesHistory />} />
             <Route path="/todos" element={<TodoList />} />
+            <Route path="/data-correction" element={<OrderCorrection />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

@@ -26,6 +26,7 @@ import dashboardRoutes from './routes/dashboard.js';
 import salesHistoryRoutes from './routes/salesHistory.js';
 import auditLogRoutes from './routes/auditLogs.js';
 import settingsRoutes from './routes/settings.js';
+import orderCorrectionRoutes from './routes/orderCorrections.js';
 import { startBackupScheduler } from './routes/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -76,6 +77,7 @@ export function createApp() {
   app.use('/api/sales-history', authenticate, salesHistoryRoutes);
   app.use('/api/audit-logs', authenticate, auditLogRoutes);
   app.use('/api/settings', authenticate, settingsRoutes);
+  app.use('/api/order-corrections', authenticate, orderCorrectionRoutes);
 
   const distDir = path.resolve(__dirname, '..', 'client', 'dist');
   app.use(

@@ -23,6 +23,7 @@ import PaymentsIcon from '@mui/icons-material/Payments';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import StorageIcon from '@mui/icons-material/Storage';
 import SettingsIcon from '@mui/icons-material/Settings';
+import BuildIcon from '@mui/icons-material/Build';
 import BrightnessAutoIcon from '@mui/icons-material/BrightnessAuto';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
@@ -42,6 +43,7 @@ const NAV_ITEMS = [
   { path: '/sales-history', label: '历史数据', icon: <HistoryIcon /> },
   { path: '/commission', label: '佣金相关', icon: <PaymentsIcon /> },
   { path: '/materials', label: '基础数据', icon: <StorageIcon /> },
+  { path: '/data-correction', label: '数据回退', icon: <BuildIcon /> },
   { path: '/settings', label: '系统设置', icon: <SettingsIcon /> }
 ];
 
