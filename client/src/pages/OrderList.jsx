@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -79,10 +78,6 @@ export default function OrderList() {
   const [scope, setScope] = useState(saved.scope || 'active');
   const [page, setPage] = useState(saved.page && Number(saved.page) > 0 ? Number(saved.page) : 1);
   const [pageSize, setPageSize] = useState(saved.page_size && Number(saved.page_size) > 0 ? Number(saved.page_size) : 10);
-  const [customer, setCustomer] = useState(saved.customer || '');
-  const [year, setYear] = useState(saved.year || '');
-  const [month, setMonth] = useState(saved.month || '');
-  const [customerOptions, setCustomerOptions] = useState([]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -100,22 +95,12 @@ export default function OrderList() {
     const dark = theme.palette.mode === 'dark';
     return { bg: dark ? p.darkBg : p.lightBg, color: dark ? p.darkColor : p.lightColor };
   };
-  const filterInputSx = {
-    '& .MuiOutlinedInput-root': { borderRadius: 2.5, bgcolor: 'background.paper' },
-    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
-    '& .MuiInputBase-input': { fontSize: 14, fontWeight: 500, textOverflow: 'ellipsis' },
-    '& .Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: 'primary.main', borderWidth: 1.5 }
-  };
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = { page, limit: pageSize };
       params.scope = scope;
       if (search.trim()) params.search = search.trim();
-      if (customer.trim()) params.customer = customer.trim();
-      if (year) params.year = year;
-      if (month) params.month = month;
       const { data: result } = await api.get('/orders', { params });
       setData(result);
       setError('');
@@ -124,7 +109,7 @@ export default function OrderList() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, scope, customer, year, month]);
+  }, [page, pageSize, search, scope]);
 
   useEffect(() => {
     load();
@@ -133,27 +118,12 @@ export default function OrderList() {
   useEffect(() => {
     sessionStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ page, page_size: pageSize, scope, search, customer, year, month })
+      JSON.stringify({ page, page_size: pageSize, scope, search })
     );
-  }, [page, pageSize, scope, search, customer, year, month]);
-
-  useEffect(() => {
-    Promise.all([api.get('/end-customers'), api.get('/contract-customers')])
-      .then(([endRes, contractRes]) => {
-        const names = [
-          ...(endRes.data.items || []).map((item) => item.customer_name),
-          ...(contractRes.data.items || []).map((item) => item.customer_name)
-        ].filter(Boolean);
-        setCustomerOptions([...new Set(names)]);
-      })
-      .catch(() => {});
-  }, []);
+  }, [page, pageSize, scope, search]);
 
   const resetFilters = () => {
     setSearch('');
-    setCustomer('');
-    setYear('');
-    setMonth('');
     setPage(1);
   };
 
@@ -214,101 +184,75 @@ export default function OrderList() {
               </Tabs>
               <Box sx={{ 
                 flex: 1, px: 1.5, py: 0.75,
-                display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'nowrap',
+                display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'nowrap',
                 overflow: 'hidden'
               }}>
                 <TextField
-                  select
                   size="small"
-                  label="年份"
-                  value={year}
-                  onChange={(e) => {
-                    setYear(e.target.value);
-                    setPage(1);
-                  }}
-                  sx={{ width: 85, ...filterInputSx }}
-                  SelectProps={{
-                    MenuProps: {
-                      PaperProps: {
-                        sx: {
-                          borderRadius: 2.5,
-                          '& .MuiMenuItem-root': { fontSize: 14, minHeight: 40, fontWeight: 500 }
-                        }
-                      }
-                    }
-                  }}
-                >
-                  <MenuItem value="">全部</MenuItem>
-{Array.from({ length: 7 }, (_, i) => String(new Date().getFullYear() - 3 + i)).map((y) => (
-                    <MenuItem key={y} value={y}>
-                      {y} 年
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  select
-                  size="small"
-                  label="月份"
-                  value={month}
-                  onChange={(e) => {
-                    setMonth(e.target.value);
-                    setPage(1);
-                  }}
-                  sx={{ width: 85, ...filterInputSx }}
-                  SelectProps={{
-                    MenuProps: {
-                      PaperProps: {
-                        sx: {
-                          borderRadius: 2.5,
-                          '& .MuiMenuItem-root': { fontSize: 14, minHeight: 40, fontWeight: 500 }
-                        }
-                      }
-                    }
-                  }}
-                >
-                  <MenuItem value="">全部</MenuItem>
-                  {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((m) => (
-                    <MenuItem key={m} value={m}>
-                      {m} 月
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <Autocomplete
-                  size="small"
-                  freeSolo
-                  options={customerOptions}
-                  value={customer}
-                  onInputChange={(_, value) => {
-                    setCustomer(value || '');
-                    setPage(1);
-                  }}
-                  onChange={(_, value) => {
-                    setCustomer(typeof value === 'string' ? value || '' : value?.customer_name || '');
-                    setPage(1);
-                  }}
-                  sx={{ width: 180, flexShrink: 0 }}
-                  ListboxProps={{
-                    sx: {
-                      '& .MuiAutocomplete-option': { fontSize: 14, minHeight: 36, fontWeight: 500 }
-                    }
-                  }}
-                  renderInput={(params) => <TextField {...params} label="客户" sx={filterInputSx} />}
-                />
-                <TextField
-                  size="small"
-                  placeholder="项目号 / PO / SO"
+                  placeholder="🔍  搜索机会号、项目名称、客户、PO、SO、年份、月份 · 多条件用空格"
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
                     setPage(1);
                   }}
-                  sx={{ flex: 1, minWidth: 140, ...filterInputSx }}
-                  InputProps={{ startAdornment: <InputAdornment position="start" sx={{ mr: 0.2 }}><SearchIcon sx={{ fontSize: 18 }} /></InputAdornment> }}
+                  sx={{
+                    flex: 1,
+                    minWidth: 260,
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3,
+                      bgcolor: 'background.paper',
+                      transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                      '&:hover': { boxShadow: '0 2px 10px rgba(25,118,210,0.15)' },
+                      '&.Mui-focused': { boxShadow: '0 0 0 3px rgba(25,118,210,0.18)' }
+                    },
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'rgba(25,118,210,0.35)',
+                      borderWidth: 1.5
+                    },
+                    '& .Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'primary.main',
+                      borderWidth: 2
+                    },
+                    '& .MuiInputBase-input': { fontSize: 14, fontWeight: 500, py: 1 },
+                    '& .MuiInputBase-input::placeholder': {
+                      color: 'primary.main',
+                      opacity: 0.8,
+                      fontWeight: 600,
+                      fontSize: 13.5
+                    }
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start" sx={{ mr: 0.5 }}>
+                        <SearchIcon sx={{ fontSize: 22, color: 'primary.main' }} />
+                      </InputAdornment>
+                    )
+                  }}
                 />
-                <Button size="small" variant="text" onClick={resetFilters} sx={{ whiteSpace: 'nowrap', flexShrink: 0, fontWeight: 600, color: 'text.secondary', fontSize: 13, minWidth: 48, '&:hover': { color: 'error.main' } }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={resetFilters}
+                  sx={{
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    fontWeight: 700,
+                    fontSize: 13,
+                    borderRadius: 2.5,
+                    borderColor: 'divider',
+                    color: 'text.secondary',
+                    minWidth: 60,
+                    '&:hover': { borderColor: 'error.main', color: 'error.main', bgcolor: 'rgba(211,47,47,0.04)' }
+                  }}
+                >
                   清除
                 </Button>
-                <IconButton onClick={() => load()} title="刷新" size="small" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, flexShrink: 0 }}>
+                <IconButton
+                  onClick={() => load()}
+                  title="刷新"
+                  size="small"
+                  sx={{ border: '1.5px solid', borderColor: 'divider', borderRadius: 2, flexShrink: 0, transition: 'all 0.2s ease', '&:hover': { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main' } }}
+                >
                   <RefreshIcon fontSize="small" />
                 </IconButton>
               </Box>

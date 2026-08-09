@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -14,6 +15,8 @@ import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import SearchIcon from '@mui/icons-material/Search';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import ClearIcon from '@mui/icons-material/Clear';
 import InboxIcon from '@mui/icons-material/Inbox';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
@@ -131,26 +134,71 @@ export default function SalesHistory() {
 
       <Card sx={{ borderRadius: 2, overflow: 'hidden', bgcolor: 'transparent', border: '1px solid', borderColor: 'divider' }}>
         {/* 搜索栏 */}
-        <Box sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { p: 2.5, borderBottom: '1px solid', borderColor: tk.border, bgcolor: tk.bg }; }}>
-          <TextField
-            size="small"
-            placeholder={`搜索：${t('end_customer')} / 物料号 / 描述 / ${t('order_id')}`}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{
-              width: { xs: '100%', md: 420 },
-              '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' },
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
-              '& .MuiInputBase-input': { fontSize: 14 },
-            }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start" sx={{ mr: 0.5 }}>
-                  <SearchIcon fontSize="small" sx={{ color: search ? 'primary.main' : 'text.secondary' }} />
-                </InputAdornment>
-              ),
-            }}
-          />
+        <Box sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { p: 2, borderBottom: '1px solid', borderColor: tk.border, bgcolor: tk.bg }; }}>
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ width: '100%' }}>
+            <TextField
+              size="small"
+              placeholder="🔍  搜索机会号、最终客户、合同客户、PO、SO、物料号、描述、年份、月份 · 多条件用空格"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 3,
+                  bgcolor: 'background.paper',
+                  transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                  '&:hover': { boxShadow: '0 2px 10px rgba(25,118,210,0.15)' },
+                  '&.Mui-focused': { boxShadow: '0 0 0 3px rgba(25,118,210,0.18)' }
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'rgba(25,118,210,0.35)',
+                  borderWidth: 1.5
+                },
+                '& .Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'primary.main',
+                  borderWidth: 2
+                },
+                '& .MuiInputBase-input': { fontSize: 14, fontWeight: 500, py: 1 },
+                '& .MuiInputBase-input::placeholder': {
+                  color: 'primary.main',
+                  opacity: 0.8,
+                  fontWeight: 600,
+                  fontSize: 13.5
+                }
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start" sx={{ mr: 0.5 }}>
+                    <SearchIcon sx={{ fontSize: 22, color: 'primary.main' }} />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            {search && (
+              <Button
+                size="medium"
+                variant="outlined"
+                color="primary"
+                startIcon={<ClearIcon />}
+                onClick={() => setSearch('')}
+                sx={{ fontWeight: 700, borderRadius: 2.5, whiteSpace: 'nowrap', flexShrink: 0, height: 40 }}
+              >
+                清空
+              </Button>
+            )}
+            <Button
+              size="medium"
+              variant="outlined"
+              color="primary"
+              startIcon={<RefreshIcon />}
+              onClick={load}
+              disabled={loading}
+              sx={{ fontWeight: 700, borderRadius: 2.5, whiteSpace: 'nowrap', flexShrink: 0, height: 40 }}
+            >
+              {loading ? '加载中...' : '刷新'}
+            </Button>
+          </Stack>
         </Box>
 
         {loading ? (

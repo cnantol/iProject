@@ -49,6 +49,7 @@ import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import HistoryIcon from '@mui/icons-material/History';
 import ImageIcon from '@mui/icons-material/Image';
+import InboxIcon from '@mui/icons-material/Inbox';
 import LinkIcon from '@mui/icons-material/Link';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
@@ -698,6 +699,7 @@ const ImportManager = memo(function ImportManager({ onError, onConfirm }) {
   const [mappingColumns, setMappingColumns] = useState([]);
   const [mappingValues, setMappingValues] = useState({});
   const [undoSuccess, setUndoSuccess] = useState('');
+  const [clearing, setClearing] = useState(false);
   const pollRef = useRef(null);
 
   const loadLogs = useCallback(async () => {
@@ -866,6 +868,19 @@ const ImportManager = memo(function ImportManager({ onError, onConfirm }) {
       loadLogs();
     } catch (err) {
       onError(errorMessage(err));
+    }
+  };
+
+  const clearImports = async () => {
+    if (!await onConfirm(`确认清空全部导入历史？此操作不可撤销，仅清除记录，不影响已导入数据。`)) return;
+    setClearing(true);
+    try {
+      await api.delete('/settings/import-logs');
+      setLogs([]);
+    } catch (err) {
+      onError(errorMessage(err));
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -1136,14 +1151,22 @@ const ImportManager = memo(function ImportManager({ onError, onConfirm }) {
           </DialogActions>
         </Dialog>
         {undoSuccess && <Alert severity="success" sx={{ mt: 2, mb: 1, borderRadius: 2 }}>{undoSuccess}</Alert>}
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 3, mb: 1 }}>
-          <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>导入历史</Typography>
-          <Chip size="small" label={`${logs.length} 条`} />
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 3, mb: 1 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>导入历史</Typography>
+            <Chip size="small" label={`${logs.length} 条`} />
+          </Stack>
+          {logs.length > 0 && (
+            <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} disabled={clearing} onClick={clearImports} sx={{ fontWeight: 700, borderRadius: 2, fontSize: 13 }}>
+              {clearing ? '清空中...' : '清空全部'}
+            </Button>
+          )}
         </Stack>
+        <Box sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'auto' }}>
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+            <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 800, whiteSpace: 'nowrap' } }}>
               <TableCell>时间</TableCell>
               <TableCell>目标</TableCell>
               <TableCell>文件名</TableCell>
@@ -1154,10 +1177,10 @@ const ImportManager = memo(function ImportManager({ onError, onConfirm }) {
           </TableHead>
           <TableBody>
             {logs.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell>{fmtDateTime(row.created_at)}</TableCell>
-                <TableCell>{IMPORT_TARGET_LABELS[row.target_type] || row.target_type}</TableCell>
-                <TableCell>{row.file_name}</TableCell>
+              <TableRow key={row.id} hover>
+                <TableCell sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>{fmtDateTime(row.created_at)}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{IMPORT_TARGET_LABELS[row.target_type] || row.target_type}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{row.file_name}</TableCell>
                 <TableCell align="right">
                   <Chip size="small" variant="outlined" label={row.success_rows} color={Number(row.success_rows) > 0 ? 'success' : 'default'} />
                 </TableCell>
@@ -1179,13 +1202,17 @@ const ImportManager = memo(function ImportManager({ onError, onConfirm }) {
             ))}
             {logs.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ color: 'text.secondary' }}>
-                  暂无导入记录
+                <TableCell colSpan={6} sx={{ border: 'none', p: 4 }}>
+                  <Stack spacing={1} alignItems="center">
+                    <InboxIcon sx={{ fontSize: 44, color: 'text.disabled' }} />
+                    <Typography variant="body2" color="text.secondary">暂无导入记录</Typography>
+                  </Stack>
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
+        </Box>
       </CardContent>
     </Card>
   );
@@ -1830,6 +1857,7 @@ const SystemManager = memo(function SystemManager({ onError, onNotice, onConfirm
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditPage, setAuditPage] = useState(1);
   const [auditTotal, setAuditTotal] = useState(0);
+  const [clearingAudit, setClearingAudit] = useState(false);
   const [account, setAccount] = useState({ current_password: '', username: '', new_password: '', confirm_password: '' });
   const [accountSaving, setAccountSaving] = useState(false);
   const [fieldLabels, setFieldLabels] = useState({ ...FIELD_LABEL_DEFAULTS });
@@ -1853,6 +1881,21 @@ const SystemManager = memo(function SystemManager({ onError, onNotice, onConfirm
       setAuditTotal(data.total || 0);
     } catch (err) {
       onError(errorMessage(err));
+    }
+  };
+
+  const clearAudit = async () => {
+    if (!await onConfirm('确认清空全部审计日志？此操作不可撤销。')) return;
+    setClearingAudit(true);
+    try {
+      await api.delete('/audit-logs');
+      setAuditLogs([]);
+      setAuditTotal(0);
+      setAuditPage(1);
+    } catch (err) {
+      onError(errorMessage(err));
+    } finally {
+      setClearingAudit(false);
     }
   };
 
@@ -2382,15 +2425,23 @@ const SystemManager = memo(function SystemManager({ onError, onNotice, onConfirm
           </Box>
 
           <Box sx={{ p: 1.5, borderRadius: 2.5, border: 1, boxShadow: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
-            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
-              <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <HistoryIcon fontSize="small" />
-              </Box>
-              <Typography variant="h6">审计日志</Typography>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+              <Stack direction="row" spacing={1.25} alignItems="center">
+                <Box sx={{ width: 34, height: 34, borderRadius: 2, bgcolor: 'rgba(0,78,154,0.10)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <HistoryIcon fontSize="small" />
+                </Box>
+                <Typography variant="h6">审计日志</Typography>
+              </Stack>
+              {auditLogs.length > 0 && (
+                <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} disabled={clearingAudit} onClick={clearAudit} sx={{ fontWeight: 700, borderRadius: 2, fontSize: 13 }}>
+                  {clearingAudit ? '清空中...' : '清空全部'}
+                </Button>
+              )}
             </Stack>
+            <Box sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'auto' }}>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 800, whiteSpace: 'nowrap' } }}>
                   <TableCell>时间</TableCell>
                   <TableCell>操作人</TableCell>
                   <TableCell>动作</TableCell>
@@ -2400,25 +2451,29 @@ const SystemManager = memo(function SystemManager({ onError, onNotice, onConfirm
               </TableHead>
               <TableBody>
                 {auditLogs.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>{fmtDateTime(row.created_at)}</TableCell>
-                    <TableCell>{row.username || '系统'}</TableCell>
+                  <TableRow key={row.id} hover>
+                    <TableCell sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>{fmtDateTime(row.created_at)}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{row.username || '系统'}</TableCell>
                     <TableCell>
                       <Chip size="small" label={row.action} variant="outlined" />
                     </TableCell>
-                    <TableCell>{row.entity_type || '-'}#{row.entity_id || '-'}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{row.entity_type || '-'}#{row.entity_id || '-'}</TableCell>
                     <TableCell sx={{ maxWidth: 420, wordBreak: 'break-all' }}>{row.detail || '-'}</TableCell>
                   </TableRow>
                 ))}
                 {auditLogs.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} align="center" sx={{ color: 'text.secondary' }}>
-                      暂无审计记录
+                    <TableCell colSpan={5} sx={{ border: 'none', p: 4 }}>
+                      <Stack spacing={1} alignItems="center">
+                        <InboxIcon sx={{ fontSize: 44, color: 'text.disabled' }} />
+                        <Typography variant="body2" color="text.secondary">暂无审计记录</Typography>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
+            </Box>
             <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="flex-end" flexWrap="wrap" useFlexGap sx={{ mt: 1.5, p: 1, borderRadius: 2, bgcolor: 'action.hover' }}>
               <Typography variant="body2" color="text.secondary">
                 共 {auditTotal} 条

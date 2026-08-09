@@ -668,6 +668,13 @@ router.get('/import-logs', (req, res) => {
   return res.json({ items });
 });
 
+router.delete('/import-logs', (req, res) => {
+  const db = getDb();
+  const total = db.prepare('SELECT COUNT(*) AS c FROM import_logs').get().c;
+  db.prepare('DELETE FROM import_logs').run();
+  return res.json({ deleted: total });
+});
+
 const IMPORT_UNDO_CHILD_TABLES = [
   { table: 'proposal_versions', column: 'order_id' },
   { table: 'quotations', column: 'order_id' },

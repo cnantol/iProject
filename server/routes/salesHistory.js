@@ -10,9 +10,18 @@ router.get('/', (req, res) => {
   const where = ["o.status = 'closed'", "o.bid_result = 'won'", 'q.id = o.selected_round_id'];
   const params = [];
   if (q) {
-    const like = `%${q}%`;
-    where.push('(ec.customer_name LIKE ? OR qi.material_no LIKE ? OR qi.description LIKE ? OR o.order_id LIKE ?)');
-    params.push(like, like, like, like);
+    const terms = q.split(/\s+/).filter(Boolean);
+    const termConditions = terms.map((term) => {
+      const like = `%${term}%`;
+      return '(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ? OR o.year LIKE ? OR o.month LIKE ? OR ec.customer_name LIKE ? OR cc.customer_name LIKE ? OR qi.material_no LIKE ? OR qi.description LIKE ? OR EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?))';
+    });
+    if (termConditions.length > 0) {
+      where.push(termConditions.join(' AND '));
+      terms.forEach((term) => {
+        const like = `%${term}%`;
+        params.push(like, like, like, like, like, like, like, like, like, like, like);
+      });
+    }
   }
   const rows = db
     .prepare(

@@ -82,14 +82,14 @@ export default function AppLayout() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: collapsed ? 'center' : 'flex-start',
-          gap: collapsed ? 0 : 1.25,
+          gap: 0,
           px: collapsed ? 1 : 2.25,
           py: 2,
           minHeight: 72,
           cursor: 'pointer',
           borderBottom: 1,
           borderColor: 'divider',
-          transition: 'background-color 0.2s ease',
+          transition: 'background-color 0.2s ease, padding 0.25s ease, justify-content 0.25s ease',
           '&:hover': { bgcolor: 'rgba(25,118,210,0.06)' }
         }}
         onClick={() => {
@@ -98,32 +98,41 @@ export default function AppLayout() {
         }}
         title="返回首页看板"
       >
-        {collapsed ? (
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Box
             sx={{
-              width: 48,
+              width: collapsed ? 48 : 0,
               height: 48,
               borderRadius: 2.5,
               overflow: 'hidden',
               flexShrink: 0,
-              boxShadow: '0 4px 12px rgba(0, 78, 154, 0.22)',
+              boxShadow: collapsed ? '0 4px 12px rgba(0, 78, 154, 0.22)' : 'none',
               background: '#004E9A',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              opacity: collapsed ? 1 : 0,
+              transition: 'width 0.25s ease, opacity 0.2s ease, box-shadow 0.25s ease'
             }}
           >
             <Box component="img" src="/favicon.svg" alt="iProject" sx={{ width: 44, height: 44 }} />
           </Box>
-        ) : (
           <Box
             component="img"
             src={logo}
             alt="iProject"
             onError={() => setLogoFailed(true)}
-            sx={{ height: 56, maxWidth: 180, width: 'auto', objectFit: 'contain', flexShrink: 0 }}
+            sx={{
+              height: 56,
+              maxWidth: collapsed ? 0 : 180,
+              width: 'auto',
+              objectFit: 'contain',
+              flexShrink: 0,
+              opacity: collapsed ? 0 : 1,
+              transition: 'max-width 0.25s ease, opacity 0.2s ease'
+            }}
           />
-        )}
+        </Box>
       </Box>
       <List sx={{ flex: 1, px: 1, pt: 1 }}>
         {NAV_ITEMS.map((item) => {
@@ -141,8 +150,16 @@ export default function AppLayout() {
                 mb: 0.5,
                 px: collapsed ? 1 : 2,
                 justifyContent: collapsed ? 'center' : 'flex-start',
-                '& .MuiListItemIcon-root': { mr: collapsed ? 0 : 2 },
-                '& .MuiListItemText-root': collapsed ? { display: 'none' } : { display: 'block' }
+                transition: 'padding 0.25s ease, justify-content 0.25s ease',
+                '& .MuiListItemIcon-root': { mr: collapsed ? 0 : 2, transition: 'margin-right 0.25s ease' },
+                '& .MuiListItemText-root': {
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  opacity: collapsed ? 0 : 1,
+                  maxWidth: collapsed ? 0 : 200,
+                  maxHeight: collapsed ? 0 : 40,
+                  transition: 'opacity 0.2s ease, max-width 0.25s ease, max-height 0.25s ease'
+                }
               }}
               title={collapsed ? item.label : undefined}
             >
@@ -193,14 +210,14 @@ export default function AppLayout() {
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.25,
+            gap: collapsed ? 0 : 1.25,
             p: collapsed ? 0.5 : 1,
             borderRadius: 2,
             bgcolor: collapsed ? 'transparent' : (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.5)'),
             border: '1px solid',
             borderColor: collapsed ? 'transparent' : (theme) => (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'divider'),
             justifyContent: collapsed ? 'center' : 'flex-start',
-            transition: 'all 0.2s ease',
+            transition: 'all 0.25s ease',
             '&:hover': {
               bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(25,118,210,0.18)' : 'rgba(25,118,210,0.06)'),
               borderColor: 'primary.main'
@@ -225,16 +242,23 @@ export default function AppLayout() {
           >
             {(user?.username || 'A').charAt(0).toUpperCase()}
           </Box>
-          {!collapsed && (
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }} noWrap>
-                {user?.username || 'admin'}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2 }} noWrap>
-                管理员
-              </Typography>
-            </Box>
-          )}
+          <Box
+            sx={{
+              minWidth: 0,
+              flex: 1,
+              overflow: 'hidden',
+              opacity: collapsed ? 0 : 1,
+              maxWidth: collapsed ? 0 : '100%',
+              transition: 'opacity 0.2s ease, max-width 0.25s ease'
+            }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }} noWrap>
+              {user?.username || 'admin'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2 }} noWrap>
+              管理员
+            </Typography>
+          </Box>
         </Box>
       </Box>
     </Box>

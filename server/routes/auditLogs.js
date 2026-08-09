@@ -16,4 +16,11 @@ router.get('/', (req, res) => {
   return res.json({ items, total, page, limit });
 });
 
+router.delete('/', (req, res) => {
+  const db = getDb();
+  const total = db.prepare('SELECT COUNT(*) AS c FROM audit_logs').get().c;
+  db.prepare('DELETE FROM audit_logs').run();
+  return res.json({ deleted: total });
+});
+
 export default router;

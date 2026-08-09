@@ -265,73 +265,11 @@ export default function Dashboard() {
       <Grid container spacing={2} sx={{ mx: -2 }}>
         <Grid item xs={12}>
           <Card>
-            <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: '#C9A227' }} />
-            <CardContent>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: '#C9A227' }} />
-                  <Typography variant="h6">最终客户金额排行</Typography>
-                </Stack>
-              </Stack>
-              {(data.customerTotals || []).length === 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                  暂无数据
-                </Typography>
-              ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                      <TableCell sx={{ width: 70 }}>排名</TableCell>
-                      <TableCell>最终客户</TableCell>
-                      <TableCell align="right">订单数</TableCell>
-                      <TableCell align="right">总金额</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {(data.customerTotals || []).map((item, index) => (
-                      <TableRow key={item.customer_name || `customer-${index}`} hover>
-                        <TableCell>
-                          <Box
-                            sx={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: 1.5,
-                              bgcolor: index === 0 ? '#C9A227' : '#C9A22733',
-                              color: index === 0 ? '#fff' : '#8A6D00',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 800,
-                              fontSize: 13
-                            }}
-                          >
-                            {index === 0 ? <EmojiEventsIcon sx={{ fontSize: 16 }} /> : index + 1}
-                          </Box>
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: index === 0 ? 800 : 600, color: index === 0 ? '#8A6D00' : 'text.primary' }}>
-                          {item.customer_name || '未分配客户'}
-                        </TableCell>
-                        <TableCell align="right">{item.order_count} 个</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800, whiteSpace: 'nowrap', color: index === 0 ? '#8A6D00' : 'text.primary' }}>
-                          ¥ {fmtMoney(item.total_amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-      <Grid container spacing={2} sx={{ mx: -2 }}>
-        <Grid item xs={12}>
-          <Card>
             <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'warning.main' }} />
             <CardContent>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
                 <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'warning.main' }} />
-                <Typography variant="h6">进行中的机会 · 开票时长 TOP10</Typography>
+                <Typography variant="h6">进行中的机会 · 开票时长 TOP5</Typography>
                 <Typography variant="caption" color="text.secondary">按发票开具后天数从长到短排列，点击行查看详情</Typography>
               </Stack>
               {(data.invoiceAging || []).length === 0 ? (
@@ -353,7 +291,7 @@ export default function Dashboard() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {(data.invoiceAging || []).map((item, index) => {
+                    {(data.invoiceAging || []).slice(0, 5).map((item, index) => {
                       const days = daysSinceDate(item.invoiced_date);
                       const urgent = days !== null && days >= 100;
                       return (
@@ -407,6 +345,68 @@ export default function Dashboard() {
                         </TableRow>
                       );
                     })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+      <Grid container spacing={2} sx={{ mx: -2 }}>
+        <Grid item xs={12}>
+          <Card>
+            <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: '#C9A227' }} />
+            <CardContent>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: '#C9A227' }} />
+                  <Typography variant="h6">最终客户金额排行</Typography>
+                </Stack>
+              </Stack>
+              {(data.customerTotals || []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+                  暂无数据
+                </Typography>
+              ) : (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                      <TableCell sx={{ width: 70 }}>排名</TableCell>
+                      <TableCell>最终客户</TableCell>
+                      <TableCell align="right">订单数</TableCell>
+                      <TableCell align="right">总金额</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(data.customerTotals || []).map((item, index) => (
+                      <TableRow key={item.customer_name || `customer-${index}`} hover>
+                        <TableCell>
+                          <Box
+                            sx={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 1.5,
+                              bgcolor: index === 0 ? '#C9A227' : '#C9A22733',
+                              color: index === 0 ? '#fff' : '#8A6D00',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 800,
+                              fontSize: 13
+                            }}
+                          >
+                            {index === 0 ? <EmojiEventsIcon sx={{ fontSize: 16 }} /> : index + 1}
+                          </Box>
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: index === 0 ? 800 : 600, color: index === 0 ? '#8A6D00' : 'text.primary' }}>
+                          {item.customer_name || '未分配客户'}
+                        </TableCell>
+                        <TableCell align="right">{item.order_count} 个</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 800, whiteSpace: 'nowrap', color: index === 0 ? '#8A6D00' : 'text.primary' }}>
+                          ¥ {fmtMoney(item.total_amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               )}

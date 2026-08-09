@@ -289,4 +289,11 @@ router.post('/manual', (req, res) => {
   return res.status(201).json({ record_id: recordId, order: db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id) });
 });
 
+router.delete('/imports', (req, res) => {
+  const db = getDb();
+  const total = db.prepare("SELECT COUNT(*) AS c FROM import_logs WHERE target_type = 'commission'").get().c;
+  db.prepare("DELETE FROM import_logs WHERE target_type = 'commission'").run();
+  return res.json({ deleted: total });
+});
+
 export default router;

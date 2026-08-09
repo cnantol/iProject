@@ -226,32 +226,25 @@ function generateOrderId(db, tryInsert, shortName = null) {
 
 router.get('/', (req, res) => {
   const db = getDb();
-  const { search, status, end_customer_id, contract_customer_id, customer, year, month, scope } = req.query;
-  const so = String(req.query.so || '').trim();
-  const po = String(req.query.po || '').trim();
-  const projectNo = String(req.query.project_no || '').trim();
+  const { search, status, end_customer_id, contract_customer_id, year, month, scope } = req.query;
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
   const base = [];
   const baseParams = [];
   if (search) {
-    const like = `%${String(search).trim()}%`;
-    base.push(
-      '(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ? OR o.project_no LIKE ? OR EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?) OR EXISTS (SELECT 1 FROM end_customers ec WHERE ec.id = o.end_customer_id AND ec.customer_name LIKE ?) OR EXISTS (SELECT 1 FROM contract_customers cc WHERE cc.id = o.contract_customer_id AND cc.customer_name LIKE ?))'
-    );
-    baseParams.push(like, like, like, like, like, like, like, like);
-  }
-  if (so) {
-    base.push('o.sales_order LIKE ?');
-    baseParams.push(`%${so}%`);
-  }
-  if (po) {
-    base.push('EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?)');
-    baseParams.push(`%${po}%`);
-  }
-  if (projectNo) {
-    base.push('o.project_no LIKE ?');
-    baseParams.push(`%${projectNo}%`);
+    // 支持空格分词多条件搜索（AND 逻辑），每个条件在全字段中匹配
+    const terms = String(search).trim().split(/\s+/).filter(Boolean);
+    const termConditions = terms.map((term) => {
+      const like = `%${term}%`;
+      return '(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ? OR o.project_no LIKE ? OR o.year LIKE ? OR o.month LIKE ? OR EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?) OR EXISTS (SELECT 1 FROM end_customers ec WHERE ec.id = o.end_customer_id AND ec.customer_name LIKE ?) OR EXISTS (SELECT 1 FROM contract_customers cc WHERE cc.id = o.contract_customer_id AND cc.customer_name LIKE ?))';
+    });
+    if (termConditions.length > 0) {
+      base.push(termConditions.join(' AND '));
+      terms.forEach((term) => {
+        const like = `%${term}%`;
+        baseParams.push(like, like, like, like, like, like, like, like, like, like);
+      });
+    }
   }
   if (end_customer_id) {
     base.push('o.end_customer_id = ?');
@@ -260,13 +253,6 @@ router.get('/', (req, res) => {
   if (contract_customer_id) {
     base.push('o.contract_customer_id = ?');
     baseParams.push(Number(contract_customer_id));
-  }
-  if (customer) {
-    const like = `%${String(customer).trim()}%`;
-    base.push(
-      '(EXISTS (SELECT 1 FROM end_customers ec WHERE ec.id = o.end_customer_id AND ec.customer_name LIKE ?) OR EXISTS (SELECT 1 FROM contract_customers cc WHERE cc.id = o.contract_customer_id AND cc.customer_name LIKE ?))'
-    );
-    baseParams.push(like, like);
   }
   if (year) {
     base.push('o.year = ?');

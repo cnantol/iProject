@@ -28,7 +28,9 @@ import Typography from '@mui/material/Typography';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import CheckIcon from '@mui/icons-material/Check';
 import PaymentsIcon from '@mui/icons-material/Payments';
+import InboxIcon from '@mui/icons-material/Inbox';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { fmtDateTime, fmtMoney } from '../utils/helpers';
@@ -66,6 +68,8 @@ export default function CommissionPage() {
     return String.fromCharCode(65 + Math.floor(idx / 26) - 1) + String.fromCharCode(65 + idx % 26);
   }
 
+  const [clearing, setClearing] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -79,6 +83,19 @@ export default function CommissionPage() {
       setLoading(false);
     }
   }, []);
+
+  const clearImports = async () => {
+    if (!window.confirm('确认清空全部匹配历史？此操作不可撤销。')) return;
+    setClearing(true);
+    try {
+      await api.delete('/commission/imports');
+      setImports([]);
+    } catch (err) {
+      setError(errorMessage(err, '清空失败'));
+    } finally {
+      setClearing(false);
+    }
+  };
 
   useEffect(() => {
     load();
@@ -644,37 +661,55 @@ export default function CommissionPage() {
             </CardContent>
           </Card>
 
-          <Card sx={{ borderRadius: 2, boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+          <Card sx={{ borderRadius: 2, boxShadow: "0 1px 3px rgba(0,0,0,0.05)", overflow: 'visible' }}>
             <CardContent sx={{ p: 2.5 }}>
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1.5 }}>
-                <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'info.main' }} />
-                <Typography variant="h6" fontWeight={800}>匹配历史</Typography>
-                {!loading && <Chip size="small" color="info" label={`共 ${imports.length} 条`} sx={{ fontWeight: 800, height: 26 }} />}
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                  <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'info.main' }} />
+                  <Typography variant="h6" fontWeight={800}>匹配历史</Typography>
+                  {!loading && <Chip size="small" color="info" label={`共 ${imports.length} 条`} sx={{ fontWeight: 800, height: 26 }} />}
+                </Stack>
+                {imports.length > 0 && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    startIcon={<DeleteIcon />}
+                    disabled={clearing}
+                    onClick={clearImports}
+                    sx={{ fontWeight: 700, borderRadius: 2, fontSize: 13 }}
+                  >
+                    {clearing ? '清空中...' : '清空全部'}
+                  </Button>
+                )}
               </Stack>
               {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress /></Box>
               ) : imports.length === 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>暂无匹配历史</Typography>
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <InboxIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+                  <Typography variant="body2" color="text.secondary">暂无匹配历史</Typography>
+                </Box>
               ) : (
-                <Box sx={{ maxHeight: 420, overflow: 'auto' }}>
-                  <Table size="small" stickyHeader sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { '& .MuiTableCell-head': { bgcolor: tk.bg, color: tk.color } }; }}>
+                <Box sx={{ maxHeight: 420, overflow: 'auto', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                  <Table size="small" stickyHeader sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { '& .MuiTableCell-head': { bgcolor: tk.bg, color: tk.color, fontWeight: 800 } }; }}>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>文件名</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>总计</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800, whiteSpace: 'nowrap', color: 'success.main' }}>成功</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800, whiteSpace: 'nowrap', color: 'error.main' }}>失败</TableCell>
-                        <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>时间</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>文件名</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>总计</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap', color: 'success.main' }}>成功</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap', color: 'error.main' }}>失败</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>时间</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {imports.map((item) => (
                         <TableRow key={item.id} hover>
-                          <TableCell sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.file_name || '-'}</TableCell>
+                          <TableCell sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{item.file_name || '-'}</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 700 }}>{item.total_rows ?? '-'}</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>{item.success_rows ?? 0}</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 700, color: item.fail_rows > 0 ? 'error.main' : 'text.secondary' }}>{item.fail_rows ?? 0}</TableCell>
-                          <TableCell sx={{ whiteSpace: 'nowrap', fontSize: 13 }}>{item.created_at ? fmtDateTime(item.created_at) : '-'}</TableCell>
+                          <TableCell sx={{ whiteSpace: 'nowrap', fontSize: 13, color: 'text.secondary' }}>{item.created_at ? fmtDateTime(item.created_at) : '-'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
