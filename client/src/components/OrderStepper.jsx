@@ -65,14 +65,7 @@ export default function OrderStepper({ order, activeKey, onSelect }) {
             fontWeight: 700
           }}
         />
-        {isClosed && (
-          <Chip
-            size="small"
-            color={order?.status === 'closed' ? 'success' : order?.status === 'lost_closed' ? 'error' : 'default'}
-            label={order?.status === 'closed' ? '已闭环' : order?.status === 'lost_closed' ? '未中标关闭' : '合同取消'}
-            sx={{ fontWeight: 700 }}
-          />
-        )}
+
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'flex-start', minWidth: 880 }}>

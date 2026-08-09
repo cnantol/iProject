@@ -11,6 +11,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Pagination from '@mui/material/Pagination';
 import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
+import Tooltip from '@mui/material/Tooltip';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
@@ -306,17 +307,17 @@ export default function OrderList() {
                         <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>SO</Typography>
                       </Stack>
                     </TableCell>
-                    <TableCell>
-                      <Stack spacing={0.25}>
+                    <TableCell align="center">
+                      <Stack spacing={0.25} alignItems="center">
                         <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, lineHeight: 1.3 }}>
-                          {t('status')}
+                          {scope === 'archived' ? '佣金状态' : '流程状态'}
                         </Typography>
                         <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary', lineHeight: 1.2 }}>
                           {t('amount')}
                         </Typography>
                       </Stack>
                     </TableCell>
-                    <TableCell align="right" sx={{ width: 80 }}>操作</TableCell>
+                    <TableCell align="center" sx={{ width: 80 }}>操作</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -392,9 +393,11 @@ export default function OrderList() {
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap', textAlign: 'center', verticalAlign: 'middle' }}>
                           <Stack spacing={0.25} alignItems="center">
-                            <Typography variant="body2" sx={{ fontWeight: 800, color: 'primary.main', fontSize: 13, lineHeight: 1.3 }}>
-                              {order.order_id || '-'}
-                            </Typography>
+                            <Tooltip title={order.order_id || '-'} arrow placement="top">
+                              <Typography variant="body2" sx={{ fontWeight: 800, color: 'primary.main', fontSize: 13, lineHeight: 1.3 }}>
+                                {order.order_id ? `OPP-...${order.order_id.slice(-4)}` : '-'}
+                              </Typography>
+                            </Tooltip>
                             <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2 }}>
                               {order.year && order.month ? `${order.year}-${String(order.month).padStart(2, '0')}` : order.year || order.month || '-'}
                             </Typography>
@@ -458,16 +461,21 @@ export default function OrderList() {
                         <TableCell sx={{ textAlign: 'center', verticalAlign: 'middle' }}>
                           <Stack spacing={0.5} alignItems="center">
                             <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap>
-                              <StatusTag
-                                label={STATUS_LABELS[order.status] || order.status}
-                                color={STATUS_COLORS[order.status] || '#78909C'}
-                                icon={<FiberManualRecordRoundedIcon sx={{ fontSize: 15 }} />}
-                              />
-                              {order.commission_status === 'warn' && (
-                                <StatusTag label="佣金偏差" color="#D32F2F" icon={<WarningAmberRoundedIcon sx={{ fontSize: 15 }} />} />
-                              )}
-                              {order.commission_status === 'zero' && (
-                                <StatusTag label="无佣金" color="#1976D2" icon={<ReceiptLongIcon sx={{ fontSize: 15 }} />} />
+                              {scope === 'archived' ? (
+                                <>
+                                  {order.commission_status === 'warn' && (
+                                    <StatusTag label="佣金偏差" color="#D32F2F" icon={<WarningAmberRoundedIcon sx={{ fontSize: 15 }} />} />
+                                  )}
+                                  {order.commission_status === 'zero' && (
+                                    <StatusTag label="无佣金" color="#1976D2" icon={<ReceiptLongIcon sx={{ fontSize: 15 }} />} />
+                                  )}
+                                </>
+                              ) : (
+                                <StatusTag
+                                  label={STATUS_LABELS[order.status] || order.status}
+                                  color={STATUS_COLORS[order.status] || '#78909C'}
+                                  icon={<FiberManualRecordRoundedIcon sx={{ fontSize: 15 }} />}
+                                />
                               )}
                             </Stack>
                             <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 13, lineHeight: 1.3, color: 'text.primary' }}>

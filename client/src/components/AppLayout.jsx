@@ -39,7 +39,7 @@ const NAV_ITEMS = [
   { path: '/', label: '首页看板', icon: <DashboardIcon /> },
   { path: '/todos', label: '待办事项', icon: <CheckCircleIcon /> },
   { path: '/orders', label: '销售机会', icon: <ListAltIcon /> },
-  { path: '/sales-history', label: '历史销售', icon: <HistoryIcon /> },
+  { path: '/sales-history', label: '历史数据', icon: <HistoryIcon /> },
   { path: '/commission', label: '佣金相关', icon: <PaymentsIcon /> },
   { path: '/materials', label: '基础数据', icon: <StorageIcon /> },
   { path: '/settings', label: '系统设置', icon: <SettingsIcon /> }
