@@ -208,16 +208,27 @@ router.get('/waiting', (req, res) => {
        ORDER BY o.id DESC`
     )
     .all();
-  
-  // Fetch PO for each order
-  const poStmt = db.prepare('SELECT po_number, po_amount FROM customer_pos WHERE order_id = ? ORDER BY id');
-  const items = orders.map(o => {
-    const pos = poStmt.all(o.id);
+
+  const posByOrder = new Map();
+  if (orders.length > 0) {
+    const placeholders = orders.map(() => '?').join(',');
+    const posRows = db
+      .prepare(`SELECT order_id, po_number, po_amount FROM customer_pos WHERE order_id IN (${placeholders}) ORDER BY order_id, id`)
+      .all(...orders.map((order) => order.id));
+    for (const pos of posRows) {
+      const list = posByOrder.get(pos.order_id) || [];
+      list.push(pos);
+      posByOrder.set(pos.order_id, list);
+    }
+  }
+
+  const items = orders.map((order) => {
+    const pos = posByOrder.get(order.id) || [];
     return {
-      ...o,
+      ...order,
       pos,
       po_numbers: pos.map(p => p.po_number).filter(Boolean).join(', '),
-      expected_commission: o.total_amount != null ? Math.round(o.total_amount * 0.01 * 100) / 100 : null,
+      expected_commission: order.total_amount != null ? Math.round(order.total_amount * 0.01 * 100) / 100 : null
     };
   });
   return res.json({ items });

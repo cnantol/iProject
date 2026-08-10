@@ -11,6 +11,7 @@ import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -33,6 +34,10 @@ export default function SalesHistory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState({ orderCount: 0, totalSales: 0, totalOrderAmount: 0, difference: 0 });
 
   // sx 回调按 theme.mode 取值,避免顶层读取 theme.palette.mode 抛错导致白屏
   const cardSx = (theme) => ({
@@ -55,6 +60,7 @@ export default function SalesHistory() {
   });
 
   useEffect(() => {
+    setPage(1);
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(timer);
   }, [search]);
@@ -62,28 +68,30 @@ export default function SalesHistory() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/sales-history', { params: debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {} });
+      const params = { page, limit: pageSize };
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+      const { data } = await api.get('/sales-history', { params });
       setItems(data.items || []);
+      setTotal(data.total || 0);
+      setSummary(data.summary || { orderCount: 0, totalSales: 0, totalOrderAmount: 0, difference: 0 });
       setError('');
+      const maxPage = Math.max(1, Math.ceil((data.total || 0) / pageSize));
+      if (page > maxPage) {
+        setPage(maxPage);
+        return;
+      }
     } catch (err) {
       setError(err.response?.data?.error || '加载失败');
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch]);
+  }, [debouncedSearch, page, pageSize]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const orderIds = new Set(items.map((row) => row.order_id));
-  const uniqueOrderTotals = new Map();
-  items.forEach((row) => {
-    if (!uniqueOrderTotals.has(row.order_id) && row.order_total != null) uniqueOrderTotals.set(row.order_id, Number(row.order_total));
-  });
-  const totalSales = items.reduce((sum, row) => sum + Number(row.line_amount || 0), 0);
-  const totalOrderAmount = [...uniqueOrderTotals.values()].reduce((sum, value) => sum + value, 0);
-  const difference = totalOrderAmount - totalSales;
+  const difference = summary.difference;
 
   return (
     <Stack spacing={2}>
@@ -95,7 +103,7 @@ export default function SalesHistory() {
       </Box>
 
       {/* 统计卡片 */}
-      {!loading && !error && items.length > 0 && (
+      {!loading && !error && summary.orderCount > 0 && (
         <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
           <Card sx={cardSx}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
@@ -103,7 +111,7 @@ export default function SalesHistory() {
                 <InventoryIcon sx={{ fontSize: 18, color: '#0ea5e9' }} />
                 <Typography variant="caption" color="text.secondary" fontWeight={600}>历史销售机会数</Typography>
               </Stack>
-              <Typography variant="h5" fontWeight={800} color="#0ea5e9">{orderIds.size}</Typography>
+              <Typography variant="h5" fontWeight={800} color="#0ea5e9">{summary.orderCount}</Typography>
             </CardContent>
           </Card>
           <Card sx={cardSx}>
@@ -112,7 +120,7 @@ export default function SalesHistory() {
                 <AttachMoneyIcon sx={{ fontSize: 18, color: '#0891b2' }} />
                 <Typography variant="caption" color="text.secondary" fontWeight={600}>历史销售总价</Typography>
               </Stack>
-              <Typography variant="h5" fontWeight={800} color="#0891b2">{fmtMoney(totalSales)}</Typography>
+              <Typography variant="h5" fontWeight={800} color="#0891b2">{fmtMoney(summary.totalSales)}</Typography>
             </CardContent>
           </Card>
           <Card sx={cardSx}>
@@ -121,7 +129,7 @@ export default function SalesHistory() {
                 <BalanceIcon sx={{ fontSize: 18, color: difference === 0 ? '#10b981' : '#f59e0b' }} />
                 <Typography variant="caption" color="text.secondary" fontWeight={600}>金额（修正后）</Typography>
               </Stack>
-              <Typography variant="h5" fontWeight={800} color={difference === 0 ? '#10b981' : '#f59e0b'}>{fmtMoney(totalOrderAmount)}</Typography>
+              <Typography variant="h5" fontWeight={800} color={difference === 0 ? '#10b981' : '#f59e0b'}>{fmtMoney(summary.totalOrderAmount)}</Typography>
               {difference !== 0 && (
                 <Typography variant="caption" sx={{ fontWeight: 700, color: '#f59e0b', mt: 0.5, display: 'block' }}>
                   差异：{fmtMoney(difference)}
@@ -208,6 +216,7 @@ export default function SalesHistory() {
         ) : error ? (
           <Alert severity="error" sx={{ m: 2, borderRadius: 1.5 }}>{error}</Alert>
         ) : (
+          <>
           <Box sx={{ overflowX: 'auto' }}>
             <Table size="small" sx={{ minWidth: 1100 }}>
               <TableHead>
@@ -273,6 +282,24 @@ export default function SalesHistory() {
               </TableBody>
             </Table>
           </Box>
+          {total > 0 && (
+            <TablePagination
+              component="div"
+              count={total}
+              page={page - 1}
+              rowsPerPage={pageSize}
+              onPageChange={(_, nextPage) => setPage(nextPage + 1)}
+              onRowsPerPageChange={(e) => {
+                setPageSize(parseInt(e.target.value, 10) || 20);
+                setPage(1);
+              }}
+              rowsPerPageOptions={[20, 50, 100]}
+              labelRowsPerPage="每页"
+              labelDisplayedRows={({ from, to, count }) => `${from}-${to} / ${count}`}
+              sx={{ borderTop: '1px solid', borderColor: 'divider' }}
+            />
+          )}
+          </>
         )}
       </Card>
     </Stack>

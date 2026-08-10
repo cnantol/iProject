@@ -90,6 +90,41 @@ try {
   assert.strictEqual(Number(lookup.unit_price_ex_vat), 140);
   ok('基础数据与价格决策表');
 
+  const importWorkbook = (headers, rows) => {
+    const book = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(book, xlsx.utils.aoa_to_sheet([headers, ...rows]), 'Sheet1');
+    return xlsx.write(book, { type: 'buffer', bookType: 'xlsx' });
+  };
+  const uploadImport = async (target, headers, rows, mapping) => {
+    const form = new FormData();
+    form.append('file', new Blob([importWorkbook(headers, rows)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'import.xlsx');
+    if (mapping) form.append('mapping', JSON.stringify(mapping));
+    const started = must(await call('POST', `/api/settings/import/${target}`, { token, form }), 200, '数据导入启动');
+    for (let i = 0; i < 60; i += 1) {
+      const progress = must(await call('GET', `/api/settings/import-progress/${started.task_id}`, { token }), 200, '数据导入进度');
+      if (progress.status === 'done' || progress.status === 'error') return progress;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error('数据导入超时');
+  };
+  const importDone = await uploadImport('guide_price', ['物料号', '描述', '指导价'], [
+    ['M-IMP-1', '测试物料1', 10],
+    ['M-IMP-2', '测试物料2', 20]
+  ]);
+  assert.strictEqual(importDone.status, 'done');
+  assert.strictEqual(importDone.success_rows, 2);
+  assert.strictEqual(importDone.fail_rows, 0);
+  const mappingDone = await uploadImport('guide_price', ['Material', 'Desc', 'Price'], [
+    ['M-MAP-1', '映射物料', 30]
+  ], { 物料号: 'Material', 描述: 'Desc', 指导价: 'Price' });
+  assert.strictEqual(mappingDone.status, 'done');
+  assert.strictEqual(mappingDone.success_rows, 1);
+  const emptyForm = new FormData();
+  emptyForm.append('file', new Blob([importWorkbook(['物料号', '指导价'], [])], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'empty.xlsx');
+  const emptyImport = await call('POST', '/api/settings/import/guide_price', { token, form: emptyForm });
+  assert.strictEqual(emptyImport.status, 400);
+  ok('数据导入批读与列映射边界');
+
   // 创建销售机会
   const created = must(
     await call('POST', '/api/orders', {
@@ -273,6 +308,11 @@ try {
   assert.strictEqual(detail.order.status, 'commission');
   assert.strictEqual(Number(detail.order.invoiced), 1);
   ok('开票自动标记、超开审计与并行推进');
+
+  const waiting = must(await call('GET', '/api/commission/waiting', { token }), 200, '佣金等待清单');
+  assert.ok(waiting.items.some((item) => item.id === orderId));
+  assert.ok(waiting.items.some((item) => Array.isArray(item.pos)));
+  ok('佣金等待清单批量加载 PO');
 
   // 佣金 Excel 匹配
   const buildCommissionForm = () => {
@@ -505,6 +545,12 @@ try {
   assert.ok(dash.totalOrders >= 2);
   const history = must(await call('GET', '/api/sales-history', { token }), 200, '历史销售');
   assert.ok(history.items.length >= 1);
+  assert.ok(history.total >= 1);
+  assert.ok(history.summary.orderCount >= 1);
+  assert.ok(Number.isFinite(history.summary.totalSales));
+  const historyPaged = must(await call('GET', '/api/sales-history?page=1&limit=2', { token }), 200, '历史销售分页');
+  assert.strictEqual(historyPaged.items.length <= 2, true);
+  assert.strictEqual(historyPaged.total, history.total);
   const audits = must(await call('GET', '/api/audit-logs', { token }), 200, '审计日志');
   const actions = new Set(audits.items.map((row) => row.action));
   for (const action of ['approval_submit', 'approval_approve', 'approval_reject', 'invoice_override', 'order_rollback', 'commission_manual']) {

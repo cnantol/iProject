@@ -245,19 +245,47 @@ function yieldEventLoop() {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
-async function runImportTask(task, rows, headers) {
+function createSheetReader(sheet, rawHeaders, mapping, standardHeaders) {
+  const ref = sheet && sheet['!ref'] ? sheet['!ref'] : 'A1';
+  const range = xlsx.utils.decode_range(ref);
+  const totalRows = Math.max(0, range.e.r);
+  const useMapping = mapping && typeof mapping === 'object' && !Array.isArray(mapping) && Array.isArray(standardHeaders);
+  const headers = useMapping ? standardHeaders : (rawHeaders || []);
+  const mapRow = (row) => useMapping
+    ? standardHeaders.map((field) => {
+        const sourceName = mapping[field];
+        const idx = headerIndex(rawHeaders, sourceName);
+        return idx >= 0 ? cell(row, idx) : null;
+      })
+    : row;
+
+  return {
+    headers,
+    totalRows,
+    readBatch(startRow, count) {
+      if (startRow > range.e.r) return [];
+      const endRow = Math.min(range.e.r, startRow + count - 1);
+      const batchRange = xlsx.utils.encode_range({
+        s: { r: startRow, c: 0 },
+        e: { r: endRow, c: range.e.c }
+      });
+      const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, range: batchRange, defval: null, raw: true });
+      return rows.map((row, index) => ({ row: mapRow(row), rowNumber: startRow + index + 1 }));
+    }
+  };
+}
+
+async function runImportTask(task, reader, headers) {
   const db = getDb();
   const batchSize = 50;
   try {
-    for (let i = 1; i < rows.length; i += batchSize) {
-      const batchRows = [];
-      for (let j = i; j < rows.length && j < i + batchSize; j++) {
-        task.processed += 1;
-        const row = rows[j];
-        if (row.every((value) => value === null || value === undefined || value === '')) continue;
-        batchRows.push({ row, rowNumber: j + 1 });
-      }
-      if (batchRows.length > 0) {
+    for (let startRow = 1; startRow <= reader.totalRows; startRow += batchSize) {
+      const batchRows = reader.readBatch(startRow, batchSize);
+      task.processed += batchRows.length;
+      const rowsToProcess = batchRows.filter((item) =>
+        item.row.some((value) => value !== null && value !== undefined && value !== '')
+      );
+      if (rowsToProcess.length > 0) {
         const snapshot = { processed: task.processed, success: task.success, failures: task.failures.length };
         const runBatch = db.transaction((items) => {
           for (const item of items) {
@@ -271,7 +299,7 @@ async function runImportTask(task, rows, headers) {
           }
         });
         try {
-          runBatch(batchRows);
+          runBatch(rowsToProcess);
         } catch (err) {
           task.processed = snapshot.processed;
           task.success = snapshot.success;
@@ -319,41 +347,31 @@ router.post('/import/:target', upload.single('file'), (req, res) => {
     fs.unlinkSync(req.file.path);
     return notFound(res);
   }
-  let rows;
+  let reader;
   try {
     const workbook = xlsx.read(fs.readFileSync(req.file.path), { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+    const ref = sheet && sheet['!ref'] ? sheet['!ref'] : 'A1';
+    const range = xlsx.utils.decode_range(ref);
+    const headerRange = xlsx.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 0, c: range.e.c } });
+    const rawHeaders = (xlsx.utils.sheet_to_json(sheet, { header: 1, range: headerRange, defval: null, raw: true })[0] || []);
+    let mapping = null;
+    if (req.body && typeof req.body.mapping === 'string' && req.body.mapping.trim()) {
+      try {
+        mapping = JSON.parse(req.body.mapping);
+      } catch {
+        mapping = null;
+      }
+    }
+    reader = createSheetReader(sheet, rawHeaders, mapping, target.headers || []);
   } catch {
     fs.unlinkSync(req.file.path);
     return badRequest(res, 'Excel 解析失败');
   }
   fs.unlinkSync(req.file.path);
-  if (!rows || rows.length < 2) return badRequest(res, 'Excel 无有效数据');
+  if (!reader || reader.totalRows < 1) return badRequest(res, 'Excel 无有效数据');
 
-  let headers = rows[0] || [];
-  let mapping = null;
-  if (req.body && typeof req.body.mapping === 'string' && req.body.mapping.trim()) {
-    try {
-      mapping = JSON.parse(req.body.mapping);
-    } catch {
-      mapping = null;
-    }
-  }
-  if (mapping && typeof mapping === 'object' && !Array.isArray(mapping)) {
-    const standardHeaders = target.headers || [];
-    rows = [
-      standardHeaders,
-      ...rows.slice(1).map((row) =>
-        standardHeaders.map((field) => {
-          const sourceName = mapping[field];
-          const idx = headerIndex(headers, sourceName);
-          return idx >= 0 ? cell(row, idx) : null;
-        })
-      )
-    ];
-    headers = standardHeaders;
-  }
+  const headers = reader.headers;
   pruneImportTasks();
   const taskId = `imp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   const task = {
@@ -361,7 +379,7 @@ router.post('/import/:target', upload.single('file'), (req, res) => {
     userId: req.user.id,
     target: req.params.target,
     fileName: req.file.originalname,
-    total: rows.length - 1,
+    total: reader.totalRows,
     processed: 0,
     success: 0,
     successIds: [],
@@ -373,7 +391,7 @@ router.post('/import/:target', upload.single('file'), (req, res) => {
   };
   importTasks.set(taskId, task);
   persistImportTask(task);
-  runImportTask(task, rows, headers).catch((err) => {
+  runImportTask(task, reader, headers).catch((err) => {
     task.status = 'error';
     task.error = err.message || '导入失败';
     task.doneAt = Date.now();
