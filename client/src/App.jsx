@@ -18,6 +18,7 @@ const SalesHistory = lazy(() => import('./pages/SalesHistory'));
 const TodoList = lazy(() => import('./pages/TodoList'));
 const Settings = lazy(() => import('./pages/Settings'));
 const OrderCorrection = lazy(() => import('./pages/OrderCorrection'));
+const QuoteStyleDesigner = lazy(() => import('./pages/QuoteStyleDesigner'));
 
 function PrivateRoute() {
   const { isAuthenticated } = useAuth();
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/sales-history" element={<SalesHistory />} />
             <Route path="/todos" element={<TodoList />} />
             <Route path="/data-correction" element={<OrderCorrection />} />
+            <Route path="/quote-style" element={<QuoteStyleDesigner />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

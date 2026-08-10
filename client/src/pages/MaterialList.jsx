@@ -35,15 +35,19 @@ import HandshakeIcon from '@mui/icons-material/Handshake';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import PriceCheckIcon from '@mui/icons-material/PriceCheck';
 import InboxIcon from '@mui/icons-material/Inbox';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import api, { errorMessage } from '../api';
 import { useConfirm } from '../components/ConfirmDialog';
+import DataImportPanel from '../components/DataImportPanel';
 import { fmtMoney } from '../utils/helpers';
 
 const TABS = [
   { key: 'end_customer', label: '最终客户', url: 'end-customers', icon: <PeopleAltIcon /> },
   { key: 'contract_customer', label: '合同客户', url: 'contract-customers', icon: <HandshakeIcon /> },
   { key: 'material', label: '框架协议价', url: 'materials', icon: <InventoryIcon /> },
-  { key: 'guide_price', label: '系统指导价', url: 'guide-prices', icon: <PriceCheckIcon /> }
+  { key: 'guide_price', label: '系统指导价', url: 'guide-prices', icon: <PriceCheckIcon /> },
+  { key: 'import', label: '数据导入', icon: <CloudUploadIcon /> }
 ];
 const PAGED_TABS = ['material', 'guide_price'];
 
@@ -77,6 +81,12 @@ export default function MaterialList() {
     const requestId = ++requestIdRef.current;
     setLoading(true);
     setError('');
+    if (nextTab === 'import') {
+      setItems([]);
+      setTotal(0);
+      setLoading(false);
+      return;
+    }
     try {
       const url = TABS.find((t) => t.key === nextTab).url;
       if (PAGED_TABS.includes(nextTab)) {
@@ -136,6 +146,7 @@ export default function MaterialList() {
   const fullWidthFields = ['remark', 'description', 'parent_customer_id'];
 
   const saveEditor = async () => {
+    if (!tabDef[tab]) return;
     setError('');
     try {
       const payload = { ...editor };
@@ -156,6 +167,7 @@ export default function MaterialList() {
   };
 
   const remove = async (row) => {
+    if (!tabDef[tab]) return;
     if (!(await confirm(`确认删除「${row.customer_name || row.material_no || row.id}」？`))) return;
     try {
       await api.delete(`/${tabDef[tab].url}/${row.id}`);
@@ -229,19 +241,47 @@ export default function MaterialList() {
   return (
     <Stack spacing={2}>
       <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1.5} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-        <Box>
-          <Typography variant="h5">基础数据</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-            最终客户、合同客户、框架协议价与系统指导价
-          </Typography>
-        </Box>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Box
+            sx={{
+              width: 42,
+              height: 42,
+              borderRadius: 1.5,
+              bgcolor: 'rgba(0,78,154,0.1)',
+              color: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            {TABS.find((item) => item.key === tab)?.icon || <FolderOpenIcon />}
+          </Box>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 800 }}>基础档案</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
+              最终客户、合同客户、框架协议价与系统指导价
+            </Typography>
+          </Box>
+        </Stack>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
           新增
         </Button>
       </Stack>
       <Card>
         <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
-        <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ px: 1.5, pt: 0.5, '& .MuiTabs-indicator': { height: 3, borderRadius: 2 } }}>
+        <Tabs
+          value={tab}
+          onChange={(_, value) => setTab(value)}
+          sx={{
+            px: 1.5,
+            pt: 0.5,
+            minHeight: 52,
+            borderBottom: 1,
+            borderColor: 'divider',
+            '& .MuiTabs-indicator': { height: 3, borderRadius: 2 },
+            '& .MuiTab-root': { minHeight: 52, fontWeight: 700, textTransform: 'none', color: 'text.secondary', '&.Mui-selected': { color: 'primary.main', fontWeight: 800 } }
+          }}
+        >
           {TABS.map((item) => (
             <Tab
               key={item.key}
@@ -254,14 +294,22 @@ export default function MaterialList() {
           ))}
         </Tabs>
         <Box sx={{ p: 2 }}>
-          <Box sx={{ p: 1.5, mb: 2, borderRadius: 2.5, border: 1, borderColor: 'divider', bgcolor: 'action.hover', display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          {tab === 'import' ? (
+            <DataImportPanel />
+          ) : (
+            <>
+          <Box sx={{ p: 1.5, mb: 2, borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'action.hover', display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
             <TextField
               size="small"
               label="搜索"
+              placeholder="输入名称 / 物料号 / 协议号"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
-              sx={{ width: { xs: '100%', md: 320 } }}
+              sx={{
+                width: { xs: '100%', md: 340 },
+                '& .MuiOutlinedInput-root': { borderRadius: 1.5, bgcolor: 'background.paper', transition: 'box-shadow 0.2s ease, border-color 0.2s ease', '&:hover': { boxShadow: '0 2px 10px rgba(25,118,210,0.12)' }, '&.Mui-focused': { boxShadow: '0 0 0 3px rgba(25,118,210,0.15)' } }
+              }}
             />
             {!loading && <Chip size="small" label={`共 ${total} 条`} variant="outlined" sx={{ fontWeight: 700 }} />}
             <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
@@ -281,18 +329,19 @@ export default function MaterialList() {
               <CircularProgress />
             </Box>
           ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+            <Box sx={{ borderRadius: 1.5, border: 1, borderColor: 'divider', overflow: 'auto' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ '& th': { bgcolor: 'rgba(15,23,42,0.03)', fontWeight: 800, whiteSpace: 'nowrap' } }}>
                   {tabDef[tab].fields.map((field) => (
                     <TableCell key={field} sx={{ textAlign: priceFields.includes(field) ? 'right' : 'left' }}>
                       {tabDef[tab].labels[field]}
                     </TableCell>
                   ))}
                   <TableCell sx={{ width: 120, textAlign: 'right' }}>操作</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                 {displayItems.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={tabDef[tab].fields.length + 1} align="center" sx={{ py: 8, color: 'text.secondary' }}>
@@ -336,8 +385,9 @@ export default function MaterialList() {
                     </TableCell>
                   </TableRow>
                 ))}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </Box>
           )}
           {!loading && (
             <TablePagination
@@ -360,6 +410,8 @@ export default function MaterialList() {
               labelDisplayedRows={({ from, to, count }) => `${from}-${to} / ${count}`}
               sx={{ borderTop: '1px solid', borderColor: 'divider' }}
             />
+          )}
+            </>
           )}
         </Box>
       </Card>
@@ -442,12 +494,12 @@ export default function MaterialList() {
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ pt: 1 }}>
-            {tabDef[tab].fields.map((field) => (
+            {(tabDef[tab]?.fields || []).map((field) => (
               <Grid item xs={12} sm={fullWidthFields.includes(field) ? 12 : 6} key={field}>
                 {field === 'end_customer_id' ? (
                   <TextField
                     select
-                    label={tabDef[tab].labels[field]}
+                    label={tabDef[tab]?.labels?.[field] || field}
                     fullWidth
                     value={editor?.end_customer_id || ''}
                     onChange={(e) => setEditor((prev) => ({ ...prev, end_customer_id: Number(e.target.value) }))}
@@ -478,7 +530,7 @@ export default function MaterialList() {
                   </TextField>
                 ) : (
                   <TextField
-                    label={tabDef[tab].labels[field]}
+                    label={tabDef[tab]?.labels?.[field] || field}
                     fullWidth
                     type={['unit_price_ex_vat', 'guide_unit_price_ex_vat'].includes(field) ? 'number' : ['valid_from', 'valid_to'].includes(field) ? 'date' : 'text'}
                     value={editor?.[field] || ''}

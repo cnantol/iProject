@@ -16,6 +16,23 @@ import { hasFrameworkForCustomer } from './materials.js';
 
 const router = Router();
 
+// ---------- 机会 ID 一致性检测 ----------
+router.get('/order-id-consistency', (req, res) => {
+  const db = getDb();
+  const total = db.prepare('SELECT COUNT(*) c FROM orders').get().c;
+  const mismatched = db
+    .prepare(
+      `SELECT id, order_id FROM orders
+       WHERE order_id != printf('%04d', id) OR order_id NOT GLOB '[0-9][0-9][0-9][0-9]'
+       ORDER BY id`
+    )
+    .all();
+  const duplicates = db
+    .prepare('SELECT order_id, COUNT(*) c FROM orders GROUP BY order_id HAVING c > 1 ORDER BY order_id')
+    .all();
+  return res.json({ ok: mismatched.length === 0 && duplicates.length === 0, total, mismatched, duplicates });
+});
+
 // ---------- 工作流配置（展示层） ----------
 router.get('/workflow', (req, res) => {
   const db = getDb();
@@ -1014,7 +1031,7 @@ router.put('/quote-style', (req, res) => {
 router.post('/quote-style/test-pdf', (req, res, next) => {
   try {
     const style = normalizeQuoteStyle(req.body?.style || readQuoteStyle());
-    const sampleOrder = { order_id: 'OPP-2026-TEST', project_name: '示例项目（测试）' };
+    const sampleOrder = { order_id: '0001', project_name: '示例项目（测试）' };
     const sampleRound = { round_no: 1, total_amount: 128500.5 };
     const sampleItems = [
       {

@@ -107,12 +107,12 @@ export default function StepBidResult({ order, readOnly, onChanged }) {
         )}
         {order.status === 'cancelled' && (
           <Alert severity="warning">
-            该销售机会因合同取消而关闭。如需恢复，请在系统设置「数据修正」中回退至中标结果。
+            该销售机会因合同取消而关闭。如需恢复，请在「流程撤回」中回退至中标结果。
           </Alert>
         )}
         {order.status === 'lost_closed' && (
           <Alert severity="warning">
-            该销售机会已标记未中标并关闭。如需恢复，请在系统设置「数据修正」中回退至中标结果。
+            该销售机会已标记未中标并关闭。如需恢复，请在「流程撤回」中回退至中标结果。
           </Alert>
         )}
         {order.status === 'finance' && order.bid_result === 'won' && <Chip size="small" color="success" label="已确认中标" />}

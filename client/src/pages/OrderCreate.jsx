@@ -53,7 +53,7 @@ export default function OrderCreate() {
       setContractCustomers(cc.data.items || []);
       setCustomFields(fields.data.items || []);
     } catch (err) {
-      setError(errorMessage(err, '基础数据加载失败'));
+      setError(errorMessage(err, '基础档案加载失败'));
     } finally {
       setLoading(false);
     }
@@ -94,7 +94,7 @@ export default function OrderCreate() {
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/orders')}>
           返回
         </Button>
-        <Typography variant="h5">新建销售机会</Typography>
+        <Typography variant="h5">新建商机</Typography>
       </Stack>
       {error && <Alert severity="error">{error}</Alert>}
       <form onSubmit={submit}>
@@ -179,7 +179,7 @@ export default function OrderCreate() {
             </Grid>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
               <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={saving}>
-                {saving ? <CircularProgress size={20} color="inherit" /> : '创建销售机会'}
+                {saving ? <CircularProgress size={20} color="inherit" /> : '创建商机'}
               </Button>
             </Box>
           </CardContent>

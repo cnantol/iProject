@@ -88,7 +88,7 @@ export default function SalesHistory() {
   return (
     <Stack spacing={2}>
       <Box>
-        <Typography variant="h5">历史销售数据</Typography>
+        <Typography variant="h5">归档记录</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
           已中标闭环销售机会的报价明细与金额对账
         </Typography>
@@ -138,7 +138,7 @@ export default function SalesHistory() {
           <Stack direction="row" spacing={1.5} alignItems="center" sx={{ width: '100%' }}>
             <TextField
               size="small"
-              placeholder="🔍  搜索机会号、最终客户、合同客户、PO、SO、物料号、描述、年份、月份 · 多条件用空格"
+              placeholder="搜索商机 ID、最终客户、合同客户、PO、SO、物料号、描述、年份、月份，多条件用空格"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               sx={{

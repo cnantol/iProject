@@ -409,7 +409,7 @@ export default function TodoList() {
   return (
     <Stack spacing={2}>
       <Box>
-        <Typography variant="h5">待办事项</Typography>
+        <Typography variant="h5">待办任务</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
           按逾期、今日、未来与已完成四区管理个人日程
         </Typography>
@@ -437,10 +437,10 @@ export default function TodoList() {
             </FormControl>
             <TextField size="small" label="截止日期" type="date" value={quick.due_date} onChange={(e) => setQuick((prev) => ({ ...prev, due_date: e.target.value }))} InputLabelProps={{ shrink: true }} />
             <FormControl size="small" sx={{ minWidth: 220 }}>
-              <InputLabel>关联销售机会</InputLabel>
+              <InputLabel>关联商机</InputLabel>
               <Select
                 value={quick.order_ref}
-                label="关联销售机会"
+                label="关联商机"
                 onChange={(e) => setQuick((prev) => ({ ...prev, order_ref: e.target.value }))}
                 sx={{
                   borderRadius: 2.5,

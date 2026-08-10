@@ -7,6 +7,8 @@ import { getDb, getDataDir } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
 import { authenticateDownload } from '../middleware/auth.js';
 import { frameworkCustomerIds } from './materials.js';
+import { readTemplate, buildRenderContext } from '../lib/quotationTemplate.js';
+import { createQuotationPdf } from '../lib/quotationRenderer.js';
 import {
   nowUtc,
   todayLocal,
@@ -371,7 +373,9 @@ router.get('/:orderId/quotations/:roundId/pdf', authenticateDownload, (req, res,
   const ec = db.prepare('SELECT customer_name, short_name FROM end_customers WHERE id = ?').get(order.end_customer_id);
   const cc = db.prepare('SELECT customer_name, short_name FROM contract_customers WHERE id = ?').get(order.contract_customer_id);
   try {
-    const doc = buildQuotationPdf(order, round, items, { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '', endShort: ec?.short_name || null, contractShort: cc?.short_name || null });
+    const customerNames = { end: ec ? ec.customer_name : '', contract: cc ? cc.customer_name : '', endShort: ec?.short_name || null, contractShort: cc?.short_name || null };
+    const context = buildRenderContext(db, order, round, items, customerNames, readTemplate());
+    const doc = createQuotationPdf(context);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="quotation-${order.order_id}-R${round.round_no}.pdf"`);
     res.setHeader('Cache-Control', 'no-store');

@@ -47,7 +47,7 @@ const EMPTY_SELECTION = { material_no: '', description: '', material_type: 'stan
 export default function StepProposal({ order, readOnly, onChanged, onAdvance }) {
   const confirm = useConfirm();
   const { t } = useFieldLabels();
-  const versions = order.versions || [];
+  const versions = useMemo(() => order.versions || [], [order.versions]);
   const [activeVersionId, setActiveVersionId] = useState(null);
   const [newVersion, setNewVersion] = useState({ version_label: '', remark: '' });
   const [rows, setRows] = useState([]);

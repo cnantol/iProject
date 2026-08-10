@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -69,7 +69,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
   const editable = !readOnly && order.status === 'quotation' && activeRound?.status === 'draft';
   const roundLocked = activeRound?.status === 'submitted';
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const { data } = await api.get(`/orders/${order.id}/quotations`);
       setQuotations(data.items || []);
@@ -78,11 +78,11 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
     } catch (err) {
       setError(errorMessage(err));
     }
-  };
+  }, [order.id]);
 
   useEffect(() => {
     load();
-  }, [order.id]);
+  }, [load]);
 
   useEffect(() => {
     if (activeRound) {
@@ -411,12 +411,15 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
                     <Button size="small" variant="contained" startIcon={<SaveIcon />} onClick={saveAllItems} disabled={saving}>
                       批量保存
                     </Button>
-                    <Button size="small" variant="outlined" component="label" startIcon={<UploadFileIcon />}>
-                      批量导入
-                      <input type="file" hidden accept=".xlsx,.xls" onChange={importItems} />
+                    <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => setRows((prev) => [...prev, { ...EMPTY_ITEM }])}>
+                      新增明细
                     </Button>
                     <Button size="small" variant="outlined" startIcon={<ContentPasteIcon />} onClick={() => setPasteOpen(true)}>
                       粘贴录入
+                    </Button>
+                    <Button size="small" variant="outlined" component="label" startIcon={<UploadFileIcon />}>
+                      批量导入
+                      <input type="file" hidden accept=".xlsx,.xls" onChange={importItems} />
                     </Button>
                   </Stack>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
@@ -540,15 +543,6 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
               </TableCell>
             </TableRow>
           ))}
-          {editable && (
-            <TableRow>
-              <TableCell colSpan={10}>
-                <Button size="small" startIcon={<AddIcon />} onClick={() => setRows((prev) => [...prev, { ...EMPTY_ITEM }])}>
-                  新增明细
-                </Button>
-              </TableCell>
-            </TableRow>
-          )}
         </TableBody>
       </Table>
 

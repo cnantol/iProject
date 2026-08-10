@@ -16,14 +16,15 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import ListAltIcon from '@mui/icons-material/ListAlt';
-import HistoryIcon from '@mui/icons-material/History';
-import PaymentsIcon from '@mui/icons-material/Payments';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import StorageIcon from '@mui/icons-material/Storage';
-import SettingsIcon from '@mui/icons-material/Settings';
-import BuildIcon from '@mui/icons-material/Build';
+import SpaceDashboardIcon from '@mui/icons-material/SpaceDashboard';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
+import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
+import ArchiveIcon from '@mui/icons-material/Archive';
+import SavingsIcon from '@mui/icons-material/Savings';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import UndoIcon from '@mui/icons-material/Undo';
+import DescriptionIcon from '@mui/icons-material/Description';
+import TuneIcon from '@mui/icons-material/Tune';
 import BrightnessAutoIcon from '@mui/icons-material/BrightnessAuto';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
@@ -37,14 +38,15 @@ import { useThemeMode } from '../context/ThemeContext';
 import { useAppLogo } from '../context/AppLogoContext';
 
 const NAV_ITEMS = [
-  { path: '/', label: '首页看板', icon: <DashboardIcon /> },
-  { path: '/todos', label: '待办事项', icon: <CheckCircleIcon /> },
-  { path: '/orders', label: '销售机会', icon: <ListAltIcon /> },
-  { path: '/sales-history', label: '历史数据', icon: <HistoryIcon /> },
-  { path: '/commission', label: '佣金相关', icon: <PaymentsIcon /> },
-  { path: '/materials', label: '基础数据', icon: <StorageIcon /> },
-  { path: '/data-correction', label: '数据回退', icon: <BuildIcon /> },
-  { path: '/settings', label: '系统设置', icon: <SettingsIcon /> }
+  { path: '/', label: '项目总览', icon: <SpaceDashboardIcon /> },
+  { path: '/todos', label: '待办任务', icon: <TaskAltIcon /> },
+  { path: '/orders', label: '商机管理', icon: <BusinessCenterIcon /> },
+  { path: '/sales-history', label: '归档记录', icon: <ArchiveIcon /> },
+  { path: '/commission', label: '佣金结算', icon: <SavingsIcon /> },
+  { path: '/materials', label: '基础档案', icon: <FolderOpenIcon /> },
+  { path: '/data-correction', label: '流程撤回', icon: <UndoIcon /> },
+  { path: '/quote-style', label: '报价模版', icon: <DescriptionIcon /> },
+  { path: '/settings', label: '系统配置', icon: <TuneIcon /> }
 ];
 
 const DRAWER_WIDTH = 232;
@@ -98,7 +100,7 @@ export default function AppLayout() {
           navigate('/');
           setMobileOpen(false);
         }}
-        title="返回首页看板"
+        title="返回项目总览"
       >
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Box
@@ -165,7 +167,23 @@ export default function AppLayout() {
               }}
               title={collapsed ? item.label : undefined}
             >
-              <ListItemIcon sx={{ minWidth: 0, color: active ? 'primary.main' : 'inherit' }}>{item.icon}</ListItemIcon>
+              <ListItemIcon sx={{ minWidth: 0 }}>
+                <Box
+                  sx={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 1.25,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: active ? 'rgba(25,118,210,0.12)' : 'rgba(15,23,42,0.05)',
+                    color: active ? 'primary.main' : 'text.secondary',
+                    transition: 'background-color 0.2s ease, color 0.2s ease'
+                  }}
+                >
+                  {item.icon}
+                </Box>
+              </ListItemIcon>
               <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14, fontWeight: active ? 700 : 500 }} />
             </ListItemButton>
           );

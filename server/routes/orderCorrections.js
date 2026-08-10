@@ -7,7 +7,7 @@ const router = Router();
 
 router.use((req, res, next) => {
   if (!req.user || req.user.username !== 'admin') {
-    return res.status(403).json({ error: '仅管理员可执行数据回退' });
+    return res.status(403).json({ error: '仅管理员可执行流程回退' });
   }
   next();
 });
@@ -272,10 +272,19 @@ router.get('/:orderId', (req, res) => {
   const db = getDb();
   const orderId = Number(req.params.orderId);
   if (!Number.isFinite(orderId)) return notFound(res);
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  const order = db
+    .prepare(
+      `SELECT o.*, ec.customer_name AS end_customer_name, cc.customer_name AS contract_customer_name
+       FROM orders o
+       LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
+       LEFT JOIN contract_customers cc ON cc.id = o.contract_customer_id
+       WHERE o.id = ?`
+    )
+    .get(orderId);
   if (!order) return notFound(res);
+  const poNumbers = db.prepare("SELECT GROUP_CONCAT(po_number, '、') AS v FROM customer_pos WHERE order_id = ?").get(order.id)?.v || null;
   return res.json({
-    order,
+    order: { ...order, po_numbers: poNumbers },
     validTargets: validRollbackTargets(db, order),
     artifacts: artifactCounts(db, order.id)
   });

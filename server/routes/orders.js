@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { getDb } from '../db/init.js';
 import {
   nowUtc,
@@ -197,33 +198,6 @@ function upsertCustomValues(db, orderId, customValues) {
   tx(customValues);
 }
 
-function generateOrderId(db, tryInsert, shortName = null) {
-  const datePart = todayLocal().replace(/-/g, '');
-  const prefix = shortName ? `OPP-${shortName}-${datePart}-` : `OPP-${datePart}-`;
-  const maxSeq = () => {
-    const rows = db.prepare("SELECT order_id FROM orders WHERE order_id LIKE 'OPP-%'").all();
-    let max = 0;
-    for (const row of rows) {
-      const m = String(row.order_id).match(/(\d+)$/);
-      if (!m) continue;
-      const parsed = Number(m[1]);
-      if (Number.isFinite(parsed) && parsed > max) max = parsed;
-    }
-    return max;
-  };
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const orderId = `${prefix}${String(maxSeq() + 1).padStart(4, '0')}`;
-    try {
-      const result = tryInsert(orderId);
-      if (result) return result;
-    } catch (err) {
-      if (String(err.message).includes('UNIQUE')) continue;
-      throw err;
-    }
-  }
-  throw new Error('销售机会编号生成冲突，请重试');
-}
-
 router.get('/', (req, res) => {
   const db = getDb();
   const { search, status, end_customer_id, contract_customer_id, year, month, scope } = req.query;
@@ -314,9 +288,6 @@ router.post('/', (req, res) => {
   if (!data.project_owner || !String(data.project_owner).trim()) return badRequest(res, '项目负责人必填');
 
   const hasFramework = hasFrameworkForCustomer(Number(data.end_customer_id)) ? 1 : 0;
-  const endCustomer = db.prepare('SELECT short_name FROM end_customers WHERE id = ?').get(Number(data.end_customer_id));
-  const contractCustomer = db.prepare('SELECT short_name FROM contract_customers WHERE id = ?').get(Number(data.contract_customer_id));
-  const shortName = endCustomer?.short_name || contractCustomer?.short_name || null;
   const ts = nowUtc();
   const insert = db.prepare(
     `INSERT INTO orders (order_id, year, month, end_customer_id, contract_customer_id, order_type, project_no, workshop,
@@ -324,9 +295,9 @@ router.post('/', (req, res) => {
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'customer_info', ?, ?)`
   );
 
-  const orderId = generateOrderId(db, (generated) => {
+  const createOrder = db.transaction(() => {
     const info = insert.run(
-      generated,
+      `PENDING-${Date.now()}-${crypto.randomUUID()}`,
       data.year ? String(data.year) : null,
       data.month ? String(data.month) : null,
       Number(data.end_customer_id),
@@ -341,8 +312,11 @@ router.post('/', (req, res) => {
       ts,
       ts
     );
-    return info.lastInsertRowid;
-  }, shortName);
+    const rowId = info.lastInsertRowid;
+    db.prepare('UPDATE orders SET order_id = ? WHERE id = ?').run(String(rowId).padStart(4, '0'), rowId);
+    return rowId;
+  });
+  const orderId = createOrder();
 
   upsertCustomValues(db, orderId, body.customValues);
   const detail = loadOrderDetail(db, orderId);

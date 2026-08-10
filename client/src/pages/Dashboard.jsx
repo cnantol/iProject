@@ -120,14 +120,14 @@ export default function Dashboard() {
         <Stack direction="row" spacing={1.25} alignItems="center">
           <Box sx={{ width: 4, height: 28, borderRadius: 2, bgcolor: 'primary.main' }} />
           <Box>
-            <Typography variant="h5">首页看板</Typography>
+            <Typography variant="h5">项目总览</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
               {new Intl.DateTimeFormat('zh-CN', { dateStyle: 'full' }).format(new Date())}
             </Typography>
           </Box>
         </Stack>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/orders/new')}>
-          新建销售机会
+          新建商机
         </Button>
       </Stack>
 
@@ -208,7 +208,7 @@ export default function Dashboard() {
               <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
-                  <Typography variant="h6">待办事项</Typography>
+                  <Typography variant="h6">待办任务</Typography>
                 </Stack>
                 <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/todos')}>
                   查看全部

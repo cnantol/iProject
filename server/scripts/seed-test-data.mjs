@@ -4,7 +4,6 @@ import { pathToFileURL } from 'node:url';
 import { initDb, closeDb, getDb, getUploadDir } from '../db/init.js';
 import { nowUtc, todayLocal } from '../utils.js';
 
-const TEST_ORDER_PREFIX = 'OPP-TEST-';
 const TEST_CUSTOMER_MARK = '[测试]';
 const ATTACHMENT_COUNT_PER_STEP = 2;
 
@@ -117,7 +116,7 @@ function buildPdfBuffer(title) {
 }
 
 function cleanupTestOrders(db) {
-  const rows = db.prepare('SELECT id, order_id FROM orders WHERE order_id LIKE ?').all(`${TEST_ORDER_PREFIX}%`);
+  const rows = db.prepare('SELECT id, order_id FROM orders WHERE project_name LIKE ?').all(`${TEST_CUSTOMER_MARK}%`);
   if (rows.length === 0) return 0;
   const tx = db.transaction(() => {
     for (const row of rows) {
@@ -204,14 +203,13 @@ function ensureCustomer(db, table, customerName, shortName, contactPerson) {
 
 function insertOrder(db, status, statusLabel, index, endCustomerId, contractCustomerId) {
   const seq = String(index).padStart(4, '0');
-  const orderId = `${TEST_ORDER_PREFIX}${status}-${seq}`;
   const now = nowUtc();
   const info = db.prepare(
     `INSERT INTO orders (order_id, year, month, end_customer_id, contract_customer_id, order_type, project_no, workshop,
       project_name, project_owner, project_remark, has_framework, status, created_at, updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
-    orderId,
+    `PENDING-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     '2026',
     '08',
     endCustomerId,
@@ -227,7 +225,10 @@ function insertOrder(db, status, statusLabel, index, endCustomerId, contractCust
     now,
     now
   );
-  return { id: info.lastInsertRowid, orderId };
+  const rowId = info.lastInsertRowid;
+  const orderId = String(rowId).padStart(4, '0');
+  db.prepare('UPDATE orders SET order_id = ? WHERE id = ?').run(orderId, rowId);
+  return { id: rowId, orderId };
 }
 
 function insertProposal(db, orderId, index) {

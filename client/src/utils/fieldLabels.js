@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../api';
 
 export const FIELD_LABEL_DEFAULTS = {
-  order_id: '销售机会编号',
+  order_id: 'ID',
   project_name: '项目名称',
   project_no: '项目编号',
   workshop: '车间',

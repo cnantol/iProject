@@ -67,6 +67,8 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onFramewo
     setAttachments((order.attachments || []).filter((item) => item.stage === 'customer_info'));
     setLocalFramework(null);
     onFrameworkChange(null);
+    // 仅在切换商机时重置表单，避免父级保存后覆盖正在编辑的内容
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order.id, onFrameworkChange]);
 
   const loadOptions = async () => {

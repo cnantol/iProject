@@ -108,7 +108,10 @@ try {
     '创建销售机会'
   );
   const orderId = created.order.id;
-  assert.match(created.order.order_id, /^OPP-\d{8}-\d{4}$/);
+  assert.match(created.order.order_id, /^\d{4}$/);
+  const idConsistency = must(await call('GET', '/api/settings/order-id-consistency', { token }), 200, '机会 ID 一致性');
+  assert.strictEqual(idConsistency.ok, true);
+  assert.strictEqual(idConsistency.mismatched.length, 0);
   assert.strictEqual(created.order.status, 'customer_info');
   ok('销售机会创建与销售机会编号生成');
 
@@ -203,6 +206,31 @@ try {
   assert.strictEqual(pdfGet.status, 200);
   assert.match(String(pdfGet.headers.get('content-type') || ''), /application\/pdf/);
   ok('报价单 PDF 导出');
+
+  // 全新报价单模板 API
+  const templateRes = must(await call('GET', '/api/quotation-template', { token }), 200, '报价单模板读取');
+  assert.strictEqual(templateRes.version, 1);
+  assert.ok(Array.isArray(templateRes.columnFields));
+  const templateFields = must(await call('GET', '/api/quotation-template/fields', { token }), 200, '报价单字段目录');
+  assert.ok(templateFields.infoFields.length > 0);
+  assert.ok(templateFields.columnFields.length > 0);
+  const savedTemplate = must(
+    await call('PUT', '/api/quotation-template', { token, body: { ...templateRes, name: 'smoke 模板', palette: { primary: '#B71C1C' } } }),
+    200,
+    '报价单模板保存'
+  );
+  assert.strictEqual(savedTemplate.name, 'smoke 模板');
+  const pdfPreviewRes = await fetch(base + '/api/quotation-template/preview-pdf', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  });
+  assert.strictEqual(pdfPreviewRes.status, 200);
+  assert.match(String(pdfPreviewRes.headers.get('content-type') || ''), /application\/pdf/);
+  const validateRes = must(await call('POST', '/api/quotation-template/validate', { token, body: templateRes }), 200, '报价单模板校验');
+  assert.ok(Array.isArray(validateRes.warnings));
+  must(await call('POST', '/api/quotation-template/reset', { token }), 200, '报价单模板重置');
+  ok('全新报价单模板 API 与 PDF 预览');
 
   must(await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'submit-approval', round_id: roundId } }), 200, '提交审批');
   const sf = must(await call('POST', `/api/orders/${orderId}/approvals`, { token, body: { approval_type: 'sales_force' } }), 201, 'Sales Force 审批提交');

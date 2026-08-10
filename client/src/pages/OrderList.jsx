@@ -129,14 +129,14 @@ export default function OrderList() {
   };
 
   const removeOrder = async (order) => {
-    if (!(await confirm(`确认删除销售机会「${order.order_id}」？删除后不可恢复。`))) return;
+    if (!(await confirm(`确认删除商机「${order.order_id}」？删除后不可恢复。`))) return;
     setDeletingId(order.id);
     setError('');
     try {
       await api.delete(`/orders/${order.id}`);
       load();
     } catch (err) {
-      setError(errorMessage(err, '删除销售机会失败'));
+      setError(errorMessage(err, '删除商机失败'));
     } finally {
       setDeletingId(null);
     }
@@ -152,13 +152,13 @@ export default function OrderList() {
         sx={{ flexWrap: 'wrap', rowGap: 1 }}
       >
         <Box>
-          <Typography variant="h5">销售机会</Typography>
+          <Typography variant="h5">商机管理</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-            查看与管理全部销售机会，点击行进入详情
+            查看与管理全部商机，点击行进入详情
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/orders/new')}>
-          新建销售机会
+          新建商机
         </Button>
       </Stack>
       <Card>
@@ -190,7 +190,7 @@ export default function OrderList() {
               }}>
                 <TextField
                   size="small"
-                  placeholder="🔍  搜索机会号、项目名称、客户、PO、SO、年份、月份 · 多条件用空格"
+                  placeholder="搜索商机 ID、客户、项目、PO、SO、年份、月份，多条件用空格"
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
@@ -292,7 +292,7 @@ export default function OrderList() {
                   }}
                 >
                     <TableCell sx={{ width: 56 }} />
-                  <TableCell align="center">机会编号</TableCell>
+                  <TableCell align="center">ID</TableCell>
                     <TableCell align="center">客户信息</TableCell>
                     <TableCell align="center">车间/负责人</TableCell>
                     <TableCell>
@@ -327,9 +327,9 @@ export default function OrderList() {
                         <Stack spacing={1} alignItems="center">
                           <InboxIcon sx={{ fontSize: 56, color: 'text.disabled' }} />
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                            {scope === 'archived' ? '暂无存档销售机会' : '暂无进行中的销售机会'}
+                            {scope === 'archived' ? '暂无归档商机' : '暂无进行中的商机'}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">可调整搜索条件或点击右上角“新建销售机会”</Typography>
+                          <Typography variant="caption" color="text.secondary">可调整搜索条件或点击右上角“新建商机”</Typography>
                         </Stack>
                       </TableCell>
                     </TableRow>
@@ -395,7 +395,7 @@ export default function OrderList() {
                           <Stack spacing={0.25} alignItems="center">
                             <Tooltip title={order.order_id || '-'} arrow placement="top">
                               <Typography variant="body2" sx={{ fontWeight: 800, color: 'primary.main', fontSize: 13, lineHeight: 1.3 }}>
-                                {order.order_id ? `OPP-...${order.order_id.slice(-4)}` : '-'}
+                                {order.order_id || '-'}
                               </Typography>
                             </Tooltip>
                             <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, lineHeight: 1.2 }}>
@@ -487,7 +487,7 @@ export default function OrderList() {
                           <IconButton
                             size="small"
                             color="error"
-                            title="删除销售机会"
+                            title="删除商机"
                             disabled={deletingId === order.id}
                             onClick={() => removeOrder(order)}
                           >
