@@ -53,21 +53,6 @@ router.post('/download-token', authenticate, (req, res) => {
   return res.json({ token });
 });
 
-router.post('/change-password', authenticate, async (req, res) => {
-  const { oldPassword, newPassword } = req.body || {};
-  if (!oldPassword || !newPassword) return badRequest(res, '请输入原密码和新密码');
-  if (String(newPassword).length < 6) return badRequest(res, '新密码长度不能少于 6 位');
-  const user = getDb().prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-  if (!(await bcrypt.compare(String(oldPassword), user.password))) {
-    return badRequest(res, '原密码不正确');
-  }
-  const hash = await bcrypt.hash(String(newPassword), 10);
-  getDb().prepare('UPDATE users SET password = ?, updated_at = ? WHERE id = ?').run(hash, nowUtc(), req.user.id);
-  writeAudit(getDb(), { userId: req.user.id, action: 'other', entityType: 'user', entityId: req.user.id, detail: { event: 'change_password' } });
-  rotateJwtSecret();
-  return res.json({ message: '密码修改成功，请重新登录' });
-});
-
 router.put('/profile', authenticate, async (req, res) => {
   const { currentPassword, username: newUsername, newPassword } = req.body || {};
   if (!currentPassword) return badRequest(res, '请输入当前密码');

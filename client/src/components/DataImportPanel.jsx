@@ -32,24 +32,10 @@ import { downloadFile } from '../utils/download';
 const IMPORT_TARGETS = ['end_customer', 'contract_customer', 'material', 'guide_price', 'history'];
 const IMPORT_TARGET_META = {
   end_customer: { color: '#1976D2', desc: '导入最终客户基础档案' },
-  contract_customer: { color: '#009688', desc: '导入合同客户基础档案' },
+  contract_customer: { color: '#00ACC1', desc: '导入合同客户基础档案' },
   material: { color: '#2E7D32', desc: '导入框架协议价格与有效期' },
   guide_price: { color: '#F57C00', desc: '导入系统指导价格' },
   history: { color: '#7B1FA2', desc: '导入历史销售机会与闭环数据' }
-};
-
-const FADE_SLIDE = {
-  '@keyframes fadeSlide': {
-    from: { opacity: 0, transform: 'translateY(8px)' },
-    to: { opacity: 1, transform: 'translateY(0)' }
-  }
-};
-
-const ICON_PULSE = {
-  '@keyframes iconPulse': {
-    '0%, 100%': { transform: 'scale(1)' },
-    '50%': { transform: 'scale(1.08)' }
-  }
 };
 
 export default function DataImportPanel() {
@@ -254,7 +240,7 @@ export default function DataImportPanel() {
   };
 
   return (
-    <Box sx={{ ...FADE_SLIDE, animation: 'fadeSlide 0.4s ease' }}>
+    <Box>
       {error && <Alert severity="error" onClose={() => setError('')} sx={{ mb: 1.5 }}>{error}</Alert>}
       <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 0.5 }}>
         <Box
@@ -267,9 +253,7 @@ export default function DataImportPanel() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(25,118,210,0.28)',
-            ...ICON_PULSE,
-            animation: 'iconPulse 2.4s ease-in-out infinite'
+            boxShadow: '0 4px 12px rgba(25,118,210,0.28)'
           }}
         >
           <CloudUploadIcon fontSize="small" />
@@ -280,7 +264,7 @@ export default function DataImportPanel() {
         按标准模板批量导入基础档案与历史商机
       </Typography>
       <Stack spacing={1.5} sx={{ mb: 2.5 }}>
-        {IMPORT_TARGETS.map((target, index) => (
+        {IMPORT_TARGETS.map((target) => (
           <Box
             key={target}
             sx={{
@@ -292,15 +276,7 @@ export default function DataImportPanel() {
               borderRadius: 2,
               border: 1,
               borderColor: 'divider',
-              bgcolor: 'background.paper',
-              transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
-              animation: 'fadeSlide 0.4s ease',
-              animationDelay: `${index * 70}ms`,
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: '0 6px 18px rgba(15,23,42,0.10)',
-                borderColor: IMPORT_TARGET_META[target].color
-              }
+              bgcolor: 'background.paper'
             }}
           >
             <Box
@@ -313,10 +289,7 @@ export default function DataImportPanel() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                flexShrink: 0,
-                ...ICON_PULSE,
-                animation: 'iconPulse 3s ease-in-out infinite',
-                animationDelay: `${index * 300}ms`
+                flexShrink: 0
               }}
             >
               <CloudUploadIcon fontSize="small" />

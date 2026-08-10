@@ -17,7 +17,7 @@ import proposalRoutes from './routes/proposals.js';
 import quotationRoutes from './routes/quotations.js';
 import approvalRoutes from './routes/approvals.js';
 import customerPosRoutes from './routes/customerPos.js';
-import attachmentRoutes, { attachmentAdminRouter } from './routes/attachments.js';
+import attachmentRoutes from './routes/attachments.js';
 import shippingRoutes from './routes/shipping.js';
 import invoiceRoutes from './routes/invoices.js';
 import commissionRoutes from './routes/commission.js';
@@ -71,7 +71,6 @@ export function createApp() {
   app.use('/api/orders', authenticate, attachmentRoutes);
   app.use('/api/orders', authenticate, shippingRoutes);
   app.use('/api/orders', authenticate, invoiceRoutes);
-  app.use('/api/attachments', authenticate, attachmentAdminRouter);
   app.use('/api/commission', authenticate, commissionRoutes);
   app.use('/api/todos', authenticate, todoRoutes);
   app.use('/api/dashboard', authenticate, dashboardRoutes);

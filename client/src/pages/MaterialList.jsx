@@ -263,15 +263,21 @@ export default function MaterialList() {
             </Typography>
           </Box>
         </Stack>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          新增
-        </Button>
+        {tab !== 'import' && (
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+            新增
+          </Button>
+        )}
       </Stack>
       <Card>
         <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
         <Tabs
           value={tab}
-          onChange={(_, value) => setTab(value)}
+          onChange={(_, value) => {
+            setTab(value);
+            setEditor(null);
+            setCopyOpen(false);
+          }}
           sx={{
             px: 1.5,
             pt: 0.5,

@@ -147,6 +147,10 @@ router.post('/upload', upload.fields([{ name: 'file', maxCount: 1 }]), (req, res
   );
 
   const process = db.transaction(() => {
+    for (const so of amountMap.keys()) {
+      const already = db.prepare('SELECT id FROM orders WHERE sales_order = ? AND commission_matched = 1 LIMIT 1').get(so);
+      if (already) skippedMatchedCount += 1;
+    }
     const orders = db
       .prepare("SELECT * FROM orders WHERE status = 'commission' AND commission_matched = 0 AND sales_order IS NOT NULL AND sales_order <> ''")
       .all();
@@ -161,11 +165,6 @@ router.post('/upload', upload.fields([{ name: 'file', maxCount: 1 }]), (req, res
       } else {
         unmatchedCount += 1;
       }
-    }
-
-    for (const so of amountMap.keys()) {
-      const already = db.prepare('SELECT id FROM orders WHERE sales_order = ? AND commission_matched = 1 LIMIT 1').get(so);
-      if (already) skippedMatchedCount += 1;
     }
 
     const logInfo = db.prepare(

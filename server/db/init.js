@@ -114,6 +114,9 @@ export function initDb(dir) {
   db.exec('CREATE INDEX IF NOT EXISTS idx_guide_prices_material ON guide_prices(material_no)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_sales_order ON orders(sales_order)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_status_commission ON orders(status, commission_matched)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_order_attachments_reference ON order_attachments(reference_type, reference_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_audit_logs_action_entity ON audit_logs(action, entity_type, entity_id)');
 
   const ensureOrdersTotalNonNegative = () => {
     const ddlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get();

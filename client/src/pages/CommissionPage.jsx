@@ -51,7 +51,6 @@ export default function CommissionPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [headerRowIdx, setHeaderRowIdx] = useState(0);
   const [sheetInfo, setSheetInfo] = useState({ sheetNames: [], sheetName: '' });
-  const [_totalRows, setTotalRows] = useState(0);
   const [activeSheetIdx, setActiveSheetIdx] = useState(0);
   const [previewRows, setPreviewRows] = useState([]);
   const [manualTarget, setManualTarget] = useState(null);
@@ -158,7 +157,6 @@ export default function CommissionPage() {
       const first = sheetConfigs[0] || {};
       setHeaders(first.headers || []);
       setHeaderRowIdx(first.headerRowIdx || 0);
-      setTotalRows(first.totalRows || 0);
       setPreviewRows((first.rowData || []).slice((first.headerRowIdx || 0) + 1, (first.headerRowIdx || 0) + 6).map((row) => (first.headers || []).map((_, idx) => row[idx] ?? '')));
       setSheetInfo({ sheetNames: workbook.SheetNames, sheetName: workbook.SheetNames[0], totalSheets: workbook.SheetNames.length });
       
@@ -457,7 +455,6 @@ export default function CommissionPage() {
                                     setActiveSheetIdx(i);
                                     setHeaders(s.headers);
                                     setHeaderRowIdx(s.headerRowIdx);
-                                    setTotalRows(s.totalRows);
                                     setPreviewRows(s.rowData.slice(s.headerRowIdx + 1, s.headerRowIdx + 6).map((row) => s.headers.map((_, idx) => row[idx] ?? '')));
                                     setSheetInfo(prev => ({ ...prev, sheetName: s.sheetName }));
                                   }}
@@ -507,7 +504,6 @@ export default function CommissionPage() {
                                 setSheets(sheets.map((s, i) => i === activeSheetIdx ? updated : s));
                                 setHeaders(ch);
                                 setHeaderRowIdx(newIdx);
-                                setTotalRows(updated.totalRows);
                                 setPreviewRows(sheet.rowData.slice(newIdx + 1, newIdx + 6).map((row) => ch.map((_, i) => row[i] ?? '')));
                               }}
                               sx={{ minWidth: 100 }} SelectProps={{ native: true }}>

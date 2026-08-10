@@ -286,6 +286,7 @@ try {
   const commission = must(await call('POST', '/api/commission/upload', { token, form: buildCommissionForm() }), 200, '佣金匹配');
   assert.strictEqual(commission.matched, 1);
   assert.strictEqual(commission.duplicate_so_count, 1);
+  assert.strictEqual(commission.skipped_matched_count, 0);
   detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情3');
   assert.strictEqual(detail.order.status, 'closed');
   assert.strictEqual(Number(detail.order.commission_amount), 1499);
@@ -339,12 +340,12 @@ try {
   assert.strictEqual(oa2bRes.status, 'bid_decision');
   ok('审批驳回重提与 superseded');
 
-  // 未中标 → lost_closed → 数据修正回退
+  // 未中标 → lost_closed → 流程回退
   must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'bid', result: 'lost' } }), 200, '未中标');
   const corrected2 = must(
-    await call('PUT', '/api/settings/correct-order-data', {
+    await call('PUT', `/api/order-corrections/${order2.id}`, {
       token,
-      body: { order_id: order2.id, target_status: 'bid_decision', confirm: 1, changes: {} }
+      body: { target: 'bid_decision', confirm: 1, expected_status: 'lost_closed' }
     }),
     200,
     'lost_closed 回退'
@@ -369,14 +370,14 @@ try {
   assert.strictEqual(Number(detail.order.commission_amount), 88);
   ok('人工补录佣金闭环');
 
-  // 数据修正：closed → shipping_invoicing 清空佣金防死锁
+  // 流程回退：closed → shipping_invoicing 清空佣金防死锁
   const fixed = must(
-    await call('PUT', '/api/settings/correct-order-data', {
+    await call('PUT', `/api/order-corrections/${orderId}`, {
       token,
-      body: { order_id: orderId, target_status: 'shipping_invoicing', confirm: 1, changes: { delivered: 0, invoiced: 0 } }
+      body: { target: 'shipping_invoicing', confirm: 1, expected_status: 'closed' }
     }),
     200,
-    '数据修正回退'
+    '流程回退清空佣金'
   );
   assert.strictEqual(fixed.order.status, 'shipping_invoicing');
   assert.strictEqual(fixed.order.commission_matched, 0);
@@ -385,7 +386,7 @@ try {
   await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'toggle-invoiced', invoiced: 1 } });
   detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情4');
   assert.strictEqual(detail.order.status, 'commission');
-  ok('数据修正回退清空佣金');
+  ok('流程回退清空佣金');
 
   // 全新数据回退 API：选项、预览与执行
   const rcMeta = must(await call('GET', `/api/order-corrections/${orderId}`, { token }), 200, '回退选项');
@@ -506,7 +507,7 @@ try {
   assert.ok(history.items.length >= 1);
   const audits = must(await call('GET', '/api/audit-logs', { token }), 200, '审计日志');
   const actions = new Set(audits.items.map((row) => row.action));
-  for (const action of ['approval_submit', 'approval_approve', 'approval_reject', 'invoice_override', 'data_correct', 'order_rollback', 'commission_manual']) {
+  for (const action of ['approval_submit', 'approval_approve', 'approval_reject', 'invoice_override', 'order_rollback', 'commission_manual']) {
     assert.ok(actions.has(action), `缺少审计动作 ${action}`);
   }
   ok('看板/历史销售/待办/审计日志');

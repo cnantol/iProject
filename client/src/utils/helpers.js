@@ -1,5 +1,4 @@
 import { STEP_KEY_INDEX, isClosedStatus } from './orderStatus.js';
-export { ORDER_STATUS, CLOSED_STATUSES, isClosedStatus } from './orderStatus.js';
 
 export function fmtMoney(value, digits = 2) {
   const num = Number(value);
@@ -77,9 +76,4 @@ export function overdueDays(dueDate) {
   if (dueDate >= today) return 0;
   const diff = new Date(`${today}T00:00:00+08:00`) - new Date(`${dueDate}T00:00:00+08:00`);
   return Math.floor(diff / 86400000);
-}
-
-export function canAdvance(order) {
-  if (!order) return false;
-  return ['customer_info', 'proposal', 'finance'].includes(order.status);
 }

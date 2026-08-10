@@ -773,7 +773,7 @@ export default function QuoteStyleDesigner() {
     >
       <Typography variant="subtitle2" sx={{ fontWeight: 800, flex: 1, minWidth: 0 }}>{title}</Typography>
       <Chip size="small" label={`${count}`} variant="outlined" />
-      <IconButton size="small" onClick={() => toggleGroup(key)}>
+      <IconButton size="small">
         {expandedGroups[key] ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
       </IconButton>
     </Stack>
@@ -981,7 +981,7 @@ export default function QuoteStyleDesigner() {
           >
             <Typography variant="subtitle2" sx={{ fontWeight: 800, flex: 1, minWidth: 0 }}>{group.title}</Typography>
             <Chip size="small" label={`${group.keys.length}`} variant="outlined" />
-            <IconButton size="small" onClick={() => toggleLabelGroup(index)}>
+            <IconButton size="small">
               {expandedLabelGroups[index] ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
             </IconButton>
           </Stack>

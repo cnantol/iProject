@@ -356,3 +356,6 @@ CREATE INDEX IF NOT EXISTS idx_todos_due ON todos(due_date);
 CREATE INDEX IF NOT EXISTS idx_todos_order_ref ON todos(order_ref);
 CREATE INDEX IF NOT EXISTS idx_custom_fields_entity ON custom_fields(entity_type);
 CREATE INDEX IF NOT EXISTS idx_import_logs_target ON import_logs(target_type);
+CREATE INDEX IF NOT EXISTS idx_order_attachments_reference ON order_attachments(reference_type, reference_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action_entity ON audit_logs(action, entity_type, entity_id);

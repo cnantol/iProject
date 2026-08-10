@@ -9,10 +9,10 @@ import { getDb, getDataDir, getUploadDir, closeDb, initDb, seedWorkflow, rotateJ
 import { logger } from '../logger.js';
 import { upload, uploadRestore, RESTORE_MAX_FILE_SIZE } from '../middleware/upload.js';
 import { authenticateDownload } from '../middleware/auth.js';
-import { nowUtc, badRequest, notFound, isMoney, isBool, isValidDate, isNonNegativeNumber, normalizeDate, normalizeSo, writeAudit, headerIndex, cell } from '../utils.js';
-import { loadOrderDetail, checkSalesOrderUnique } from './orders.js';
-import { buildQuotationPdf } from './quotations.js';
+import { nowUtc, badRequest, notFound, isMoney, isNonNegativeNumber, normalizeDate, normalizeSo, writeAudit, headerIndex, cell } from '../utils.js';
+import { checkSalesOrderUnique } from './orders.js';
 import { hasFrameworkForCustomer } from './materials.js';
+import { templateFilePath } from '../lib/quotationTemplate.js';
 
 const router = Router();
 
@@ -31,69 +31,6 @@ router.get('/order-id-consistency', (req, res) => {
     .prepare('SELECT order_id, COUNT(*) c FROM orders GROUP BY order_id HAVING c > 1 ORDER BY order_id')
     .all();
   return res.json({ ok: mismatched.length === 0 && duplicates.length === 0, total, mismatched, duplicates });
-});
-
-// ---------- 工作流配置（展示层） ----------
-router.get('/workflow', (req, res) => {
-  const db = getDb();
-  const steps = db.prepare('SELECT * FROM workflow_steps ORDER BY sort_order').all();
-  const transitions = db.prepare('SELECT * FROM workflow_transitions ORDER BY id').all();
-  return res.json({ steps, transitions });
-});
-
-router.put('/workflow', (req, res) => {
-  const db = getDb();
-  const { steps } = req.body || {};
-  if (!Array.isArray(steps)) return badRequest(res, 'steps 必须为数组');
-  const tx = db.transaction((rows) => {
-    const update = db.prepare('UPDATE workflow_steps SET step_name = ?, sort_order = ?, is_active = ? WHERE step_key = ?');
-    for (const step of rows) {
-      if (!step.step_key) continue;
-      update.run(
-        step.step_name != null ? String(step.step_name) : step.step_key,
-        Number.isFinite(Number(step.sort_order)) ? Number(step.sort_order) : 0,
-        Number(step.is_active) === 1 ? 1 : 0,
-        step.step_key
-      );
-    }
-  });
-  tx(steps);
-  const result = db.prepare('SELECT * FROM workflow_steps ORDER BY sort_order').all();
-  return res.json({ steps: result });
-});
-
-// ---------- 步骤字段绑定（展示层配置） ----------
-router.get('/workflow/bindings', (req, res) => {
-  const items = getDb()
-    .prepare(
-      `SELECT wf.step_key, wf.field_id, wf.sort_order, cf.field_name, cf.entity_type
-       FROM workflow_step_fields wf
-       JOIN custom_fields cf ON cf.id = wf.field_id
-       ORDER BY wf.step_key, wf.sort_order`
-    )
-    .all();
-  return res.json({ items });
-});
-
-router.put('/workflow/bindings', (req, res) => {
-  const db = getDb();
-  const { bindings } = req.body || {};
-  if (!Array.isArray(bindings)) return badRequest(res, 'bindings 必须为数组');
-  const stepKeys = new Set(db.prepare('SELECT step_key FROM workflow_steps').all().map((row) => row.step_key));
-  const tx = db.transaction((rows) => {
-    const del = db.prepare('DELETE FROM workflow_step_fields WHERE step_key = ?');
-    const ins = db.prepare('INSERT INTO workflow_step_fields (step_key, field_id, sort_order) VALUES (?,?,?)');
-    for (const item of rows) {
-      if (!stepKeys.has(item.step_key) || !Array.isArray(item.field_ids)) continue;
-      del.run(item.step_key);
-      item.field_ids.forEach((fieldId, index) => {
-        const id = Number(fieldId);
-        if (Number.isFinite(id)) ins.run(item.step_key, id, index);
-      });
-    }
-  });
-  tx(bindings);
-  return res.json({ message: '字段绑定已保存' });
 });
 
 // ---------- 自定义字段 ----------
@@ -570,6 +507,7 @@ function importHistoryRow(db, headers, row) {
   const year = value('年份');
   const month = value('月份');
   if (orderId === null || String(orderId).trim() === '') return '销售机会编号必填';
+  if (!/^\d{4}$/.test(String(orderId).trim())) return '销售机会编号必须为 4 位数字';
   if (year === null || String(year).trim() === '') return '年份必填';
   if (month === null || String(month).trim() === '') return '月份必填';
   const status = value('状态') ? String(value('状态')) : 'customer_info';
@@ -599,7 +537,7 @@ function importHistoryRow(db, headers, row) {
   }
   const delivered = parseBool(value('是否发货'));
   const invoiced = parseBool(value('是否开票'));
-  const commissionMatched = parseBool(value('佣金是否匹配'));
+  let commissionMatched = parseBool(value('佣金是否匹配'));
   const commissionAmountRaw = value('佣金金额');
   let commissionAmount = null;
   if (commissionAmountRaw !== null && commissionAmountRaw !== '') {
@@ -629,6 +567,12 @@ function importHistoryRow(db, headers, row) {
   const orderType = value('销售机会类型') ? String(value('销售机会类型')) : null;
   if (orderType && !['A', 'B', 'C'].includes(orderType)) return '销售机会类型无效';
   const ts = nowUtc();
+  let commissionDate = commissionMatched === 1 ? ts : null;
+  if (status === 'closed' && commissionMatched !== 1) {
+    commissionMatched = 1;
+    commissionAmount = commissionAmount === null ? 0 : commissionAmount;
+    commissionDate = ts;
+  }
   try {
     const info = db
       .prepare(
@@ -659,7 +603,7 @@ function importHistoryRow(db, headers, row) {
         invoicedDate,
         commissionMatched,
         commissionAmount,
-        commissionMatched === 1 ? ts : null,
+        commissionDate,
         status,
         hasFrameworkForCustomer(endCustomerId) ? 1 : 0,
         0,
@@ -788,16 +732,12 @@ function createBackup() {
   const filename = `iproject-backup-${ts}-${crypto.randomBytes(3).toString('hex')}.zip`;
   const zip = new AdmZip();
   if (fs.existsSync(dbPath)) zip.addFile('database.sqlite', fs.readFileSync(dbPath));
-  if (fs.existsSync(quoteStyleFile())) zip.addFile('quote-style.json', fs.readFileSync(quoteStyleFile()));
+  if (fs.existsSync(templateFilePath())) zip.addFile('quotation-template.json', fs.readFileSync(templateFilePath()));
   if (fs.existsSync(fieldDisplayFile())) zip.addFile('field-display-names.json', fs.readFileSync(fieldDisplayFile()));
   if (fs.existsSync(appLogoFile())) zip.addFile('app-logo.json', fs.readFileSync(appLogoFile()));
-  const uploads = getUploadDir();
-  if (fs.existsSync(uploads)) {
-    for (const file of fs.readdirSync(uploads)) {
-      const filePath = path.join(uploads, file);
-      if (fs.statSync(filePath).isFile()) zip.addFile(`uploads/${file}`, fs.readFileSync(filePath));
-    }
-  }
+  if (fs.existsSync(backupScheduleFile())) zip.addFile('backup-schedule.json', fs.readFileSync(backupScheduleFile()));
+  addDirToZip(zip, getUploadDir(), 'uploads');
+  addDirToZip(zip, path.join(dataDir, 'custom-fonts'), 'custom-fonts');
   const zipPath = path.join(backupDir, filename);
   fs.writeFileSync(zipPath, zip.toBuffer());
   // 异步触发清理,避免阻塞响应
@@ -805,6 +745,19 @@ function createBackup() {
     try { enforceBackupRetention(); } catch (err) { logger.error('backup', '备份保留清理失败', { err: err?.message }); }
   });
   return { filename, size: fs.statSync(zipPath).size, downloadUrl: `/api/settings/backup/${filename}/download` };
+}
+
+function addDirToZip(zip, dir, prefix) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    const zipPath = `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) {
+      addDirToZip(zip, fullPath, zipPath);
+    } else if (entry.isFile()) {
+      zip.addFile(zipPath, fs.readFileSync(fullPath));
+    }
+  }
 }
 
 function listBackupFiles() {
@@ -845,228 +798,6 @@ router.post('/backup', (req, res) => {
   const result = createBackup();
   writeAudit(getDb(), { userId: req.user.id, action: 'other', entityType: 'settings', detail: { event: 'backup', filename: result.filename } });
   return res.json(result);
-});
-
-// ---------- 报价单式样 ----------
-const QUOTE_STYLE_LABEL_KEYS = [
-  'quote_title',
-  'quote_date',
-  'quote_no',
-  'order_no',
-  'project_name',
-  'end_customer',
-  'contract_customer',
-  'detail_title',
-  'total',
-  'material_no',
-  'description',
-  'type',
-  'price_source',
-  'unit_price',
-  'qty',
-  'line_amount'
-];
-
-const QUOTE_STYLE_VISIBILITY_KEYS = [
-  'quote_no',
-  'quote_date',
-  'order_no',
-  'project_name',
-  'end_customer',
-  'contract_customer',
-  'contact_info',
-  'material_no',
-  'description',
-  'type',
-  'price_source',
-  'unit_price',
-  'qty',
-  'line_amount'
-];
-
-function defaultQuoteStyle() {
-  return {
-    company_name: 'iProject',
-    primary_color: '#004E9A',
-    secondary_color: '#DCE8F5',
-    company_address: '',
-    company_phone: '',
-    company_email: '',
-    header_text: '',
-    footer_text: '',
-    font_family: 'sans',
-    quote_no_template: '',
-    title_alignment: 'center',
-    info_alignment: 'center',
-    header_alignment: 'center',
-    footer_alignment: 'center',
-    language: 'zh',
-    logo_position: 'center',
-    quote_date: '',
-    logo: null,
-    field_visibility: {
-      quote_no: 1,
-      quote_date: 1,
-      order_no: 1,
-      project_name: 1,
-      end_customer: 1,
-      contract_customer: 1,
-      contact_info: 1,
-      material_no: 1,
-      description: 1,
-      type: 1,
-      price_source: 1,
-      unit_price: 1,
-      qty: 1,
-      line_amount: 1
-    },
-    labels: {
-      quote_title: '报价单',
-      quote_date: '报价日期',
-      quote_no: '报价单编号',
-      order_no: '销售机会编号',
-      project_name: '项目名称',
-      end_customer: '最终客户',
-      contract_customer: '合同客户',
-      detail_title: '报价明细',
-      total: '合计（未税）',
-      material_no: '物料号',
-      description: '描述',
-      type: '类型',
-      price_source: '价格来源',
-      unit_price: '单价',
-      qty: '数量',
-      line_amount: '行金额'
-    },
-    labels_en: {
-      quote_title: 'Quotation',
-      quote_date: 'Quotation Date',
-      quote_no: 'Quotation No.',
-      order_no: 'Order No.',
-      project_name: 'Project Name',
-      end_customer: 'End Customer',
-      contract_customer: 'Contract Customer',
-      detail_title: 'Quotation Details',
-      total: 'Total (Excl. VAT)',
-      material_no: 'Material No.',
-      description: 'Description',
-      type: 'Type',
-      price_source: 'Price Source',
-      unit_price: 'Unit Price',
-      qty: 'Qty',
-      line_amount: 'Line Amount'
-    }
-  };
-}
-
-function normalizeQuoteStyle(raw = {}) {
-  const defaults = defaultQuoteStyle();
-  const text = (value, fallback, max = 200) => (value === undefined || value === null ? fallback : String(value).trim().slice(0, max));
-  const color = (value, fallback) => (/^#[0-9A-Fa-f]{6}$/.test(String(value || '')) ? String(value) : fallback);
-  const labels = { ...defaults.labels };
-  const rawLabels = raw.labels && typeof raw.labels === 'object' ? raw.labels : {};
-  for (const key of QUOTE_STYLE_LABEL_KEYS) {
-    if (rawLabels[key] !== undefined) labels[key] = text(rawLabels[key], labels[key], 40);
-  }
-  const labelsEn = { ...defaults.labels_en };
-  const rawLabelsEn = raw.labels_en && typeof raw.labels_en === 'object' ? raw.labels_en : {};
-  for (const key of QUOTE_STYLE_LABEL_KEYS) {
-    if (rawLabelsEn[key] !== undefined) labelsEn[key] = text(rawLabelsEn[key], labelsEn[key], 40);
-  }
-  const align = (value, fallback) => (['left', 'center', 'right'].includes(value) ? value : fallback);
-  const visibility = { ...defaults.field_visibility };
-  const rawVisibility = raw.field_visibility && typeof raw.field_visibility === 'object' ? raw.field_visibility : {};
-  for (const key of QUOTE_STYLE_VISIBILITY_KEYS) {
-    if (rawVisibility[key] !== undefined) visibility[key] = Number(rawVisibility[key]) === 1 || rawVisibility[key] === true ? 1 : 0;
-  }
-  const logo = raw.logo && /^data:image\/(png|jpeg|jpg);base64,/i.test(String(raw.logo)) && String(raw.logo).length <= 2_400_000 ? String(raw.logo) : null;
-  const quoteDate = raw.quote_date && /^\d{4}-\d{2}-\d{2}$/.test(String(raw.quote_date)) ? String(raw.quote_date) : '';
-  return {
-    company_name: text(raw.company_name, defaults.company_name, 80),
-    primary_color: color(raw.primary_color, defaults.primary_color),
-    secondary_color: color(raw.secondary_color, defaults.secondary_color),
-    company_address: text(raw.company_address, '', 200),
-    company_phone: text(raw.company_phone, '', 60),
-    company_email: text(raw.company_email, '', 120),
-    header_text: text(raw.header_text, '', 200),
-    footer_text: text(raw.footer_text, '', 200),
-    font_family: ['sans', 'serif', 'mono'].includes(raw.font_family) ? raw.font_family : defaults.font_family,
-    quote_no_template: text(raw.quote_no_template, defaults.quote_no_template, 120),
-    title_alignment: align(raw.title_alignment, defaults.title_alignment),
-    info_alignment: align(raw.info_alignment, defaults.info_alignment),
-    header_alignment: align(raw.header_alignment, defaults.header_alignment),
-    footer_alignment: align(raw.footer_alignment, defaults.footer_alignment),
-    language: ['zh', 'en'].includes(raw.language) ? raw.language : defaults.language,
-    logo_position: ['left', 'center', 'right'].includes(raw.logo_position) ? raw.logo_position : defaults.logo_position,
-    quote_date: quoteDate,
-    logo,
-    field_visibility: visibility,
-    labels,
-    labels_en: labelsEn
-  };
-}
-
-function quoteStyleFile() {
-  return path.join(getDataDir(), 'quote-style.json');
-}
-
-function readQuoteStyle() {
-  try {
-    return normalizeQuoteStyle(JSON.parse(fs.readFileSync(quoteStyleFile(), 'utf8')));
-  } catch {
-    return defaultQuoteStyle();
-  }
-}
-
-router.get('/quote-style', (req, res) => {
-  return res.json(readQuoteStyle());
-});
-
-router.put('/quote-style', (req, res) => {
-  const style = normalizeQuoteStyle(req.body || {});
-  fs.writeFileSync(quoteStyleFile(), JSON.stringify(style, null, 2));
-  return res.json(style);
-});
-
-router.post('/quote-style/test-pdf', (req, res, next) => {
-  try {
-    const style = normalizeQuoteStyle(req.body?.style || readQuoteStyle());
-    const sampleOrder = { order_id: '0001', project_name: '示例项目（测试）' };
-    const sampleRound = { round_no: 1, total_amount: 128500.5 };
-    const sampleItems = [
-      {
-        material_no: 'AC-1001',
-        description: '压缩机组示例',
-        material_type: 'standard',
-        price_source: 'guide_price',
-        unit_price_ex_vat: 128500.5,
-        qty: 1,
-        line_amount: 128500.5
-      },
-      {
-        material_no: 'AC-1002',
-        description: '备件套件示例',
-        material_type: 'non_standard',
-        price_source: 'manual',
-        unit_price_ex_vat: 0,
-        qty: 1,
-        line_amount: 0
-      }
-    ];
-    const customerNames = { end: '示例最终客户', contract: '示例合同客户', endShort: 'AC', contractShort: null };
-    const doc = buildQuotationPdf(sampleOrder, sampleRound, sampleItems, customerNames, style);
-    const chunks = [];
-    doc.on('error', next);
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => {
-      const buffer = Buffer.concat(chunks);
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', 'attachment; filename="quote-style-test.pdf"');
-      res.send(buffer);
-    });
-  } catch (err) {
-    next(err);
-  }
 });
 
 // ---------- 字段显示名称配置 ----------
@@ -1210,7 +941,7 @@ export function startBackupScheduler() {
       const schedule = readBackupSchedule();
       if (!schedule.enabled) return;
       const now = new Date();
-      const key = `${now.getHours()}:${now.getMinutes()}`;
+      const key = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       const target = `${String(schedule.hour).padStart(2, '0')}:${String(schedule.minute).padStart(2, '0')}`;
       if (key !== target || key === lastScheduledBackupKey) return;
       lastScheduledBackupKey = key;
@@ -1300,12 +1031,19 @@ function performRestore(zipPath, displayName, userId) {
         fs.rmSync(getUploadDir(), { recursive: true, force: true });
         fs.cpSync(uploadsDir, getUploadDir(), { recursive: true });
       }
-      const styleFile = path.join(tmpDir, 'quote-style.json');
-      if (fs.existsSync(styleFile)) fs.copyFileSync(styleFile, quoteStyleFile());
+      const newTemplateFile = path.join(tmpDir, 'quotation-template.json');
+      if (fs.existsSync(newTemplateFile)) fs.copyFileSync(newTemplateFile, templateFilePath());
       const fieldFile = path.join(tmpDir, 'field-display-names.json');
       if (fs.existsSync(fieldFile)) fs.copyFileSync(fieldFile, fieldDisplayFile());
       const logoFile = path.join(tmpDir, 'app-logo.json');
       if (fs.existsSync(logoFile)) fs.copyFileSync(logoFile, appLogoFile());
+      const scheduleFile = path.join(tmpDir, 'backup-schedule.json');
+      if (fs.existsSync(scheduleFile)) fs.copyFileSync(scheduleFile, backupScheduleFile());
+      const fontDir = path.join(tmpDir, 'custom-fonts');
+      if (fs.existsSync(fontDir)) {
+        fs.rmSync(path.join(dataDir, 'custom-fonts'), { recursive: true, force: true });
+        fs.cpSync(fontDir, path.join(dataDir, 'custom-fonts'), { recursive: true });
+      }
       initDb(dataDir);
       reinitialized = true;
       writeAudit(getDb(), { userId, action: 'other', entityType: 'settings', detail: { event: 'restore', filename: displayName } });
@@ -1357,184 +1095,6 @@ router.post('/restore/:filename', (req, res) => {
   } catch (err) {
     return badRequest(res, err.message || '还原失败');
   }
-});
-
-// ---------- 数据修正 ----------
-router.put('/correct-order-data', (req, res) => {
-  const db = getDb();
-  const { order_id: orderId, changes = {}, target_status: targetStatus = null, confirm = false } = req.body || {};
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(Number(orderId));
-  if (!order) return notFound(res);
-  if (Number(confirm) !== 1) return badRequest(res, '数据修正需二次确认');
-
-  const before = {
-    status: order.status,
-    sales_order: order.sales_order,
-    total_amount: order.total_amount,
-    delivered: order.delivered,
-    delivered_date: order.delivered_date,
-    invoiced: order.invoiced,
-    invoiced_date: order.invoiced_date,
-    commission_matched: order.commission_matched,
-    commission_amount: order.commission_amount,
-    commission_date: order.commission_date,
-    bid_result: order.bid_result,
-    closed_at: order.closed_at,
-    selected_round_id: order.selected_round_id
-  };
-
-  const next = { ...before };
-  const target = targetStatus ? String(targetStatus) : null;
-  const validTargets = ['shipping_invoicing', 'finance', 'commission', 'bid_decision', 'quotation', 'proposal'];
-  if (target && !validTargets.includes(target)) return badRequest(res, '回退目标状态无效');
-  if (target && target === 'commission' && !['closed'].includes(order.status)) return badRequest(res, '仅 closed 销售机会可回退至 commission');
-  // 中间阶段也允许向更早的步骤回退（防止越界推进）
-  const stepOrder = ['customer_info', 'proposal', 'quotation', 'approval_pending', 'bid_decision', 'finance', 'shipping_invoicing', 'commission', 'closed', 'lost_closed', 'cancelled'];
-  if (target) {
-    const targetIdx = stepOrder.indexOf(target);
-    const orderIdx = stepOrder.indexOf(order.status);
-    // 目标必须在当前阶段之前（index 更小）；等于当前阶段不允许
-    if (targetIdx === -1 || orderIdx === -1 || targetIdx >= orderIdx) {
-      return badRequest(res, '当前状态不支持回退');
-    }
-  }
-
-  if (changes.delivered !== undefined) {
-    if (!isBool(Number(changes.delivered))) return badRequest(res, '发货状态参数无效');
-    next.delivered = Number(changes.delivered);
-    if (next.delivered === 0 && ['commission', 'closed'].includes(order.status) && !target) {
-      return badRequest(res, '将 delivered 改为 0 必须指定回退目标状态');
-    }
-  }
-  if (changes.delivered_date !== undefined) {
-    const date = changes.delivered_date ? String(changes.delivered_date) : null;
-    if (date && !isValidDate(date)) return badRequest(res, '发货日期格式必须为 YYYY-MM-DD');
-    next.delivered_date = date;
-  }
-  if (changes.invoiced !== undefined) {
-    if (!isBool(Number(changes.invoiced))) return badRequest(res, '开票状态参数无效');
-    next.invoiced = Number(changes.invoiced);
-    if (next.invoiced === 0 && ['commission', 'closed'].includes(order.status) && !target) {
-      return badRequest(res, '将 invoiced 改为 0 必须指定回退目标状态');
-    }
-  }
-  if (changes.invoiced_date !== undefined) {
-    const date = changes.invoiced_date ? String(changes.invoiced_date) : null;
-    if (date && !isValidDate(date)) return badRequest(res, '开票日期格式必须为 YYYY-MM-DD');
-    next.invoiced_date = date;
-  }
-  if (changes.total_amount !== undefined && changes.total_amount !== null && changes.total_amount !== '') {
-    if (!isNonNegativeNumber(changes.total_amount)) return badRequest(res, '总金额不能小于 0');
-    next.total_amount = Number(changes.total_amount);
-  } else if (changes.total_amount !== undefined) {
-    next.total_amount = null;
-  }
-  if (changes.sales_order !== undefined) {
-    const so = changes.sales_order ? normalizeSo(changes.sales_order) : null;
-    if (so && !checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他销售机会使用');
-    next.sales_order = so;
-  }
-  if (changes.payment_terms !== undefined) next.payment_terms = changes.payment_terms || null;
-
-  const tx = db.transaction(() => {
-    if (target === 'shipping_invoicing') {
-      next.delivered = next.delivered === 1 && !changes.delivered ? 0 : next.delivered;
-      next.invoiced = next.invoiced === 1 && !changes.invoiced ? 0 : next.invoiced;
-      next.commission_matched = 0;
-      next.commission_amount = null;
-      next.commission_date = null;
-    } else if (target === 'finance') {
-      next.commission_matched = 0;
-      next.commission_amount = null;
-      next.commission_date = null;
-      next.delivered = 0;
-      next.delivered_date = null;
-      next.invoiced = 0;
-      next.invoiced_date = null;
-    } else if (target === 'bid_decision') {
-      next.commission_matched = 0;
-      next.commission_amount = null;
-      next.commission_date = null;
-      next.delivered = 0;
-      next.delivered_date = null;
-      next.invoiced = 0;
-      next.invoiced_date = null;
-      next.sales_order = null;
-      next.total_amount = null;
-      db.prepare('DELETE FROM customer_pos WHERE order_id = ?').run(order.id);
-      if (['lost_closed', 'cancelled'].includes(order.status)) {
-        next.bid_result = null;
-        next.closed_at = null;
-      }
-    } else if (target === 'quotation') {
-      next.commission_matched = 0;
-      next.commission_amount = null;
-      next.commission_date = null;
-      next.delivered = 0;
-      next.delivered_date = null;
-      next.invoiced = 0;
-      next.invoiced_date = null;
-      next.sales_order = null;
-      next.total_amount = null;
-      next.selected_round_id = null;
-      next.bid_result = null;
-      next.closed_at = null;
-      db.prepare('DELETE FROM customer_pos WHERE order_id = ?').run(order.id);
-      db.prepare("UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND status IN ('pending','approved')").run(order.id);
-    } else if (target === 'proposal') {
-      // 回退到方案阶段：清空方案阶段之后产生的字段，保留 proposal_versions / 选型明细 / 报价轮次
-      next.commission_matched = 0;
-      next.commission_amount = null;
-      next.commission_date = null;
-      next.delivered = 0;
-      next.delivered_date = null;
-      next.invoiced = 0;
-      next.invoiced_date = null;
-      next.sales_order = null;
-      next.total_amount = null;
-      next.selected_round_id = null;
-      next.bid_result = null;
-      next.closed_at = null;
-      db.prepare('DELETE FROM customer_pos WHERE order_id = ?').run(order.id);
-      db.prepare("UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND status IN ('pending','approved')").run(order.id);
-    } else if (target === 'commission') {
-      next.commission_matched = 0;
-      next.commission_amount = null;
-      next.commission_date = null;
-    }
-
-    db.prepare(
-      `UPDATE orders SET status=?, sales_order=?, total_amount=?, delivered=?, delivered_date=?, invoiced=?, invoiced_date=?,
-        commission_matched=?, commission_amount=?, commission_date=?, bid_result=?, closed_at=?, selected_round_id=?, payment_terms=?, updated_at=?
-       WHERE id=?`
-    ).run(
-      target || order.status,
-      next.sales_order,
-      next.total_amount,
-      next.delivered,
-      next.delivered_date,
-      next.invoiced,
-      next.invoiced_date,
-      next.commission_matched,
-      next.commission_amount,
-      next.commission_date,
-      next.bid_result,
-      next.closed_at,
-      next.selected_round_id,
-      next.payment_terms,
-      nowUtc(),
-      order.id
-    );
-    writeAudit(db, {
-      userId: req.user.id,
-      action: 'data_correct',
-      entityType: 'order',
-      entityId: order.id,
-      detail: { before, after: next, target_status: target }
-    });
-  });
-  tx();
-  return res.json(loadOrderDetail(db, order.id));
 });
 
 // ---------- 重置 ----------
