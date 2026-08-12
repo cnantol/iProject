@@ -20,6 +20,7 @@ import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
+import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
@@ -39,6 +40,9 @@ import { tableHeadTokens } from '../theme/md3Theme';
 
 export default function CommissionPage() {
   const [waiting, setWaiting] = useState([]);
+  const [waitingPage, setWaitingPage] = useState(1);
+  const [waitingPageSize, setWaitingPageSize] = useState(20);
+  const [waitingTotal, setWaitingTotal] = useState(0);
   const [imports, setImports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -72,16 +76,22 @@ export default function CommissionPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [waitRes, importRes] = await Promise.all([api.get('/commission/waiting'), api.get('/commission/imports')]);
+      const [waitRes, importRes] = await Promise.all([
+        api.get('/commission/waiting', { params: { page: waitingPage, limit: waitingPageSize } }),
+        api.get('/commission/imports')
+      ]);
       setWaiting(waitRes.data.items || []);
+      setWaitingTotal(waitRes.data.total || 0);
       setImports(importRes.data.items || []);
+      const maxPage = Math.max(1, Math.ceil((waitRes.data.total || 0) / waitingPageSize));
+      if (waitingPage > maxPage) setWaitingPage(maxPage);
       setError('');
     } catch (err) {
       setError(errorMessage(err, '加载失败'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [waitingPage, waitingPageSize]);
 
   const clearImports = async () => {
     if (!window.confirm('确认清空全部匹配历史？此操作不可撤销。')) return;
@@ -588,8 +598,8 @@ export default function CommissionPage() {
               <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 1.5, flexWrap: 'nowrap' }}>
                 <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main', flexShrink: 0 }} />
                 <Typography variant="h6" fontWeight={800} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>等待匹配清单</Typography>
-                {!loading && waiting.length > 0 && (
-                  <Chip size="small" color="primary" label={`共 ${waiting.length} 条`} sx={{ fontWeight: 800, fontSize: 13, height: 26, flexShrink: 0 }} />
+                {!loading && waitingTotal > 0 && (
+                  <Chip size="small" color="primary" label={`共 ${waitingTotal} 条`} sx={{ fontWeight: 800, fontSize: 13, height: 26, flexShrink: 0 }} />
                 )}
                 {loading && <CircularProgress size={18} sx={{ ml: 1 }} />}
               </Stack>
@@ -601,6 +611,7 @@ export default function CommissionPage() {
                   <Typography variant="body2" color="text.secondary">暂无等待匹配的销售机会</Typography>
                 </Box>
               ) : (
+                <>
                 <Table size="small" sx={{ '& .MuiTableCell-head': { fontWeight: 800 } }}>
                   <TableHead>
                     <TableRow sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { '& .MuiTableCell-head': { bgcolor: tk.bg, color: tk.color } }; }}>
@@ -627,7 +638,7 @@ export default function CommissionPage() {
                     </TableRow>
                   </TableHead>
                     <TableBody>
-                      {waiting.slice(0, 200).map((item) => (
+                      {waiting.map((item) => (
                         <TableRow key={item.id} hover sx={(theme) => ({ '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#fafbfd' } })}>
                           <TableCell sx={{ fontWeight: 700, color: 'primary.main', whiteSpace: 'nowrap' }}>{item.order_id}</TableCell>
                           <TableCell sx={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -653,6 +664,21 @@ export default function CommissionPage() {
                       ))}
                     </TableBody>
                   </Table>
+                  <TablePagination
+                    component="div"
+                    count={waitingTotal}
+                    page={waitingPage - 1}
+                    rowsPerPage={waitingPageSize}
+                    onPageChange={(_, nextPage) => setWaitingPage(nextPage + 1)}
+                    onRowsPerPageChange={(e) => {
+                      setWaitingPageSize(parseInt(e.target.value, 10) || 20);
+                      setWaitingPage(1);
+                    }}
+                    rowsPerPageOptions={[20, 50, 100]}
+                    labelRowsPerPage="每页"
+                    labelDisplayedRows={({ from, to, count }) => `${from}-${to} / ${count}`}
+                  />
+                </>
               )}
             </CardContent>
           </Card>

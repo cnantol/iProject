@@ -342,6 +342,7 @@ BEGIN
 END;
 
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_status_bid ON orders(status, bid_result);
 CREATE INDEX IF NOT EXISTS idx_customer_pos_order ON customer_pos(order_id);
 CREATE INDEX IF NOT EXISTS idx_proposal_versions_order ON proposal_versions(order_id);
 CREATE INDEX IF NOT EXISTS idx_proposal_selections_version ON proposal_selections(proposal_version_id);

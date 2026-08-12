@@ -12,6 +12,7 @@
     "dev:client": "node scripts/dev-client.mjs",
     "smoke": "node server/scripts/smoke-test.mjs",
     "seed:test": "pnpm --filter iproject-server seed:test",
+    "import:atlas": "node server/scripts/import-atlas-copco.mjs",
     "lint:page-structure": "node scripts/check-page-structure.mjs",
     "prebuild": "pnpm lint:page-structure && pnpm lint",
     "lint": "eslint ."

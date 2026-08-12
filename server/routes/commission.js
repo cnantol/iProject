@@ -198,6 +198,11 @@ router.post('/upload', upload.fields([{ name: 'file', maxCount: 1 }]), (req, res
 
 router.get('/waiting', (req, res) => {
   const db = getDb();
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+  const total = db
+    .prepare("SELECT COUNT(*) AS c FROM orders WHERE status = 'commission' AND commission_matched = 0")
+    .get().c;
   const orders = db
     .prepare(
       `SELECT o.*, ec.customer_name AS end_customer_name, cc.customer_name AS contract_customer_name
@@ -205,9 +210,10 @@ router.get('/waiting', (req, res) => {
        LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
        LEFT JOIN contract_customers cc ON cc.id = o.contract_customer_id
        WHERE o.status = 'commission' AND o.commission_matched = 0
-       ORDER BY o.id DESC`
+       ORDER BY o.id DESC
+       LIMIT ? OFFSET ?`
     )
-    .all();
+    .all(limit, (page - 1) * limit);
 
   const posByOrder = new Map();
   if (orders.length > 0) {
@@ -231,7 +237,7 @@ router.get('/waiting', (req, res) => {
       expected_commission: order.total_amount != null ? Math.round(order.total_amount * 0.01 * 100) / 100 : null
     };
   });
-  return res.json({ items });
+  return res.json({ items, total, page, limit });
 });
 
 router.get('/deviations', (req, res) => {

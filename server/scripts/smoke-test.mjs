@@ -125,6 +125,17 @@ try {
   assert.strictEqual(emptyImport.status, 400);
   ok('数据导入批读与列映射边界');
 
+  const historyHeaders = ['销售机会编号', '年份', '月份', '最终客户', '合同客户', '项目名称', '项目负责人', '销售机会类型', '状态', 'Sales Order', '总金额', '是否发货', '发货日期', '是否开票', '开票日期', '佣金是否匹配', '佣金金额', '付款条款', '项目编号', '车间', '项目备注'];
+  const historyImport = await uploadImport('history', historyHeaders, [
+    ['abc', '2026', '5', ec.customer_name, cc.customer_name, '自动编号导入测试', '李工', 'A', '', 'SO-HIST-AUTO', 100, 1, '2026-05-01', 1, '2026-05-01', 0, 0, 'TT60', '', '', '备注']
+  ]);
+  assert.strictEqual(historyImport.status, 'done');
+  assert.strictEqual(historyImport.success_rows, 1);
+  const autoOrder = getDb().prepare('SELECT id, order_id FROM orders WHERE sales_order = ?').get('SO-HIST-AUTO');
+  assert.ok(autoOrder);
+  assert.strictEqual(autoOrder.order_id, String(autoOrder.id).padStart(4, '0'));
+  ok('历史商机导入自动生成编号');
+
   // 创建销售机会
   const created = must(
     await call('POST', '/api/orders', {
@@ -312,6 +323,8 @@ try {
   const waiting = must(await call('GET', '/api/commission/waiting', { token }), 200, '佣金等待清单');
   assert.ok(waiting.items.some((item) => item.id === orderId));
   assert.ok(waiting.items.some((item) => Array.isArray(item.pos)));
+  assert.ok(waiting.total >= 1);
+  assert.ok(waiting.limit >= 1);
   ok('佣金等待清单批量加载 PO');
 
   // 佣金 Excel 匹配

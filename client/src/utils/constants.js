@@ -51,9 +51,9 @@ export const ATTACHMENT_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jp
 export const IMPORT_TARGET_LABELS = {
   end_customer: '最终客户导入',
   contract_customer: '合同客户导入',
-  material: '框架协议价格导入',
-  guide_price: '指导价导入',
-  history: '历史销售机会导入'
+  material: '框架协议导入',
+  guide_price: '指导价格导入',
+  history: '历史商机导入'
 };
 
 export const ORDER_TYPES = ['A', 'B', 'C'];

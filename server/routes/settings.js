@@ -110,19 +110,19 @@ const IMPORT_TARGETS = {
     required: ['客户名称']
   },
   material: {
-    label: '框架协议价格导入',
+    label: '框架协议导入',
     headers: ['最终客户', '物料号', '描述', '协议未税单价', '单位', '协议编号', '生效日期', '失效日期', '备注'],
     required: ['最终客户', '物料号', '协议未税单价', '生效日期']
   },
   guide_price: {
-    label: '指导价导入',
+    label: '指导价格导入',
     headers: ['物料号', '描述', '指导价', '单位', '备注'],
     required: ['物料号', '指导价']
   },
   history: {
-    label: '历史销售机会导入',
+    label: '历史商机导入',
     headers: ['销售机会编号', '年份', '月份', '最终客户', '合同客户', '项目名称', '项目负责人', '销售机会类型', '状态', 'Sales Order', '总金额', '是否发货', '发货日期', '是否开票', '开票日期', '佣金是否匹配', '佣金金额', '付款条款', '项目编号', '车间', '项目备注'],
-    required: ['销售机会编号', '年份', '月份']
+    required: ['年份', '月份']
   }
 };
 
@@ -150,6 +150,7 @@ router.get('/import/:target/template', authenticateDownload, (req, res) => {
 
 const importTasks = new Map();
 const IMPORT_TASK_TTL_MS = 30 * 60 * 1000;
+const IMPORT_MAX_ROWS = 200000;
 
 function taskTime(ms) {
   return ms ? new Date(ms).toISOString().replace('T', ' ').slice(0, 19) : null;
@@ -353,6 +354,10 @@ router.post('/import/:target', upload.single('file'), (req, res) => {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const ref = sheet && sheet['!ref'] ? sheet['!ref'] : 'A1';
     const range = xlsx.utils.decode_range(ref);
+    if (range.e.r > IMPORT_MAX_ROWS) {
+      fs.unlinkSync(req.file.path);
+      return badRequest(res, `导入行数不能超过 ${IMPORT_MAX_ROWS} 行`);
+    }
     const headerRange = xlsx.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 0, c: range.e.c } });
     const rawHeaders = (xlsx.utils.sheet_to_json(sheet, { header: 1, range: headerRange, defval: null, raw: true })[0] || []);
     let mapping = null;
@@ -521,11 +526,8 @@ function importRow(db, target, headers, row) {
 
 function importHistoryRow(db, headers, row) {
   const value = (name) => cell(row, headerIndex(headers, name));
-  const orderId = value('销售机会编号');
   const year = value('年份');
   const month = value('月份');
-  if (orderId === null || String(orderId).trim() === '') return '销售机会编号必填';
-  if (!/^\d{4}$/.test(String(orderId).trim())) return '销售机会编号必须为 4 位数字';
   if (year === null || String(year).trim() === '') return '年份必填';
   if (month === null || String(month).trim() === '') return '月份必填';
   const status = value('状态') ? String(value('状态')) : 'customer_info';
@@ -592,6 +594,7 @@ function importHistoryRow(db, headers, row) {
     commissionDate = ts;
   }
   try {
+    const placeholderOrderId = `PENDING-${crypto.randomUUID()}`;
     const info = db
       .prepare(
         `INSERT INTO orders (order_id, year, month, end_customer_id, contract_customer_id, order_type, project_no, workshop,
@@ -601,7 +604,7 @@ function importHistoryRow(db, headers, row) {
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       )
       .run(
-        String(orderId).trim(),
+        placeholderOrderId,
         String(year).trim(),
         String(month).trim(),
         endCustomerId,
@@ -629,9 +632,11 @@ function importHistoryRow(db, headers, row) {
         ts,
         ts
       );
-    return { table: 'order', id: info.lastInsertRowid };
+    const rowId = Number(info.lastInsertRowid);
+    db.prepare('UPDATE orders SET order_id = ? WHERE id = ?').run(String(rowId).padStart(4, '0'), rowId);
+    return { table: 'order', id: rowId };
   } catch (err) {
-    if (String(err.message).includes('UNIQUE')) return '销售机会编号或 SO 号已存在';
+    if (String(err.message).includes('UNIQUE')) return 'SO 号已存在';
     throw err;
   }
 }
