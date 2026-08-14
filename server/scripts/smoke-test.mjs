@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import xlsx from 'xlsx';
+import PDFDocument from 'pdfkit';
 import { initDb, closeDb, getDb, getUploadDir } from '../db/init.js';
 import { nowUtc } from '../utils.js';
 import { createApp } from '../index.js';
@@ -51,6 +52,27 @@ function makeCommissionWorkbook() {
   const book = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(book, sheet, 'Sheet1');
   return xlsx.write(book, { type: 'buffer', bookType: 'xlsx' });
+}
+
+function makeInvoicePdf() {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4' });
+    const fontPath = '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
+    if (fs.existsSync(fontPath)) {
+      doc.registerFont('cjk', fontPath);
+      doc.font('cjk');
+    }
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('error', reject);
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.text('增值税电子普通发票');
+    doc.text('发票号码：123456789012345678');
+    doc.text('开票日期：2026年5月1日');
+    doc.text('价税合计（小写）：¥123.45');
+    doc.text('合计金额：123.45');
+    doc.end();
+  });
 }
 
 let passed = 0;
@@ -306,14 +328,36 @@ try {
   ok('发货批次累计校验');
 
   const pos = must(await call('GET', `/api/orders/${orderId}/customer-pos`, { token }), 200, 'PO 列表');
+  const invoicePdf = await makeInvoicePdf();
+  const invoiceFd = new FormData();
+  invoiceFd.append('file', new Blob([invoicePdf], { type: 'application/pdf' }), 'invoice.pdf');
+  invoiceFd.append('stage', 'invoicing');
+  const invoiceAttachment = must(
+    await call('POST', `/api/orders/${orderId}/attachments`, { token, form: invoiceFd }),
+    201,
+    '发票附件上传'
+  );
+  const recognized = must(
+    await call('POST', `/api/orders/${orderId}/invoices/recognize`, { token, body: { attachment_id: invoiceAttachment.id } }),
+    200,
+    'PDF 发票识别'
+  );
+  assert.strictEqual(recognized.recognized, true);
+  assert.strictEqual(recognized.invoice_no, '123456789012345678');
+  assert.strictEqual(recognized.invoice_date, '2026-05-01');
+  assert.strictEqual(Number(recognized.amount), 123.45);
   const over = must(
     await call('POST', `/api/orders/${orderId}/invoices`, {
       token,
-      body: { po_id: pos.items[0].id, invoice_no: 'INV-001', amount: 800, confirm: 1 }
+      body: { po_id: pos.items[0].id, invoice_no: 'INV-001', amount: 800, confirm: 1, attachment_id: invoiceAttachment.id }
     }),
     201,
     '超开确认'
   );
+  const boundAttachment = getDb().prepare('SELECT reference_type, reference_id FROM order_attachments WHERE id = ?').get(invoiceAttachment.id);
+  assert.strictEqual(boundAttachment.reference_type, 'invoice_record');
+  assert.ok(Number(boundAttachment.reference_id) > 0);
+  ok('PDF 发票识别与附件绑定');
   assert.ok(over.item.id > 0);
   detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情2');
   assert.strictEqual(detail.order.status, 'commission');
@@ -464,7 +508,7 @@ try {
   const rcPlan = must(await call('GET', `/api/order-corrections/${orderId}/plan?target=finance`, { token }), 200, '回退预览');
   assert.strictEqual(rcPlan.plan.target, 'finance');
   assert.strictEqual(rcPlan.plan.deletions.invoices, 1);
-  assert.strictEqual(rcPlan.plan.deletions.invoiceAttachments, 1);
+  assert.strictEqual(rcPlan.plan.deletions.invoiceAttachments, 2);
   assert.strictEqual(rcPlan.plan.deletions.shippingBatches, 2);
   assert.strictEqual(rcPlan.plan.fieldChanges.closed_at, null);
   const rcNoConfirm = await call('PUT', `/api/order-corrections/${orderId}`, { token, body: { target: 'finance' } });
@@ -577,16 +621,17 @@ try {
   assert.strictEqual(getDb().prepare("SELECT COUNT(*) AS c FROM users WHERE username='admin'").get().c, 1);
   ok('软重置保留用户与工作流');
 
-  // 硬重置：JWT 失效 + uploads 清空 + audit 保留
+  // 硬重置：JWT 失效 + 全量清空 + audit 清空
   await call('POST', '/api/settings/reset-factory', { token, body: { password: 'password' } });
   const oldToken = await call('GET', '/api/dashboard', { token });
   assert.strictEqual(oldToken.status, 401);
   const relogin = must(await call('POST', '/api/auth/login', { body: { username: 'admin', password: 'password' } }), 200, '硬重置后登录');
   const auditAfter = must(await call('GET', '/api/audit-logs', { token: relogin.token }), 200, '硬重置后审计');
-  assert.ok(auditAfter.items.some((row) => row.action === 'reset_factory'));
+  assert.strictEqual(auditAfter.items.length, 0);
+  assert.strictEqual(auditAfter.total, 0);
   const uploads = path.join(dataDir, 'uploads');
   assert.strictEqual(fs.readdirSync(uploads).length, 0);
-  ok('硬重置轮换 JWT 并保留审计');
+  ok('硬重置轮换 JWT 并清空审计');
 
   console.log(`\n全部通过：${passed} 项`);
   process.exitCode = 0;

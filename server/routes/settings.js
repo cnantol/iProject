@@ -1178,11 +1178,15 @@ router.post('/reset-factory', async (req, res) => {
   const db = getDb();
   const { password } = req.body || {};
   if (!(await verifyPassword(db, password))) return badRequest(res, '管理员密码不正确');
-  writeAudit(db, { userId: req.user.id, action: 'reset_factory', entityType: 'settings', detail: { scope: 'factory' } });
-  deleteBusinessData(db);
-  db.prepare('DELETE FROM login_attempts').run();
-  db.prepare("DELETE FROM users WHERE username <> 'admin'").run();
-  seedWorkflow(db);
+  importTasks.clear();
+  lastScheduledBackupKey = '';
+  const dataDir = getDataDir();
+  closeDb();
+  try {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  } finally {
+    initDb(dataDir);
+  }
   rotateJwtSecret();
   return res.json({ message: '系统已恢复出厂设置，请重新登录' });
 });

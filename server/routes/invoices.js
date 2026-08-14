@@ -1,10 +1,101 @@
 import { Router } from 'express';
+import fs from 'node:fs';
+import { PDFParse } from 'pdf-parse';
 import { getDb } from '../db/init.js';
 import { nowUtc, todayLocal, badRequest, notFound, pick, isMoney, isValidDate, writeAudit, cleanupUploadedFiles, resolveAttachmentFilePath } from '../utils.js';
 import { maybeAutoAdvance } from './orders.js';
 
 const router = Router();
 const FIELDS = ['po_id', 'invoice_no', 'amount', 'invoice_date', 'remark'];
+
+function extractInvoiceFields(text) {
+  const result = {
+    invoice_no: null,
+    invoice_date: null,
+    amount: null,
+    confidence: { invoice_no: 0, invoice_date: 0, amount: 0 }
+  };
+  const noMatch = text.match(/发票号码?\s*[:：]?\s*([0-9]{8,20})/)
+    || text.match(/No\.?\s*[:：]?\s*([0-9]{8,20})/);
+  if (noMatch) {
+    result.invoice_no = noMatch[1];
+    result.confidence.invoice_no = 1;
+  }
+  const dateMatch = text.match(/开票日期\s*[:：]?\s*(\d{4})[年/\-.](\d{1,2})[月/\-.](\d{1,2})日?/);
+  if (dateMatch) {
+    const y = Number(dateMatch[1]);
+    const m = Number(dateMatch[2]);
+    const d = Number(dateMatch[3]);
+    if (y >= 2000 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      result.invoice_date = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      result.confidence.invoice_date = 1;
+    }
+  }
+  const amountPatterns = [
+    /价税合计\s*[（(]\s*小写\s*[)）]\s*[:：]?\s*[¥￥]?\s*([0-9][0-9,]*\.\d{2})/,
+    /价税合计\s*[:：]?\s*[¥￥]?\s*([0-9][0-9,]*\.\d{2})/,
+    /合计金额\s*[:：]?\s*[¥￥]?\s*([0-9][0-9,]*\.\d{2})/
+  ];
+  for (const pattern of amountPatterns) {
+    const amountMatch = text.match(pattern);
+    if (amountMatch) {
+      const amount = Number(amountMatch[1].replace(/,/g, ''));
+      if (Number.isFinite(amount) && amount > 0) {
+        result.amount = amount;
+        result.confidence.amount = 1;
+        break;
+      }
+    }
+  }
+  if (result.amount === null) {
+    const candidates = [...text.matchAll(/([0-9][0-9,]*\.\d{2})/g)]
+      .map((m) => Number(m[1].replace(/,/g, '')))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (candidates.length > 0) {
+      result.amount = Math.max(...candidates);
+      result.confidence.amount = 0.5;
+    }
+  }
+  return result;
+}
+
+router.post('/:orderId/invoices/recognize', async (req, res, next) => {
+  try {
+    const db = getDb();
+    const order = loadOrder(db, req.params.orderId);
+    if (!order) return notFound(res);
+    const attachmentId = Number((req.body || {}).attachment_id);
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) return badRequest(res, '请选择要识别的发票附件');
+    const attachment = db
+      .prepare("SELECT * FROM order_attachments WHERE id = ? AND order_id = ? AND stage = 'invoicing'")
+      .get(attachmentId, order.id);
+    if (!attachment) return badRequest(res, '发票附件不存在');
+    if (attachment.file_type !== 'pdf') return badRequest(res, '仅支持 PDF 发票识别');
+    const filePath = resolveAttachmentFilePath(attachment);
+    if (!filePath || !fs.existsSync(filePath)) return notFound(res, '附件文件不存在');
+    const parser = new PDFParse({ data: fs.readFileSync(filePath) });
+    try {
+      const result = await parser.getText();
+      const text = String(result.text || '');
+      if (!text.trim()) {
+        return res.json({
+          recognized: false,
+          invoice_no: null,
+          invoice_date: null,
+          amount: null,
+          confidence: { invoice_no: 0, invoice_date: 0, amount: 0 },
+          message: '未识别到文字，请手动填写'
+        });
+      }
+      const fields = extractInvoiceFields(text);
+      return res.json({ recognized: true, ...fields, message: '识别完成，请核对后保存' });
+    } finally {
+      await parser.destroy().catch(() => {});
+    }
+  } catch (err) {
+    next(err);
+  }
+});
 
 function loadOrder(db, orderId) {
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(Number(orderId));
@@ -59,6 +150,14 @@ router.post('/:orderId/invoices', (req, res) => {
   if (!order) return notFound(res);
   if (order.status !== 'shipping_invoicing') return badRequest(res, '仅发货+开票阶段可登记发票');
   const data = pick(req.body || {}, FIELDS);
+  const attachmentId = Number((req.body || {}).attachment_id);
+  let attachment = null;
+  if (attachmentId) {
+    attachment = db
+      .prepare("SELECT id FROM order_attachments WHERE id = ? AND order_id = ? AND stage = 'invoicing' AND (reference_type IS NULL OR reference_type = 'invoice_pending')")
+      .get(attachmentId, order.id);
+    if (!attachment) return badRequest(res, '发票附件无效或已绑定其他发票');
+  }
   if (!data.po_id) return badRequest(res, '请选择对应的 PO');
   const po = db.prepare('SELECT * FROM customer_pos WHERE id = ? AND order_id = ?').get(Number(data.po_id), order.id);
   if (!po) return badRequest(res, '所选 PO 不存在');
@@ -89,6 +188,10 @@ router.post('/:orderId/invoices', (req, res) => {
         nowUtc()
       );
     invoiceId = info.lastInsertRowid;
+    if (attachment) {
+      db.prepare("UPDATE order_attachments SET reference_type = 'invoice_record', reference_id = ? WHERE id = ?")
+        .run(invoiceId, attachment.id);
+    }
     if (confirm) {
       writeAudit(db, {
         userId: req.user.id,

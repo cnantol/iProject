@@ -681,7 +681,7 @@ export default function Settings() {
             <Typography variant="body2">
               {resetType === 'business'
                 ? '将清空全部业务数据，保留用户与工作流配置。'
-                : '将清空全部数据（含用户、配置），仅保留 admin 账户与审计日志，并轮换登录密钥。'}
+                : '将清空全部数据（含用户、配置、审计日志与附件），仅保留 admin 账户，密码恢复默认，并轮换登录密钥。'}
             </Typography>
             <TextField label="管理员密码" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth />
           </Stack>

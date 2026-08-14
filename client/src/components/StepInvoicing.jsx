@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -14,6 +15,7 @@ import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
@@ -26,6 +28,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { useConfirm } from './ConfirmDialog';
 import { fmtMoney, fmtDate } from '../utils/helpers';
@@ -39,6 +42,10 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
   const [invoicedDate, setInvoicedDate] = useState(order.invoiced_date || '');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [_pendingToggle, setPendingToggle] = useState(false);
+  const [recognizing, setRecognizing] = useState(false);
+  const [recognitionInfo, setRecognitionInfo] = useState(null);
+  const [pendingAttachmentId, setPendingAttachmentId] = useState(null);
+  const invoiceFileRef = useRef(null);
   const [error, setError] = useState('');
   const editable = !readOnly && order.status === 'shipping_invoicing';
 
@@ -78,11 +85,51 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
     }
     setError('');
     try {
-      await api.post(`/orders/${order.id}/invoices`, { ...form, po_id: Number(form.po_id), amount: Number(form.amount), confirm: wouldExceed ? 1 : 0 });
+      const payload = { ...form, po_id: Number(form.po_id), amount: Number(form.amount), confirm: wouldExceed ? 1 : 0 };
+      if (pendingAttachmentId) payload.attachment_id = pendingAttachmentId;
+      await api.post(`/orders/${order.id}/invoices`, payload);
       setForm({ po_id: '', invoice_no: '', amount: '', invoice_date: '', remark: '' });
+      setPendingAttachmentId(null);
+      setRecognitionInfo(null);
       onChanged();
     } catch (err) {
       setError(errorMessage(err));
+    }
+  };
+
+  const handleInvoiceUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+      setError('仅支持 PDF 发票识别');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setError('发票文件不能超过 20MB');
+      return;
+    }
+    setRecognizing(true);
+    setError('');
+    setRecognitionInfo(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('stage', 'invoicing');
+      const { data: attachment } = await api.post(`/orders/${order.id}/attachments`, formData);
+      setPendingAttachmentId(attachment.id);
+      const { data } = await api.post(`/orders/${order.id}/invoices/recognize`, { attachment_id: attachment.id });
+      setRecognitionInfo(data);
+      setForm((prev) => ({
+        ...prev,
+        invoice_no: data.invoice_no || prev.invoice_no,
+        invoice_date: data.invoice_date || prev.invoice_date,
+        amount: data.amount != null ? String(data.amount) : prev.amount
+      }));
+    } catch (err) {
+      setError(errorMessage(err, '发票识别失败'));
+    } finally {
+      setRecognizing(false);
     }
   };
 
@@ -144,6 +191,16 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
         <Box sx={{ mb: 2 }}>
           <Alert severity="error">{error}</Alert>
         </Box>
+      )}
+      {recognitionInfo && (
+        <Alert severity={recognitionInfo.recognized ? 'info' : 'warning'} sx={{ mb: 2 }} onClose={() => setRecognitionInfo(null)}>
+          {recognitionInfo.message}
+          {recognitionInfo.recognized && (
+            <Box component="span" sx={{ display: 'block', mt: 0.5 }}>
+              发票号：{recognitionInfo.invoice_no || '-'} ｜ 开票日期：{recognitionInfo.invoice_date || '-'} ｜ 金额：{recognitionInfo.amount != null ? `¥ ${fmtMoney(recognitionInfo.amount)}` : '-'}
+            </Box>
+          )}
+        </Alert>
       )}
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         {[
@@ -225,32 +282,63 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
       </Table>
 
       {editable && (
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mt: 2, flexWrap: 'wrap', rowGap: 1 }}>
-          <FormControl sx={{ minWidth: 180 }}>
-            <InputLabel>对应 PO</InputLabel>
-            <Select value={form.po_id} label="对应 PO" onChange={(e) => setForm((prev) => ({ ...prev, po_id: e.target.value }))}>
-              {pos.map((po) => (
-                <MenuItem key={po.id} value={po.id}>
-                  {po.po_number}（¥ {fmtMoney(po.po_amount)}）
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <TextField label="发票号" value={form.invoice_no} onChange={(e) => setForm((prev) => ({ ...prev, invoice_no: e.target.value }))} />
-          <TextField label="金额" type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} />
-          <TextField
-            label="开票日期"
-            type="date"
-            value={form.invoice_date}
-            onChange={(e) => setForm((prev) => ({ ...prev, invoice_date: e.target.value }))}
-            InputLabelProps={{ shrink: true }}
-            required
-          />
-          <TextField label="备注" value={form.remark} onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))} />
-          <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={addInvoice}>
-            添加发票
-          </Button>
-        </Stack>
+        <Paper variant="outlined" sx={{ mt: 2.5, p: 2, borderRadius: 2, borderColor: 'divider' }}>
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+            <Box sx={{ width: 4, height: 20, borderRadius: 2, bgcolor: 'secondary.main' }} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>新增发票</Typography>
+            <Box sx={{ flex: 1 }} />
+            <Button
+              component="label"
+              variant="outlined"
+              size="small"
+              startIcon={recognizing ? <CircularProgress size={16} /> : <UploadFileIcon />}
+              disabled={recognizing}
+            >
+              {recognizing ? '识别中...' : '上传 PDF 自动识别'}
+              <input ref={invoiceFileRef} type="file" hidden accept="application/pdf,.pdf" onChange={handleInvoiceUpload} />
+            </Button>
+          </Stack>
+          <Grid container spacing={2} alignItems="flex-end">
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth size="small">
+                <InputLabel>对应 PO</InputLabel>
+                <Select value={form.po_id} label="对应 PO" onChange={(e) => setForm((prev) => ({ ...prev, po_id: e.target.value }))}>
+                  {pos.map((po) => (
+                    <MenuItem key={po.id} value={po.id}>
+                      {po.po_number}（¥ {fmtMoney(po.po_amount)}）
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField label="发票号" fullWidth size="small" value={form.invoice_no} onChange={(e) => setForm((prev) => ({ ...prev, invoice_no: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField label="金额" type="number" fullWidth size="small" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField
+                label="开票日期"
+                type="date"
+                fullWidth
+                size="small"
+                value={form.invoice_date}
+                onChange={(e) => setForm((prev) => ({ ...prev, invoice_date: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField label="备注" fullWidth size="small" value={form.remark} onChange={(e) => setForm((prev) => ({ ...prev, remark: e.target.value }))} />
+            </Grid>
+            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={addInvoice}>
+                添加发票
+              </Button>
+            </Grid>
+          </Grid>
+        </Paper>
       )}
 
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
