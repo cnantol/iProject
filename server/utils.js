@@ -117,7 +117,7 @@ export function notFound(res, message = '资源不存在') {
   return res.status(404).json({ error: message });
 }
 
-export function conflict(res, message = '销售机会状态已变更，请刷新') {
+export function conflict(res, message = '商机状态已变更，请刷新') {
   return res.status(409).json({ error: message });
 }
 
@@ -168,7 +168,7 @@ export function cleanupUploadedFiles(files) {
 /**
  * 附件的最终存储根目录。
  * 结构: <uploads>/<order_id>/<stage>/<filename>
- *   - order_id: 附件所属的销售机会 id
+ *   - order_id: 附件所属的商机 id
  *   - stage:    上传时标记的阶段 (customer_info/proposal/finance/invoicing)
  * 临时文件(multer 落地)仍落在 getUploadDir() 下,由 moveUploadedFile 搬到最终目录。
  */

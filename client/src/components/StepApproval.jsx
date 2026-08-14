@@ -225,7 +225,7 @@ export default function StepApproval({ order, readOnly, onChanged }) {
         <DialogTitle>确认驳回审批</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1.5 }}>
-            驳回后销售机会将回退至报价阶段，选中轮次回退草稿，需重新提交报价后再送审。
+            驳回后商机将回退至报价阶段，选中轮次回退草稿，需重新提交报价后再送审。
           </Typography>
           <TextField
             label="审批备注"

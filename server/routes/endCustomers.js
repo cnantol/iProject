@@ -112,7 +112,7 @@ router.delete('/:id', (req, res) => {
     getDb().prepare('DELETE FROM end_customers WHERE id = ?').run(row.id);
     return res.json({ message: '删除成功' });
   } catch (err) {
-    if (String(err.message).includes('FOREIGN KEY')) return badRequest(res, '该客户已被销售机会、框架协议或作为其他客户的所属集团引用，无法删除');
+    if (String(err.message).includes('FOREIGN KEY')) return badRequest(res, '该客户已被商机、框架协议或作为其他客户的所属集团引用，无法删除');
     throw err;
   }
 });

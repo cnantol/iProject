@@ -169,7 +169,7 @@ export default function Dashboard() {
               </Typography>
               {(data.inProgressByCustomer || []).length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ py: 1, textAlign: 'center' }}>
-                  暂无进行中机会
+                  暂无进行中商机
                 </Typography>
               ) : (
                 <Stack spacing={1}>
@@ -269,19 +269,19 @@ export default function Dashboard() {
             <CardContent>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
                 <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'warning.main' }} />
-                <Typography variant="h6">进行中的机会 · 开票时长 TOP5</Typography>
+                <Typography variant="h6">进行中的商机 · 开票时长 TOP5</Typography>
                 <Typography variant="caption" color="text.secondary">按发票开具后天数从长到短排列，点击行查看详情</Typography>
               </Stack>
               {(data.invoiceAging || []).length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                  暂无进行中的已开票机会
+                  暂无进行中的已开票商机
                 </Typography>
               ) : (
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
                       <TableCell sx={{ width: 64 }}>排名</TableCell>
-                      <TableCell>机会号</TableCell>
+                      <TableCell>商机号</TableCell>
                       <TableCell>最终客户</TableCell>
                       <TableCell align="center" sx={{ width: 76 }}>项目类型</TableCell>
                       <TableCell>项目名称</TableCell>

@@ -23,6 +23,7 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
 import InboxIcon from '@mui/icons-material/Inbox';
@@ -36,6 +37,7 @@ import { useConfirm } from '../components/ConfirmDialog';
 import { STATUS_LABELS, STATUS_COLORS } from '../utils/constants';
 import { daysSinceDate, fmtMoney } from '../utils/helpers';
 import { useFieldLabels } from '../utils/fieldLabels';
+import { downloadFile } from '../utils/download';
 import { tableHeadTokens } from '../theme/md3Theme';
 
 const STORAGE_KEY = 'iproject_order_list_v1';
@@ -157,9 +159,14 @@ export default function OrderList() {
             查看与管理全部商机，点击行进入详情
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/orders/new')}>
-          新建商机
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={() => downloadFile('/api/orders/export', '商机备份.xlsx')}>
+            导出 Excel
+          </Button>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/orders/new')}>
+            新建商机
+          </Button>
+        </Stack>
       </Stack>
       <Card>
             <Box sx={{ 

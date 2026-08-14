@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import xlsx from 'xlsx';
 import { initDb, closeDb, getDb } from '../db/init.js';
-import { nowUtc, normalizeSo } from '../utils.js';
+import { nowUtc, normalizeDate, normalizeSo } from '../utils.js';
 import { hasFrameworkForCustomer } from '../routes/materials.js';
 
-const DEFAULT_FILE = '/Users/lijian/Downloads/Atlas Copco.xlsx';
+const DEFAULT_FILE = '/Users/lijian/Desktop/WorkBuddy/20260812Atlas Copco.xlsx';
 const MONTH_MAP = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
   jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12
@@ -40,6 +40,23 @@ function parseYesNo(value) {
   if (['y', 'yes', '1', 'true', '是'].includes(text)) return 1;
   if (['n', 'no', '0', 'false', '-'].includes(text)) return 0;
   return null;
+}
+
+function splitPoNumbers(raw) {
+  if (!raw) return [];
+  const cleaned = String(raw)
+    .replace(/[，,;；]/g, ' ')
+    .replace(/\.(?=\s|$)/g, ' ');
+  const seen = new Set();
+  const result = [];
+  for (const token of cleaned.split(/\s+/).map((s) => s.trim()).filter(Boolean)) {
+    const match = token.match(/^(.*?)[（(]\s*新PO\s*[)）]$/i);
+    const number = match ? match[1] : token;
+    if (!number || seen.has(number)) continue;
+    seen.add(number);
+    result.push({ number, remark: match ? '新PO' : null });
+  }
+  return result;
 }
 
 function normalizePayment(value) {
@@ -90,9 +107,12 @@ function parseRows(rows, limit) {
     const remark = remarkParts.length > 0 ? remarkParts.join('；') : null;
     const paymentTerms = normalizePayment(get(raw, 'Payment Method'));
     const deliveredRaw = get(raw, 'Delivered');
-    const invoicedRaw = get(raw, 'Invoiced\n(ex-VAT)');
-    const commissionStatusRaw = get(raw, '佣金状态');
-    const commissionAmountRaw = get(raw, '佣金金额');
+    const invoicedRaw = get(raw, 'Invoiced') != null ? get(raw, 'Invoiced') : get(raw, 'Invoiced\n(ex-VAT)');
+    const commissionStatusRaw = get(raw, 'Commission Status') != null ? get(raw, 'Commission Status') : get(raw, '佣金状态');
+    const commissionAmountRaw = get(raw, 'Commission Amount') != null ? get(raw, 'Commission Amount') : get(raw, '佣金金额');
+    const orderStatusRaw = get(raw, 'Order status');
+    const deliveredDateRaw = get(raw, 'Delivered Date');
+    const invoicedDateRaw = get(raw, 'Invoiced Date');
 
     const errors = [];
     if (contractName == null || String(contractName).trim() === '') errors.push('合同客户缺失');
@@ -100,7 +120,7 @@ function parseRows(rows, limit) {
     if (year == null || !/^\d{4}$/.test(String(year).trim())) errors.push('年份无效');
     if (month == null) errors.push('月份无法识别');
     if (!Number.isFinite(totalAmount) || totalAmount < 0) errors.push('总金额无效');
-    if (orderType != null && !['A', 'B', 'C'].includes(orderType)) errors.push(`销售机会类型无效: ${orderType}`);
+    if (orderType != null && !['A', 'B', 'C'].includes(orderType)) errors.push(`商机类型无效: ${orderType}`);
     if (errors.length > 0) {
       result.push({ rowNumber, errors, skip: true });
       return;
@@ -116,6 +136,8 @@ function parseRows(rows, limit) {
       || (totalAmount === 0 && remark != null && /取消/.test(remark));
     const delivered = cancelled ? 0 : (deliveredFlag === 1 || deliveredFlag === 'service') ? 1 : 0;
     const invoiced = cancelled ? 0 : invoicedFlag === 1 ? 1 : 0;
+    const explicitStatus = orderStatusRaw == null ? '' : String(orderStatusRaw).trim();
+    const validStatuses = ['customer_info', 'proposal', 'quotation', 'approval_pending', 'bid_decision', 'finance', 'shipping_invoicing', 'commission', 'closed', 'lost_closed', 'cancelled'];
 
     const commissionStatus = commissionStatusRaw == null
       ? null
@@ -131,7 +153,21 @@ function parseRows(rows, limit) {
     let finalDelivered = delivered;
     let finalInvoiced = invoiced;
 
-    if (cancelled) {
+    if (explicitStatus && validStatuses.includes(explicitStatus)) {
+      status = explicitStatus;
+      if (status === 'cancelled') {
+        finalDelivered = 0;
+        finalInvoiced = 0;
+      } else if (status === 'closed') {
+        finalDelivered = 1;
+        finalInvoiced = 1;
+        commissionMatched = 1;
+        commissionAmount = commissionStatus === 'yes'
+          ? (Number.isFinite(Number(commissionAmountRaw)) ? Math.max(0, Number(commissionAmountRaw)) : 0)
+          : 0;
+        commissionDate = null;
+      }
+    } else if (cancelled) {
       status = 'cancelled';
       finalDelivered = 0;
       finalInvoiced = 0;
@@ -143,7 +179,7 @@ function parseRows(rows, limit) {
       commissionAmount = commissionStatus === 'yes'
         ? (Number.isFinite(Number(commissionAmountRaw)) ? Math.max(0, Number(commissionAmountRaw)) : 0)
         : 0;
-      commissionDate = nowUtc();
+      commissionDate = null;
     } else if (finalDelivered === 1 && finalInvoiced === 1) {
       status = 'commission';
     } else if (finalDelivered === 1 || finalInvoiced === 1 || poNumber) {
@@ -153,10 +189,15 @@ function parseRows(rows, limit) {
     }
 
     const monthText = normalizeMonthText(month);
-    const defaultDate = `${String(year).trim()}-${monthText}-01`;
-    const deliveredDate = finalDelivered === 1 ? defaultDate : null;
-    const invoicedDate = finalInvoiced === 1 ? defaultDate : null;
-    const closedAt = ['closed', 'cancelled'].includes(status) ? nowUtc() : null;
+    let deliveredDate = finalDelivered === 1 ? normalizeDate(deliveredDateRaw) : null;
+    let invoicedDate = finalInvoiced === 1 ? normalizeDate(invoicedDateRaw) : null;
+    if (status === 'shipping_invoicing') {
+      if (finalDelivered === 1 && !deliveredDate) finalDelivered = 0;
+      if (finalInvoiced === 1 && !invoicedDate) finalInvoiced = 0;
+      deliveredDate = finalDelivered === 1 ? deliveredDate : null;
+      invoicedDate = finalInvoiced === 1 ? invoicedDate : null;
+    }
+    const closedAt = null;
 
     result.push({
       rowNumber,
@@ -183,6 +224,8 @@ function parseRows(rows, limit) {
       commissionAmount,
       commissionDate,
       status,
+      bidResult: status === 'closed' ? 'won' : null,
+      rawStatus: explicitStatus,
       closedAt,
       warnings,
       skip: false
@@ -215,11 +258,14 @@ function runImport(db, rows) {
     INSERT INTO orders (
       id, order_id, year, month, end_customer_id, contract_customer_id, order_type, project_no, workshop,
       project_name, project_owner, project_remark, sales_order, total_amount, payment_terms, delivered, delivered_date,
-      invoiced, invoiced_date, commission_matched, commission_amount, commission_date, status, has_framework, proposal_skipped,
+      invoiced, invoiced_date, commission_matched, commission_amount, commission_date, status, bid_result, has_framework, proposal_skipped,
       closed_at, created_at, updated_at
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `);
-  const insertPo = db.prepare('INSERT INTO customer_pos (order_id, po_number, po_amount, created_at) VALUES (?,?,?,?)');
+  const insertPo = db.prepare('INSERT INTO customer_pos (order_id, po_number, po_amount, remark, created_at) VALUES (?,?,?,?,?)');
+  const insertApproval = db.prepare(
+    'INSERT INTO approval_records (order_id, quotation_id, approval_type, status, approver_id, applied_at, responded_at, remark) VALUES (?,?,?,?,?,?,?,?)'
+  );
 
   for (const row of rows) {
     if (row.skip) {
@@ -265,6 +311,7 @@ function runImport(db, rows) {
       row.commissionAmount,
       row.commissionDate,
       row.status,
+      row.bidResult,
       hasFrameworkForCustomer(endCustomerId) ? 1 : 0,
       0,
       row.closedAt,
@@ -273,10 +320,18 @@ function runImport(db, rows) {
     );
     report.ordersCreated += 1;
     if (row.status === 'cancelled') report.cancelledOrders += 1;
+    if (row.status === 'closed') {
+      insertApproval.run(nextId, null, 'sales_force', 'approved', null, null, null, '历史导入自动完成');
+      insertApproval.run(nextId, null, 'oa_contract', 'approved', null, null, null, '历史导入自动完成');
+    }
 
-    if (row.poNumber && row.totalAmount > 0) {
-      insertPo.run(nextId, row.poNumber, row.totalAmount, ts);
-      report.posCreated += 1;
+    if (row.poNumber) {
+      const poNumbers = splitPoNumbers(row.poNumber);
+      const isMulti = poNumbers.length > 1;
+      for (const poItem of poNumbers) {
+        insertPo.run(nextId, poItem.number, isMulti ? null : (row.totalAmount > 0 ? row.totalAmount : null), poItem.remark || null, ts);
+      }
+      report.posCreated += poNumbers.length;
     }
   }
   return report;
@@ -284,10 +339,19 @@ function runImport(db, rows) {
 
 function printReport(rows, report, apply) {
   const valid = rows.filter((row) => !row.skip);
+  const statusCounts = {};
+  for (const row of valid) {
+    statusCounts[row.status] = (statusCounts[row.status] || 0) + 1;
+  }
   console.log(`模式：${apply ? '正式导入' : 'Dry-run 预览'}`);
   console.log(`有效数据行：${valid.length}`);
   console.log(`预计导入：客户 ${report.customersCreated} 个，订单 ${report.ordersCreated} 张，PO ${report.posCreated} 条`);
   console.log(`取消订单：${report.cancelledOrders} 张`);
+  console.log(`状态分布：${JSON.stringify(statusCounts)}`);
+  const statusMismatches = valid.filter((row) => row.rawStatus && row.rawStatus !== row.status);
+  if (statusMismatches.length > 0) {
+    console.log(`状态不一致行：${statusMismatches.slice(0, 10).map((row) => `${row.rowNumber}(${row.rawStatus}->${row.status})`).join(', ')}`);
+  }
   console.log(`失败行：${report.failures.length}`);
   for (const failure of report.failures.slice(0, 50)) {
     console.log(`  - 第 ${failure.rowNumber} 行：${failure.reason}`);
@@ -336,7 +400,7 @@ function main() {
       const simulated = {
         customersCreated: endToCreate.size + contractToCreate.size,
         ordersCreated: validRows.length,
-        posCreated: validRows.filter((row) => row.poNumber && row.totalAmount > 0).length,
+        posCreated: validRows.reduce((sum, row) => sum + (row.poNumber ? splitPoNumbers(row.poNumber).length : 0), 0),
         cancelledOrders: validRows.filter((row) => row.status === 'cancelled').length,
         failures: parsed.filter((row) => row.skip).map((row) => ({ rowNumber: row.rowNumber, reason: row.errors.join('；') }))
       };

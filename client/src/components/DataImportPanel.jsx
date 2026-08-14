@@ -35,7 +35,7 @@ const IMPORT_TARGET_META = {
   contract_customer: { color: '#00ACC1', desc: '导入合同客户基础档案' },
   material: { color: '#2E7D32', desc: '导入框架协议价格与有效期' },
   guide_price: { color: '#F57C00', desc: '导入系统指导价格' },
-  history: { color: '#7B1FA2', desc: '导入历史销售机会与闭环数据' }
+  history: { color: '#7B1FA2', desc: '导入历史商机与闭环数据' }
 };
 
 export default function DataImportPanel() {

@@ -1,4 +1,4 @@
-// 全站共享的销售机会状态枚举。
+// 全站共享的商机状态枚举。
 // 与 server 端 orders.status 枚举严格保持一致；改一处要同步另一处。
 // 已结束状态（closed/lost_closed/cancelled）共享同一个 STEP_KEY_INDEX 槽位 8。
 

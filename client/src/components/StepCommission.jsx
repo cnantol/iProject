@@ -58,7 +58,7 @@ export default function StepCommission({ order, readOnly, onChanged }) {
         </Stack>
       ) : (
         <Alert severity="info" sx={{ mb: 2 }}>
-          该销售机会尚未匹配佣金，保持等待下次佣金 Excel 匹配；特殊情况可由管理员人工补录。
+          该商机尚未匹配佣金，保持等待下次佣金 Excel 匹配；特殊情况可由管理员人工补录。
         </Alert>
       )}
       {canManual && (
@@ -76,7 +76,7 @@ export default function StepCommission({ order, readOnly, onChanged }) {
             </Box>
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.25 }}>人工补录佣金</Typography>
-              <Typography variant="caption" color="text.secondary">仅用于特殊业务场景，提交后该机会将进入闭环</Typography>
+              <Typography variant="caption" color="text.secondary">仅用于特殊业务场景，提交后该商机将进入闭环</Typography>
             </Box>
           </Stack>
         </DialogTitle>
@@ -99,7 +99,7 @@ export default function StepCommission({ order, readOnly, onChanged }) {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               fullWidth
-              helperText="允许为 0，保存后该机会将关闭"
+              helperText="允许为 0，保存后该商机将关闭"
               InputProps={{ startAdornment: <InputAdornment position="start">¥</InputAdornment> }}
             />
             <TextField label="补录备注" multiline minRows={2} value={remark} onChange={(e) => setRemark(e.target.value)} fullWidth helperText="选填，建议记录补录原因" />

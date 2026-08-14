@@ -17,6 +17,7 @@ import {
   resolveAttachmentFilePath
 } from '../utils.js';
 import { hasFrameworkForCustomer, frameworkSourceCustomer } from './materials.js';
+import { appendOpportunityRow, buildOpportunitiesWorkbook } from '../lib/opportunityBackup.js';
 
 const router = Router();
 
@@ -271,6 +272,24 @@ router.get('/', (req, res) => {
   return res.json({ items: items.map(withCommissionCheck), total, page, limit, activeCount, archivedCount });
 });
 
+router.get('/export', async (req, res) => {
+  const db = getDb();
+  const orders = db
+    .prepare(
+      `SELECT o.*, ec.customer_name AS end_customer_name, cc.customer_name AS contract_customer_name
+       FROM orders o
+       LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
+       LEFT JOIN contract_customers cc ON cc.id = o.contract_customer_id
+       ORDER BY o.id`
+    )
+    .all();
+  const buffer = await buildOpportunitiesWorkbook(orders);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="opportunities-backup.xlsx"');
+  res.setHeader('Cache-Control', 'no-store');
+  return res.send(buffer);
+});
+
 router.get('/:id', (req, res) => {
   const detail = loadOrderDetail(getDb(), req.params.id);
   if (!detail) return notFound(res);
@@ -320,6 +339,7 @@ router.post('/', (req, res) => {
 
   upsertCustomValues(db, orderId, body.customValues);
   const detail = loadOrderDetail(db, orderId);
+  appendOpportunityRow(detail.order);
   return res.status(201).json(detail);
 });
 
@@ -336,7 +356,7 @@ router.patch('/:id', (req, res) => {
       data.has_framework = hasFrameworkForCustomer(Number(data.end_customer_id)) ? 1 : 0;
     }
     if (data.order_type !== undefined && !['A', 'B', 'C'].includes(String(data.order_type))) {
-      return badRequest(res, '请选择有效的销售机会类型');
+      return badRequest(res, '请选择有效的商机类型');
     }
     db.prepare(
       `UPDATE orders SET year=?, month=?, end_customer_id=?, contract_customer_id=?, order_type=?, project_no=?, workshop=?,
@@ -361,7 +381,7 @@ router.patch('/:id', (req, res) => {
     if (data.sales_order !== undefined) {
       const so = String(data.sales_order).trim();
       if (!so) return badRequest(res, 'Sales Order 必填');
-      if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他销售机会使用');
+      if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他商机使用');
       data.sales_order = so;
     }
     db.prepare('UPDATE orders SET sales_order=?, payment_terms=?, updated_at=? WHERE id=?').run(
@@ -371,7 +391,7 @@ router.patch('/:id', (req, res) => {
       order.id
     );
   } else {
-    return badRequest(res, '当前销售机会状态不允许修改这些字段');
+    return badRequest(res, '当前商机状态不允许修改这些字段');
   }
 
   upsertCustomValues(db, order.id, body.customValues);
@@ -384,7 +404,7 @@ router.delete('/:id', (req, res) => {
   if (!detail) return notFound(res);
   const { order } = detail;
   if (!['customer_info', 'proposal', 'quotation'].includes(order.status)) {
-    return badRequest(res, '仅客户信息/方案/报价阶段的销售机会允许删除');
+    return badRequest(res, '仅客户信息/方案/报价阶段的商机允许删除');
   }
   if (detail.approvals.length > 0) return badRequest(res, '存在审批记录，禁止删除');
   if (detail.shippingBatches.length > 0) return badRequest(res, '存在发货批次记录，禁止删除');
@@ -414,7 +434,7 @@ router.delete('/:id', (req, res) => {
     entityId: order.id,
     detail: { order_id: order.order_id }
   });
-  return res.json({ message: '销售机会已删除' });
+  return res.json({ message: '商机已删除' });
 });
 
 function maybeAutoAdvance(db, orderId) {
@@ -460,9 +480,9 @@ router.patch('/:id/status', (req, res) => {
     if (order.status === 'finance') {
       const so = order.sales_order ? String(order.sales_order).trim() : '';
       if (!so) return badRequest(res, 'Sales Order 必填');
-      if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他销售机会使用');
+      if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他商机使用');
       if (order.total_amount === null || order.total_amount === undefined || !isNonNegativeNumber(order.total_amount)) {
-        return badRequest(res, '销售机会总金额无效，无法进入下一步');
+        return badRequest(res, '商机总金额无效，无法进入下一步');
       }
       const pos = db.prepare('SELECT * FROM customer_pos WHERE order_id = ?').all(order.id);
       if (pos.length === 0) return badRequest(res, '至少录入一行 Customer PO');

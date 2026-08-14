@@ -147,7 +147,7 @@ try {
   assert.strictEqual(emptyImport.status, 400);
   ok('数据导入批读与列映射边界');
 
-  const historyHeaders = ['销售机会编号', '年份', '月份', '最终客户', '合同客户', '项目名称', '项目负责人', '销售机会类型', '状态', 'Sales Order', '总金额', '是否发货', '发货日期', '是否开票', '开票日期', '佣金是否匹配', '佣金金额', '付款条款', '项目编号', '车间', '项目备注'];
+  const historyHeaders = ['商机编号', '年份', '月份', '最终客户', '合同客户', '项目名称', '项目负责人', '商机类型', '状态', 'Sales Order', '总金额', '是否发货', '发货日期', '是否开票', '开票日期', '佣金是否匹配', '佣金金额', '付款条款', '项目编号', '车间', '项目备注'];
   const historyImport = await uploadImport('history', historyHeaders, [
     ['abc', '2026', '5', ec.customer_name, cc.customer_name, '自动编号导入测试', '李工', 'A', '', 'SO-HIST-AUTO', 100, 1, '2026-05-01', 1, '2026-05-01', 0, 0, 'TT60', '', '', '备注']
   ]);
@@ -158,7 +158,7 @@ try {
   assert.strictEqual(autoOrder.order_id, String(autoOrder.id).padStart(4, '0'));
   ok('历史商机导入自动生成编号');
 
-  // 创建销售机会
+  // 创建商机
   const created = must(
     await call('POST', '/api/orders', {
       token,
@@ -173,15 +173,24 @@ try {
       }
     }),
     201,
-    '创建销售机会'
+    '创建商机'
   );
   const orderId = created.order.id;
   assert.match(created.order.order_id, /^\d{4}$/);
-  const idConsistency = must(await call('GET', '/api/settings/order-id-consistency', { token }), 200, '机会 ID 一致性');
+  const idConsistency = must(await call('GET', '/api/settings/order-id-consistency', { token }), 200, '商机 ID 一致性');
   assert.strictEqual(idConsistency.ok, true);
   assert.strictEqual(idConsistency.mismatched.length, 0);
   assert.strictEqual(created.order.status, 'customer_info');
-  ok('销售机会创建与销售机会编号生成');
+  const backupFile = path.join(dataDir, 'opportunity-backup.xlsx');
+  assert.ok(fs.existsSync(backupFile), '新建商机应自动生成备份 Excel');
+  const backupWorkbook = xlsx.read(fs.readFileSync(backupFile), { type: 'buffer' });
+  const backupRows = xlsx.utils.sheet_to_json(backupWorkbook.Sheets[backupWorkbook.SheetNames[0]], { header: 1, defval: null, raw: true });
+  assert.ok(backupRows.some((row) => String(row[0]) === created.order.order_id));
+  const exportRes = await fetch(base + '/api/orders/export', { headers: { Authorization: `Bearer ${token}` } });
+  assert.strictEqual(exportRes.status, 200);
+  assert.match(String(exportRes.headers.get('content-type') || ''), /spreadsheet/);
+  ok('商机自动备份与 Excel 导出');
+  ok('商机创建与商机编号生成');
 
   must(await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'advance' } }), 200, '客户信息→方案');
   const version = must(
@@ -311,7 +320,7 @@ try {
   ok('双线审批通过自动推进');
 
   must(await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'bid', result: 'won' } }), 200, '中标');
-  let detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情');
+  let detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '商机详情');
   assert.strictEqual(Number(detail.order.total_amount), 729.5);
   ok('中标自动写入总金额');
 
@@ -359,7 +368,7 @@ try {
   assert.ok(Number(boundAttachment.reference_id) > 0);
   ok('PDF 发票识别与附件绑定');
   assert.ok(over.item.id > 0);
-  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情2');
+  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '商机详情2');
   assert.strictEqual(detail.order.status, 'commission');
   assert.strictEqual(Number(detail.order.invoiced), 1);
   ok('开票自动标记、超开审计与并行推进');
@@ -384,7 +393,7 @@ try {
   assert.strictEqual(commission.matched, 1);
   assert.strictEqual(commission.duplicate_so_count, 1);
   assert.strictEqual(commission.skipped_matched_count, 0);
-  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情3');
+  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '商机详情3');
   assert.strictEqual(detail.order.status, 'closed');
   assert.strictEqual(Number(detail.order.commission_amount), 1499);
   ok('佣金匹配闭环（含重复 SO 计数）');
@@ -403,11 +412,11 @@ try {
       body: { end_customer_id: ec.id, contract_customer_id: cc.id, order_type: 'B', project_name: '测试项目2', project_owner: '王工' }
     }),
     201,
-    '创建销售机会2'
+    '创建商机2'
   ).order;
   await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'advance' } });
   await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'advance', skip: 1 } });
-  const rounds2 = must(await call('GET', `/api/orders/${order2.id}/quotations`, { token }), 200, '销售机会2报价');
+  const rounds2 = must(await call('GET', `/api/orders/${order2.id}/quotations`, { token }), 200, '商机2报价');
   const round2 = rounds2.items[0].id;
   await call('POST', `/api/orders/${order2.id}/quotations/${round2}/items`, {
     token,
@@ -451,18 +460,18 @@ try {
   assert.strictEqual(corrected2.order.bid_result, null);
   must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'bid', result: 'won' } }), 200, '重新中标');
   await call('PATCH', `/api/orders/${order2.id}`, { token, body: { sales_order: 'SO-002' } });
-  const pos2 = must(await call('GET', `/api/orders/${order2.id}/customer-pos`, { token }), 200, '销售机会2 PO');
+  const pos2 = must(await call('GET', `/api/orders/${order2.id}/customer-pos`, { token }), 200, '商机2 PO');
   if (pos2.items.length === 0) {
     await call('POST', `/api/orders/${order2.id}/customer-pos`, { token, body: { po_number: 'PO-002', po_amount: 10 } });
   }
-  must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'advance' } }), 200, '销售机会2 进入发货开票');
-  must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'toggle-delivered', delivered: 1 } }), 200, '销售机会2 发货（无批次）');
-  const pos2b = must(await call('GET', `/api/orders/${order2.id}/customer-pos`, { token }), 200, '销售机会2 PO 2');
+  must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'advance' } }), 200, '商机2 进入发货开票');
+  must(await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'toggle-delivered', delivered: 1 } }), 200, '商机2 发货（无批次）');
+  const pos2b = must(await call('GET', `/api/orders/${order2.id}/customer-pos`, { token }), 200, '商机2 PO 2');
   await call('POST', `/api/orders/${order2.id}/invoices`, { token, body: { po_id: pos2b.items[0].id, invoice_no: 'INV-003', amount: 10 } });
-  detail = must(await call('GET', `/api/orders/${order2.id}`, { token }), 200, '销售机会2 自动开票');
+  detail = must(await call('GET', `/api/orders/${order2.id}`, { token }), 200, '商机2 自动开票');
   assert.strictEqual(detail.order.status, 'commission');
   must(await call('POST', '/api/commission/manual', { token, body: { order_id: order2.id, amount: 88, remark: 'Excel 遗漏' } }), 201, '人工补录');
-  detail = must(await call('GET', `/api/orders/${order2.id}`, { token }), 200, '销售机会2 详情');
+  detail = must(await call('GET', `/api/orders/${order2.id}`, { token }), 200, '商机2 详情');
   assert.strictEqual(detail.order.status, 'closed');
   assert.strictEqual(Number(detail.order.commission_amount), 88);
   ok('人工补录佣金闭环');
@@ -481,7 +490,7 @@ try {
   assert.strictEqual(fixed.order.commission_amount, null);
   await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'toggle-delivered', delivered: 1 } });
   await call('PATCH', `/api/orders/${orderId}/status`, { token, body: { action: 'toggle-invoiced', invoiced: 1 } });
-  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '销售机会详情4');
+  detail = must(await call('GET', `/api/orders/${orderId}`, { token }), 200, '商机详情4');
   assert.strictEqual(detail.order.status, 'commission');
   ok('流程回退清空佣金');
 
@@ -565,11 +574,11 @@ try {
       body: { end_customer_id: ec.id, contract_customer_id: cc.id, order_type: 'B', project_name: '测试项目3', project_owner: '王工' }
     }),
     201,
-    '创建销售机会3'
+    '创建商机3'
   ).order;
   await call('PATCH', `/api/orders/${order3.id}/status`, { token, body: { action: 'advance' } });
   await call('PATCH', `/api/orders/${order3.id}/status`, { token, body: { action: 'advance', skip: 1 } });
-  const rounds3 = must(await call('GET', `/api/orders/${order3.id}/quotations`, { token }), 200, '销售机会3报价');
+  const rounds3 = must(await call('GET', `/api/orders/${order3.id}/quotations`, { token }), 200, '商机3报价');
   const round3 = rounds3.items[0].id;
   await call('POST', `/api/orders/${order3.id}/quotations/${round3}/items`, {
     token,
@@ -581,7 +590,7 @@ try {
   const oa3 = must(await call('POST', `/api/orders/${order3.id}/approvals`, { token, body: { approval_type: 'oa_contract' } }), 201, 'OA3 提交').id;
   await call('PUT', `/api/orders/${order3.id}/approvals/${sf3}`, { token, body: { action: 'approve' } });
   await call('PUT', `/api/orders/${order3.id}/approvals/${oa3}`, { token, body: { action: 'approve' } });
-  must(await call('PATCH', `/api/orders/${order3.id}/status`, { token, body: { action: 'bid', result: 'lost' } }), 200, '销售机会3 未中标');
+  must(await call('PATCH', `/api/orders/${order3.id}/status`, { token, body: { action: 'bid', result: 'lost' } }), 200, '商机3 未中标');
   const rcLostMeta = must(await call('GET', `/api/order-corrections/${order3.id}`, { token }), 200, '未中标回退选项');
   assert.ok(rcLostMeta.validTargets.includes('bid_decision'));
   assert.ok(!rcLostMeta.validTargets.includes('finance'));

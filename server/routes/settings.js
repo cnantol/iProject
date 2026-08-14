@@ -16,7 +16,7 @@ import { templateFilePath } from '../lib/quotationTemplate.js';
 
 const router = Router();
 
-// ---------- 机会 ID 一致性检测 ----------
+// ---------- 商机 ID 一致性检测 ----------
 router.get('/order-id-consistency', (req, res) => {
   const db = getDb();
   const total = db.prepare('SELECT COUNT(*) c FROM orders').get().c;
@@ -121,7 +121,7 @@ const IMPORT_TARGETS = {
   },
   history: {
     label: '历史商机导入',
-    headers: ['销售机会编号', '年份', '月份', '最终客户', '合同客户', '项目名称', '项目负责人', '销售机会类型', '状态', 'Sales Order', '总金额', '是否发货', '发货日期', '是否开票', '开票日期', '佣金是否匹配', '佣金金额', '付款条款', '项目编号', '车间', '项目备注'],
+    headers: ['商机编号', '年份', '月份', '最终客户', '合同客户', '项目名称', '项目负责人', '商机类型', '状态', 'Sales Order', '总金额', '是否发货', '发货日期', '是否开票', '开票日期', '佣金是否匹配', '佣金金额', '付款条款', '项目编号', '车间', '项目备注'],
     required: ['年份', '月份']
   }
 };
@@ -548,7 +548,7 @@ function importHistoryRow(db, headers, row) {
     contractCustomerId = cc.id;
   }
   const salesOrder = value('Sales Order') != null ? normalizeSo(value('Sales Order')) : null;
-  if (salesOrder && !checkSalesOrderUnique(db, salesOrder, null)) return '该 SO 号已被其他销售机会使用';
+  if (salesOrder && !checkSalesOrderUnique(db, salesOrder, null)) return '该 SO 号已被其他商机使用';
   const totalAmountRaw = value('总金额');
   let totalAmount = null;
   if (totalAmountRaw !== null && totalAmountRaw !== '') {
@@ -576,7 +576,7 @@ function importHistoryRow(db, headers, row) {
   if (delivered === 1 && !deliveredDate) return 'delivered=1 必须同时提供发货日期';
   if (commissionMatched === 1 && !isMoney(commissionAmount)) return '佣金匹配时必须提供大于 0 的佣金金额';
   if (status === 'closed' && (delivered !== 1 || invoiced !== 1)) {
-    return 'closed 销售机会必须 delivered=1 且 invoiced=1';
+    return 'closed 商机必须 delivered=1 且 invoiced=1';
   }
   if (deliveredDateRaw !== null && deliveredDateRaw !== undefined && deliveredDateRaw !== '' && !deliveredDate) {
     return '发货日期格式无效，支持 YYYY-MM-DD、YYYY/MM/DD、YYYY.MM.DD、YYYY年M月D日或 Excel 日期';
@@ -584,8 +584,8 @@ function importHistoryRow(db, headers, row) {
   if (invoicedDateRaw !== null && invoicedDateRaw !== undefined && invoicedDateRaw !== '' && !invoicedDate) {
     return '开票日期格式无效，支持 YYYY-MM-DD、YYYY/MM/DD、YYYY.MM.DD、YYYY年M月D日或 Excel 日期';
   }
-  const orderType = value('销售机会类型') ? String(value('销售机会类型')) : null;
-  if (orderType && !['A', 'B', 'C'].includes(orderType)) return '销售机会类型无效';
+  const orderType = value('商机类型') ? String(value('商机类型')) : null;
+  if (orderType && !['A', 'B', 'C'].includes(orderType)) return '商机类型无效';
   const ts = nowUtc();
   let commissionDate = commissionMatched === 1 ? ts : null;
   if (status === 'closed' && commissionMatched !== 1) {
@@ -696,10 +696,10 @@ router.post('/import/:id/undo', (req, res) => {
       for (const { table, column } of IMPORT_UNDO_CHILD_TABLES) {
         const placeholders = orderIds.map(() => '?').join(',');
         const count = db.prepare(`SELECT COUNT(*) AS c FROM ${table} WHERE ${column} IN (${placeholders})`).get(...orderIds).c;
-        if (count > 0) throw new Error(`导入的销售机会已存在关联数据（${table}），为安全起见已阻止撤回`);
+        if (count > 0) throw new Error(`导入的商机已存在关联数据（${table}），为安全起见已阻止撤回`);
       }
       const info = db.prepare(`DELETE FROM orders WHERE id IN (${orderIds.map(() => '?').join(',')})`).run(...orderIds);
-      deleted.push(`${info.changes} 个销售机会`);
+      deleted.push(`${info.changes} 个商机`);
     } else if (log.target_type === 'end_customer' || log.target_type === 'contract_customer') {
       const table = log.target_type === 'end_customer' ? 'end_customers' : 'contract_customers';
       const ids = toIds(log.target_type);
@@ -845,7 +845,7 @@ const FIELD_DISPLAY_KEYS = [
 ];
 
 const FIELD_DISPLAY_DEFAULTS = {
-  order_id: '销售机会编号',
+  order_id: '商机编号',
   project_name: '项目名称',
   project_no: '项目编号',
   workshop: '车间',
@@ -854,7 +854,7 @@ const FIELD_DISPLAY_DEFAULTS = {
   end_customer: '最终客户',
   contract_customer: '合同客户',
   short_name: '客户简称',
-  order_type: '销售机会类型',
+  order_type: '商机类型',
   status: '状态',
   amount: '金额',
   sales_order: 'Sales Order',

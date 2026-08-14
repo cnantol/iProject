@@ -80,7 +80,7 @@ router.put('/:orderId/approvals/:recordId', (req, res) => {
   const remark = (req.body || {}).remark != null ? String((req.body || {}).remark) : record.remark;
 
   if (action === 'approve') {
-    if (order.status !== 'approval_pending') return badRequest(res, '销售机会当前不在审批阶段');
+    if (order.status !== 'approval_pending') return badRequest(res, '商机当前不在审批阶段');
     const info = db
       .prepare('UPDATE approval_records SET status = ?, approver_id = ?, responded_at = ?, remark = ? WHERE id = ? AND status = ?')
       .run('approved', req.user.id, nowUtc(), remark, record.id, 'pending');
@@ -113,7 +113,7 @@ router.put('/:orderId/approvals/:recordId', (req, res) => {
   }
 
   if (action === 'reject') {
-    if (order.status !== 'approval_pending') return badRequest(res, '销售机会当前不在审批阶段');
+    if (order.status !== 'approval_pending') return badRequest(res, '商机当前不在审批阶段');
     let changed = false;
     const tx = db.transaction(() => {
       // 先 supersede 同线下其他 pending/rejected 与另一线 pending（保留 approved 追溯）

@@ -98,7 +98,7 @@ export default function SalesHistory() {
       <Box>
         <Typography variant="h5">归档记录</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-          已中标闭环销售机会的报价明细与金额对账
+          已中标闭环商机的报价明细与金额对账
         </Typography>
       </Box>
 
@@ -109,7 +109,7 @@ export default function SalesHistory() {
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
                 <InventoryIcon sx={{ fontSize: 18, color: '#0ea5e9' }} />
-                <Typography variant="caption" color="text.secondary" fontWeight={600}>历史销售机会数</Typography>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>历史商机数</Typography>
               </Stack>
               <Typography variant="h5" fontWeight={800} color="#0ea5e9">{summary.orderCount}</Typography>
             </CardContent>

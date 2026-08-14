@@ -51,7 +51,7 @@ router.post('/', (req, res) => {
   if (data.due_date && !isValidDate(data.due_date)) return badRequest(res, '截止日期格式必须为 YYYY-MM-DD');
   if (data.order_ref) {
     const order = db.prepare('SELECT id FROM orders WHERE id = ?').get(Number(data.order_ref));
-    if (!order) return badRequest(res, '关联销售机会不存在');
+    if (!order) return badRequest(res, '关联商机不存在');
   }
   const ts = nowUtc();
   const info = db
@@ -79,7 +79,7 @@ router.put('/:id', (req, res) => {
   if (merged.due_date && !isValidDate(merged.due_date)) return badRequest(res, '截止日期格式必须为 YYYY-MM-DD');
   if (merged.order_ref) {
     const order = db.prepare('SELECT id FROM orders WHERE id = ?').get(Number(merged.order_ref));
-    if (!order) return badRequest(res, '关联销售机会不存在');
+    if (!order) return badRequest(res, '关联商机不存在');
   }
   db.prepare('UPDATE todos SET title=?, description=?, priority=?, due_date=?, order_ref=?, updated_at=? WHERE id=?').run(
     String(merged.title).trim(),

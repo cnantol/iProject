@@ -106,7 +106,7 @@ export function initDb(dir) {
   // - users.username: 登录 / 唯一性检查
   // - materials.(end_customer_id, material_no): 报价价格匹配(联合索引,覆盖 WHERE 两字段)
   // - guide_prices.material_no: 通用价格查询
-  // - orders.sales_order: 佣金匹配 + 销售机会唯一性
+  // - orders.sales_order: 佣金匹配 + 商机唯一性
   // - orders.(status, commission_matched): 佣金待匹配批次扫描
   db.exec('CREATE INDEX IF NOT EXISTS idx_login_attempts_key ON login_attempts(lock_key)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');

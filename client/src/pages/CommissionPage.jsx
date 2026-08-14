@@ -608,14 +608,14 @@ export default function CommissionPage() {
               ) : waiting.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 4 }}>
                   <PaymentsIcon sx={{ fontSize: 40, color: 'grey.300', mb: 1 }} />
-                  <Typography variant="body2" color="text.secondary">暂无等待匹配的销售机会</Typography>
+                  <Typography variant="body2" color="text.secondary">暂无等待匹配的商机</Typography>
                 </Box>
               ) : (
                 <>
                 <Table size="small" sx={{ '& .MuiTableCell-head': { fontWeight: 800 } }}>
                   <TableHead>
                     <TableRow sx={(theme) => { const tk = tableHeadTokens[theme.palette.mode]; return { '& .MuiTableCell-head': { bgcolor: tk.bg, color: tk.color } }; }}>
-                      <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>机会号</TableCell>
+                      <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>商机号</TableCell>
                       <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>最终客户</TableCell>
                       <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>SO</TableCell>
                       <TableCell sx={{ fontWeight: 800, whiteSpace: 'nowrap' }}>PO</TableCell>
@@ -970,7 +970,7 @@ function CommissionDeviations() {
             <Table size="small" sx={{ '& .MuiTableCell-head': { position: 'sticky', top: 0, zIndex: 1 } }}>
               <TableHead>
                 <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap', borderBottom: '2px solid', borderColor: 'divider' } }}>
-                  <TableCell>机会号</TableCell>
+                  <TableCell>商机号</TableCell>
                   <TableCell>{t('end_customer')}</TableCell>
                   <TableCell align="center" sx={{ width: 76 }}>项目类型</TableCell>
                   <TableCell>项目名称</TableCell>

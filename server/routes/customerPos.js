@@ -25,7 +25,7 @@ router.post('/:orderId/customer-pos', (req, res) => {
   const db = getDb();
   const order = loadOrder(db, req.params.orderId);
   if (!order) return notFound(res);
-  if (posLocked(order)) return badRequest(res, '销售机会已进入发货/开票阶段，PO 明细锁定只读');
+  if (posLocked(order)) return badRequest(res, '商机已进入发货/开票阶段，PO 明细锁定只读');
   const data = pick(req.body || {}, FIELDS);
   if (!data.po_number || !String(data.po_number).trim()) return badRequest(res, 'PO 号必填');
   if (!isMoney(data.po_amount)) return badRequest(res, 'PO 金额必须大于 0');
@@ -43,7 +43,7 @@ router.post('/:orderId/customer-pos', (req, res) => {
     });
     return res.status(201).json(db.prepare('SELECT * FROM customer_pos WHERE id = ?').get(info.lastInsertRowid));
   } catch (err) {
-    if (String(err.message).includes('UNIQUE')) return badRequest(res, '该销售机会下 PO 号已存在');
+    if (String(err.message).includes('UNIQUE')) return badRequest(res, '该商机下 PO 号已存在');
     throw err;
   }
 });
@@ -54,7 +54,7 @@ router.put('/:orderId/customer-pos/:poId', (req, res) => {
   if (!order) return notFound(res);
   const row = db.prepare('SELECT * FROM customer_pos WHERE id = ? AND order_id = ?').get(Number(req.params.poId), order.id);
   if (!row) return notFound(res);
-  if (posLocked(order)) return badRequest(res, '销售机会已进入发货/开票阶段，PO 明细锁定只读');
+  if (posLocked(order)) return badRequest(res, '商机已进入发货/开票阶段，PO 明细锁定只读');
   const data = pick(req.body || {}, FIELDS);
   const merged = { ...row, ...data };
   if (!merged.po_number || !String(merged.po_number).trim()) return badRequest(res, 'PO 号必填');
@@ -75,7 +75,7 @@ router.put('/:orderId/customer-pos/:poId', (req, res) => {
     });
     return res.json(db.prepare('SELECT * FROM customer_pos WHERE id = ?').get(row.id));
   } catch (err) {
-    if (String(err.message).includes('UNIQUE')) return badRequest(res, '该销售机会下 PO 号已存在');
+    if (String(err.message).includes('UNIQUE')) return badRequest(res, '该商机下 PO 号已存在');
     throw err;
   }
 });
@@ -86,7 +86,7 @@ router.delete('/:orderId/customer-pos/:poId', (req, res) => {
   if (!order) return notFound(res);
   const row = db.prepare('SELECT * FROM customer_pos WHERE id = ? AND order_id = ?').get(Number(req.params.poId), order.id);
   if (!row) return notFound(res);
-  if (posLocked(order)) return badRequest(res, '销售机会已进入发货/开票阶段，PO 明细锁定只读');
+  if (posLocked(order)) return badRequest(res, '商机已进入发货/开票阶段，PO 明细锁定只读');
   try {
     db.prepare('DELETE FROM customer_pos WHERE id = ?').run(row.id);
     writeAudit(db, {

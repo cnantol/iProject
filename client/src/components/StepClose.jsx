@@ -14,22 +14,22 @@ export default function StepClose({ order }) {
   const lostClosed = order.status === 'lost_closed';
   const cancelled = order.status === 'cancelled';
   const subtitle = closed
-    ? '中标销售机会已闭环，全步骤只读'
+    ? '中标商机已闭环，全步骤只读'
     : lostClosed
-      ? '未中标销售机会已关闭，全步骤只读'
+      ? '未中标商机已关闭，全步骤只读'
       : cancelled
-        ? '合同已取消，销售机会已关闭，全步骤只读'
-        : `销售机会尚未闭环（当前阶段：${STATUS_LABELS[order.status] || order.status}）`;
+        ? '合同已取消，商机已关闭，全步骤只读'
+        : `商机尚未闭环（当前阶段：${STATUS_LABELS[order.status] || order.status}）`;
   return (
     <StepWrapper title="项目闭环" subtitle={subtitle}>
       <Alert severity={closed ? 'success' : lostClosed || cancelled ? 'warning' : 'info'} sx={{ mb: 2 }}>
         {closed
-          ? '该销售机会已完成佣金结算并闭环，数据仅供查阅。'
+          ? '该商机已完成佣金结算并闭环，数据仅供查阅。'
           : lostClosed
-            ? '该销售机会已标记未中标并关闭。'
+            ? '该商机已标记未中标并关闭。'
             : cancelled
-              ? '该销售机会因合同取消而关闭。'
-              : '该销售机会尚未闭环，佣金匹配完成后将自动进入闭环。'}
+              ? '该商机因合同取消而关闭。'
+              : '该商机尚未闭环，佣金匹配完成后将自动进入闭环。'}
       </Alert>
       {order.commission_status === 'warn' && (
         <Alert severity="error" sx={{ mb: 2 }}>

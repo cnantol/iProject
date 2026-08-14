@@ -107,12 +107,12 @@ export default function StepBidResult({ order, readOnly, onChanged }) {
         )}
         {order.status === 'cancelled' && (
           <Alert severity="warning">
-            该销售机会因合同取消而关闭。如需恢复，请在「流程撤回」中回退至中标结果。
+            该商机因合同取消而关闭。如需恢复，请在「流程撤回」中回退至中标结果。
           </Alert>
         )}
         {order.status === 'lost_closed' && (
           <Alert severity="warning">
-            该销售机会已标记未中标并关闭。如需恢复，请在「流程撤回」中回退至中标结果。
+            该商机已标记未中标并关闭。如需恢复，请在「流程撤回」中回退至中标结果。
           </Alert>
         )}
         {order.status === 'finance' && order.bid_result === 'won' && <Chip size="small" color="success" label="已确认中标" />}
@@ -121,7 +121,7 @@ export default function StepBidResult({ order, readOnly, onChanged }) {
       <Dialog open={lostOpen} onClose={() => setLostOpen(false)}>
         <DialogTitle>确认未中标</DialogTitle>
         <DialogContent>
-          <DialogContentText>未中标后销售机会将进入 lost_closed 只读终点，不可在流程中恢复。是否确认？</DialogContentText>
+          <DialogContentText>未中标后商机将进入 lost_closed 只读终点，不可在流程中恢复。是否确认？</DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setLostOpen(false)}>取消</Button>
@@ -133,7 +133,7 @@ export default function StepBidResult({ order, readOnly, onChanged }) {
       <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)}>
         <DialogTitle>确认合同取消</DialogTitle>
         <DialogContent>
-          <DialogContentText>合同取消后销售机会将进入取消关闭终点，不可在流程中恢复。是否确认？</DialogContentText>
+          <DialogContentText>合同取消后商机将进入取消关闭终点，不可在流程中恢复。是否确认？</DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCancelOpen(false)}>取消</Button>
