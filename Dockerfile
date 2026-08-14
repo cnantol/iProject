@@ -1,40 +1,39 @@
-# iProject 全链路项目管理专家 - 多阶段构建镜像
-FROM node:22-alpine AS builder
+# 多阶段构建不是必须：本项目含 better-sqlite3 原生模块 + 中文字体，
+# 用单阶段 node:20-bookworm 一次编译运行最稳，避免原生依赖跨阶段链接出错。
+FROM node:20-bookworm
 
 WORKDIR /app
 
-# 国内部署时可通过 --build-arg NPM_REGISTRY=https://registry.npmmirror.com 加速
-ARG NPM_REGISTRY=https://registry.npmjs.org
-ENV COREPACK_NPM_REGISTRY=$NPM_REGISTRY
+# 系统依赖：
+#  - build-essential / python3 : 编译 better-sqlite3 原生模块
+#  - fonts-wqy-zenhei / fonts-noto-cjk : PDF 报价单中文渲染
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3 \
+    fonts-wqy-zenhei \
+    fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
 
-# corepack 按 package.json 的 packageManager 字段安装 pnpm；
-# better-sqlite3 在 alpine(musl) 上无预编译产物，需要本机编译工具链
-RUN corepack enable
-RUN apk add --no-cache python3 make g++
+# 启用 pnpm（版本由根 package.json 的 packageManager 字段决定）
+RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY server/package.json server/
-COPY client/package.json client/
-RUN pnpm install --frozen-lockfile --registry="$NPM_REGISTRY"
+# 复制全部源码（.dockerignore 已排除 node_modules / .git / dist）
+COPY . .
 
-COPY server server
-COPY client client
-RUN pnpm --filter iproject-client build
+# 安装依赖并构建前端；better-sqlite3 在此阶段编译
+RUN pnpm install && pnpm build
 
-FROM node:22-alpine AS runner
-
-WORKDIR /app
 ENV NODE_ENV=production
+ENV PORT=3001
+ENV DATA_DIR=/app/data
+ENV TRUST_PROXY=1
+ENV CJK_FONT_PATH=/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
+ENV CJK_SERIF_FONT_PATH=/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
+ENV CJK_MONO_FONT_PATH=/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
 
-# 中文字体：报价单 PDF 中文渲染
-RUN apk add --no-cache font-noto-cjk
-
-COPY --from=builder /app/node_modules node_modules
-COPY --from=builder /app/server server
-COPY --from=builder /app/client/dist client/dist
-COPY package.json ./
-
-VOLUME ["/app/server/db/data"]
 EXPOSE 3001
+
+# 数据持久化到 /app/data（docker-compose 挂载卷）
+VOLUME ["/app/data"]
 
 CMD ["node", "server/index.js"]

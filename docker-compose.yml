@@ -1,0 +1,15 @@
+services:
+  iproject:
+    build: .
+    image: iproject-oms:latest
+    container_name: iproject-oms
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    volumes:
+      - iproject-data:/app/data
+
+volumes:
+  iproject-data:
