@@ -1,0 +1,31 @@
+# iProject-OMS 反向代理配置（Caddy，自动 HTTPS）
+# Caddy 会向 Let's Encrypt 自动申请并续期证书，并把 HTTP(80) 重定向到 HTTPS(443)。
+#
+# 变量来自 .env：
+#   DOMAIN       对外域名，如 oms.example.com（必填，否则回退 localhost 仅本地自签）
+#   ACME_EMAIL   申请证书用的联系邮箱（Let's Encrypt 要求，HTTPS 模式必填）
+#
+# 代理目标 iproject:3001 为 docker-compose 内的服务名（同一网络可达）。
+
+{
+    # 全局：证书申请邮箱（留空则在 HTTPS 模式下 Caddy 会报错，需填写）
+    email {$ACME_EMAIL}
+    # 证书/账号数据持久化到 /data 卷（Caddyfile 的 storage 默认即 /data，无需额外配置）
+}
+
+{$DOMAIN:localhost} {
+    encode gzip
+
+    # 上传大文件（附件/报价单）按需调大
+    request_body {
+        max_size 20MB
+    }
+
+    # 透传真实客户端信息，便于后端日志与 X-Forwarded-Proto 判断
+    reverse_proxy iproject:3001 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
