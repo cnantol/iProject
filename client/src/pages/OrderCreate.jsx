@@ -27,7 +27,7 @@ import { useFieldLabels } from '../utils/fieldLabels';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 15 }, (_, i) => String(CURRENT_YEAR - 5 + i));
-const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1));
+const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
 
 const frameworkChipSx = (isFramework) => ({
   height: 34,
@@ -96,7 +96,7 @@ export default function OrderCreate() {
   const { t } = useFieldLabels();
   const [form, setForm] = useState({
     year: String(new Date().getFullYear()),
-    month: String(new Date().getMonth() + 1),
+    month: String(new Date().getMonth() + 1).padStart(2, '0'),
     end_customer_id: null,
     contract_customer_id: null,
     workshop: '',

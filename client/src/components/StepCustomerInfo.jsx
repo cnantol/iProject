@@ -33,7 +33,7 @@ import StepWrapper from './StepWrapper';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 15 }, (_, i) => String(CURRENT_YEAR - 5 + i));
-const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1));
+const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
 
 export default function StepCustomerInfo({ order, readOnly, onChanged, onFrameworkChange }) {
   const { t } = useFieldLabels();
@@ -51,7 +51,7 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onFramewo
   useEffect(() => {
     setForm({
       year: order.year || '',
-      month: order.month || '',
+      month: order.month ? String(order.month).padStart(2, '0') : '',
       end_customer_id: order.end_customer_id || null,
       contract_customer_id: order.contract_customer_id || null,
       workshop: order.workshop || '',

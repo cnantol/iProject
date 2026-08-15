@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { getDb } from '../db/init.js';
 import {
@@ -14,6 +13,7 @@ import {
   isBool,
   isValidDate,
   writeAudit,
+  cleanupUploadedFiles,
   resolveAttachmentFilePath
 } from '../utils.js';
 import { hasFrameworkForCustomer, frameworkSourceCustomer } from './materials.js';
@@ -34,6 +34,12 @@ const STEP1_FIELDS = [
   'project_remark'
 ];
 const FINANCE_FIELDS = ['sales_order', 'payment_terms'];
+
+function normalizeMonth(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 1 || num > 12) return null;
+  return String(Math.floor(num)).padStart(2, '0');
+}
 
 function checkSalesOrderUnique(db, salesOrder, excludeId) {
   const row = excludeId == null
@@ -305,6 +311,11 @@ router.post('/', (req, res) => {
   if (!data.contract_customer_id) return badRequest(res, '合同客户必选');
   if (!data.project_name || !String(data.project_name).trim()) return badRequest(res, '项目名称必填');
   if (!data.project_owner || !String(data.project_owner).trim()) return badRequest(res, '项目负责人必填');
+  if (data.month !== undefined && data.month !== null && data.month !== '') {
+    const month = normalizeMonth(data.month);
+    if (!month) return badRequest(res, '月份必须为 1-12');
+    data.month = month;
+  }
 
   const hasFramework = hasFrameworkForCustomer(Number(data.end_customer_id)) ? 1 : 0;
   const ts = nowUtc();
@@ -358,12 +369,17 @@ router.patch('/:id', (req, res) => {
     if (data.order_type !== undefined && !['A', 'B', 'C'].includes(String(data.order_type))) {
       return badRequest(res, '请选择有效的商机类型');
     }
+    if (data.month !== undefined && data.month !== null && data.month !== '') {
+      const month = normalizeMonth(data.month);
+      if (!month) return badRequest(res, '月份必须为 1-12');
+      data.month = month;
+    }
     db.prepare(
       `UPDATE orders SET year=?, month=?, end_customer_id=?, contract_customer_id=?, order_type=?, project_no=?, workshop=?,
        project_name=?, project_owner=?, project_remark=?, has_framework=?, updated_at=? WHERE id=?`
     ).run(
       data.year !== undefined ? String(data.year) : order.year,
-      data.month !== undefined ? String(data.month) : order.month,
+      data.month !== undefined ? String(data.month) : (order.month ? String(order.month).padStart(2, '0') : order.month),
       data.end_customer_id !== undefined ? Number(data.end_customer_id) : order.end_customer_id,
       data.contract_customer_id !== undefined ? Number(data.contract_customer_id) : order.contract_customer_id,
       data.order_type !== undefined ? String(data.order_type) : order.order_type,
@@ -410,14 +426,10 @@ router.delete('/:id', (req, res) => {
   if (detail.shippingBatches.length > 0) return badRequest(res, '存在发货批次记录，禁止删除');
   if (detail.invoices.length > 0) return badRequest(res, '存在开票记录，禁止删除');
 
+  const files = db.prepare('SELECT file_path FROM order_attachments WHERE order_id = ?').all(order.id);
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM order_custom_fields WHERE order_id = ?').run(order.id);
-    const files = db.prepare('SELECT file_path FROM order_attachments WHERE order_id = ?').all(order.id);
     db.prepare('DELETE FROM order_attachments WHERE order_id = ?').run(order.id);
-    for (const row of files) {
-      const filePath = resolveAttachmentFilePath(row);
-      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    }
     db.prepare('DELETE FROM customer_pos WHERE order_id = ?').run(order.id);
     db.prepare('DELETE FROM quotation_items WHERE quotation_id IN (SELECT id FROM quotations WHERE order_id = ?)').run(order.id);
     db.prepare('DELETE FROM quotations WHERE order_id = ?').run(order.id);
@@ -428,6 +440,7 @@ router.delete('/:id', (req, res) => {
     db.prepare('DELETE FROM orders WHERE id = ?').run(order.id);
   });
   tx();
+  cleanupUploadedFiles(files.map((row) => ({ path: resolveAttachmentFilePath(row) })));
   writeAudit(db, {
     userId: req.user.id,
     action: 'delete_order',

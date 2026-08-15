@@ -184,6 +184,7 @@ try {
   assert.strictEqual(idConsistency.ok, true);
   assert.strictEqual(idConsistency.mismatched.length, 0);
   assert.strictEqual(created.order.status, 'customer_info');
+  assert.strictEqual(created.order.month, '08');
   const note = must(
     await call('POST', `/api/orders/${orderId}/notes`, { token, body: { content: 'Project Log 测试' } }),
     201,
@@ -380,6 +381,11 @@ try {
     201,
     '超开确认'
   );
+  const dupInvoice = await call('POST', `/api/orders/${orderId}/invoices`, {
+    token,
+    body: { po_id: pos.items[0].id, invoice_no: 'INV-001', amount: 800, confirm: 1 }
+  });
+  assert.strictEqual(dupInvoice.status, 400, '重复发票号应返回 400');
   const boundAttachment = getDb().prepare('SELECT reference_type, reference_id FROM order_attachments WHERE id = ?').get(invoiceAttachment.id);
   assert.strictEqual(boundAttachment.reference_type, 'invoice_record');
   assert.ok(Number(boundAttachment.reference_id) > 0);
@@ -450,6 +456,8 @@ try {
     'OA 驳回'
   );
   assert.strictEqual(rejected.status, 'quotation');
+  const approvalsAfterReject = must(await call('GET', `/api/orders/${order2.id}/approvals`, { token }), 200, '驳回后审批记录');
+  assert.strictEqual(approvalsAfterReject.items.find((item) => item.id === sf2.id)?.status, 'approved', '驳回不应清除另一线已通过记录');
   const roundAfterReject = must(await call('GET', `/api/orders/${order2.id}/quotations`, { token }), 200, '驳回后轮次');
   assert.strictEqual(roundAfterReject.items[0].status, 'draft');
   const blockedResubmit = await call('PATCH', `/api/orders/${order2.id}/status`, { token, body: { action: 'submit-approval', round_id: round2 } });
@@ -662,7 +670,7 @@ try {
   must(await call('POST', '/api/settings/reset-business', { token, body: { password: 'password' } }), 200, '软重置');
   assert.strictEqual(getDb().prepare('SELECT COUNT(*) AS c FROM orders').get().c, 0);
   assert.strictEqual(getDb().prepare("SELECT COUNT(*) AS c FROM users WHERE username='admin'").get().c, 1);
-  ok('软重置保留用户与工作流');
+  ok('软重置保留用户与基础配置');
 
   // 硬重置：JWT 失效 + 全量清空 + audit 清空
   await call('POST', '/api/settings/reset-factory', { token, body: { password: 'password' } });

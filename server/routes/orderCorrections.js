@@ -164,6 +164,7 @@ export function buildRollbackPlan(db, order, target) {
 }
 
 export function executeRollback(db, plan, userId, expectedStatus = null) {
+  let attachmentFiles = [];
   const tx = db.transaction(() => {
     const currentOrder = db.prepare('SELECT * FROM orders WHERE id = ?').get(plan.orderId);
     if (!currentOrder) throw new Error('订单不存在');
@@ -199,7 +200,7 @@ export function executeRollback(db, plan, userId, expectedStatus = null) {
         `DELETE FROM order_attachments WHERE order_id = ? AND reference_type = 'invoice_record'
          AND reference_id IN (${placeholders})`
       ).run(plan.orderId, ...plan.deletedIds.invoices);
-      cleanupUploadedFiles(attachmentRows.map((row) => ({ path: resolveAttachmentFilePath(row) })));
+      attachmentFiles = attachmentRows.map((row) => ({ path: resolveAttachmentFilePath(row) }));
     }
     if (plan.deletedIds.invoices.length > 0) {
       db.prepare(`DELETE FROM invoice_records WHERE order_id = ? AND id IN (${plan.deletedIds.invoices.map(() => '?').join(',')})`).run(
@@ -266,6 +267,7 @@ export function executeRollback(db, plan, userId, expectedStatus = null) {
     });
   });
   tx();
+  cleanupUploadedFiles(attachmentFiles);
 }
 
 router.get('/:orderId', (req, res) => {

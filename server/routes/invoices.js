@@ -35,8 +35,9 @@ function extractInvoiceFields(text) {
     const y = Number(dateMatch[1]);
     const m = Number(dateMatch[2]);
     const d = Number(dateMatch[3]);
-    if (y >= 2000 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-      result.invoice_date = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const dateStr = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    if (y >= 2000 && isValidDate(dateStr)) {
+      result.invoice_date = dateStr;
       result.confidence.invoice_date = 1;
     }
   }
@@ -75,6 +76,10 @@ function extractInvoiceFields(text) {
   if (taxRate === null) {
     const rateMatch = text.match(/(\d+(?:\.\d+)?)\s*%/);
     if (rateMatch) taxRate = Number(rateMatch[1]);
+  }
+  if (taxRate !== null) {
+    const rates = [...text.matchAll(/(\d+(?:\.\d+)?)\s*%/g)].map((match) => Number(match[1]).toFixed(2));
+    if (new Set(rates).size > 1) taxRate = null;
   }
   result.tax_rate = taxRate;
   if (result.amount === null && result.total_amount_incl_tax !== null && taxRate !== null && taxRate > 0) {
@@ -135,6 +140,9 @@ router.post('/:orderId/invoices/recognize', async (req, res, next) => {
         });
       }
       const fields = extractInvoiceFields(text);
+      if (!fields.invoice_no && !fields.invoice_date && fields.amount == null) {
+        return res.json({ recognized: false, ...fields, message: '未识别到发票关键字段，请手动填写' });
+      }
       return res.json({ recognized: true, ...fields, message: '识别完成，请核对后保存' });
     } finally {
       await parser.destroy().catch(() => {});
@@ -222,7 +230,8 @@ router.post('/:orderId/invoices', (req, res) => {
   const poInvoiced = db
     .prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM invoice_records WHERE po_id = ?')
     .get(po.id).s;
-  const wouldExceedPo = Number(poInvoiced) + Number(data.amount) > Number(po.po_amount) + 1e-9;
+  const poAmount = po.po_amount == null || po.po_amount === '' || Number(po.po_amount) <= 0 ? null : Number(po.po_amount);
+  const wouldExceedPo = poAmount !== null && Number(poInvoiced) + Number(data.amount) > poAmount + 1e-9;
   if (wouldExceedPo && Number(req.body.confirm) !== 1) {
     return badRequest(res, `该 PO 累计开票将超过 PO 金额（PO ${po.po_amount}，已开 ${poInvoiced}），请确认后保存`);
   }
@@ -261,7 +270,12 @@ router.post('/:orderId/invoices', (req, res) => {
       });
     }
   });
-  tx();
+  try {
+    tx();
+  } catch (err) {
+    if (String(err.message).includes('UNIQUE')) return badRequest(res, '该发票号在本商机下已存在');
+    throw err;
+  }
   syncInvoicedFlag(db, order.id);
   maybeAutoAdvance(db, order.id);
   const row = db

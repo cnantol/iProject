@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import AdmZip from 'adm-zip';
 import bcrypt from 'bcryptjs';
 import xlsx from 'xlsx';
-import { getDb, getDataDir, getUploadDir, closeDb, initDb, seedWorkflow, rotateJwtSecret } from '../db/init.js';
+import { getDb, getDataDir, getUploadDir, closeDb, initDb, rotateJwtSecret } from '../db/init.js';
 import { logger } from '../logger.js';
 import { upload, uploadRestore, RESTORE_MAX_FILE_SIZE } from '../middleware/upload.js';
 import { authenticateDownload } from '../middleware/auth.js';
@@ -15,6 +15,13 @@ import { hasFrameworkForCustomer } from './materials.js';
 import { templateFilePath } from '../lib/quotationTemplate.js';
 
 const router = Router();
+
+router.use((req, res, next) => {
+  if (!req.user || req.user.username !== 'admin') {
+    return res.status(403).json({ error: '仅管理员可操作系统配置' });
+  }
+  next();
+});
 
 // ---------- 商机 ID 一致性检测 ----------
 router.get('/order-id-consistency', (req, res) => {
@@ -83,7 +90,6 @@ router.delete('/fields/:id', (req, res) => {
   if (Number(row.is_system) === 1) return badRequest(res, '系统内置字段不可删除');
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM order_custom_fields WHERE field_id = ?').run(row.id);
-    db.prepare('DELETE FROM workflow_step_fields WHERE field_id = ?').run(row.id);
     db.prepare('DELETE FROM custom_fields WHERE id = ?').run(row.id);
   });
   tx();
@@ -1148,16 +1154,13 @@ function deleteBusinessData(db) {
     'guide_prices',
     'materials',
     'end_customers',
-    'contract_customers',
-    'workflow_transitions',
-    'workflow_steps'
+    'contract_customers'
   ];
   const tx = db.transaction(() => {
     db.prepare('UPDATE orders SET selected_round_id = NULL').run();
     for (const table of tables) {
       db.prepare(`DELETE FROM ${table}`).run();
     }
-    db.prepare('DELETE FROM workflow_step_fields WHERE field_id IN (SELECT id FROM custom_fields WHERE is_system = 0)').run();
     db.prepare('DELETE FROM custom_fields WHERE is_system = 0').run();
   });
   tx();
@@ -1171,7 +1174,6 @@ router.post('/reset-business', async (req, res) => {
   if (!(await verifyPassword(db, password))) return badRequest(res, '管理员密码不正确');
   writeAudit(db, { userId: req.user.id, action: 'reset_business', entityType: 'settings', detail: { scope: 'business' } });
   deleteBusinessData(db);
-  seedWorkflow(db);
   return res.json({ message: '业务数据已重置' });
 });
 

@@ -38,10 +38,24 @@ router.post('/:orderId/attachments', upload.single('file'), (req, res) => {
     cleanupUploadedFiles([req.file]);
     return badRequest(res, `当前状态 ${orderRow.status} 不允许上传 ${stage} 阶段附件`);
   }
-  // 搬到分层目录: <uploads>/<order_id>/<stage>/<file_name>
-  const moved = moveUploadedFile(req.file, orderRow.id, stage);
   const referenceType = req.body.reference_type ? String(req.body.reference_type) : null;
   const referenceId = req.body.reference_id ? Number(req.body.reference_id) : null;
+  if (referenceType) {
+    const validTypes = ['proposal_version', 'invoice_record'];
+    if (!validTypes.includes(referenceType) || !Number.isInteger(referenceId) || referenceId <= 0) {
+      cleanupUploadedFiles([req.file]);
+      return badRequest(res, '附件引用类型无效');
+    }
+    const referenced = referenceType === 'proposal_version'
+      ? db.prepare('SELECT id FROM proposal_versions WHERE id = ? AND order_id = ?').get(referenceId, orderRow.id)
+      : db.prepare('SELECT id FROM invoice_records WHERE id = ? AND order_id = ?').get(referenceId, orderRow.id);
+    if (!referenced) {
+      cleanupUploadedFiles([req.file]);
+      return badRequest(res, '附件引用对象不存在或不属于该商机');
+    }
+  }
+  // 搬到分层目录: <uploads>/<order_id>/<stage>/<file_name>
+  const moved = moveUploadedFile(req.file, orderRow.id, stage);
   const relPath = `${orderRow.id}/${stage}/${moved.fileName}`;
   const info = db
     .prepare(
@@ -80,6 +94,9 @@ router.delete('/:orderId/attachments/:attachmentId', (req, res) => {
   const db = getDb();
   const row = db.prepare('SELECT * FROM order_attachments WHERE id = ? AND order_id = ?').get(Number(req.params.attachmentId), Number(req.params.orderId));
   if (!row) return notFound(res);
+  if (row.reference_type === 'invoice_record') {
+    return badRequest(res, '该附件已绑定发票，请通过发票记录删除');
+  }
   const filePath = resolveAttachmentFilePath(row);
   if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
   db.prepare('DELETE FROM order_attachments WHERE id = ?').run(row.id);

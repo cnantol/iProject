@@ -88,7 +88,8 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
     }
     const po = pos.find((item) => item.id === Number(form.po_id));
     const poInvoiced = invoices.filter((item) => item.po_id === Number(form.po_id)).reduce((sum, item) => sum + Number(item.amount || 0), 0);
-    const wouldExceed = po && Number(poInvoiced) + Number(form.amount) > Number(po.po_amount);
+    const poAmount = po && po.po_amount != null && Number(po.po_amount) > 0 ? Number(po.po_amount) : null;
+    const wouldExceed = poAmount !== null && Number(poInvoiced) + Number(form.amount) > poAmount;
     if (wouldExceed && !(await confirm(`该 PO 累计开票将超过 PO 金额（PO ${fmtMoney(po.po_amount)}，已开 ${fmtMoney(poInvoiced)}），确认继续？`))) {
       return;
     }

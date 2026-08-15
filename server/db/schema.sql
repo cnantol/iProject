@@ -271,22 +271,6 @@ CREATE TABLE IF NOT EXISTS custom_fields (
   created_at TEXT
 );
 
-CREATE TABLE IF NOT EXISTS workflow_steps (
-  id INTEGER PRIMARY KEY,
-  step_key TEXT NOT NULL UNIQUE,
-  step_name TEXT NOT NULL,
-  sort_order INTEGER,
-  is_active INTEGER DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS workflow_transitions (
-  id INTEGER PRIMARY KEY,
-  from_step TEXT,
-  to_step TEXT,
-  condition_type TEXT,
-  condition_field TEXT
-);
-
 CREATE TABLE IF NOT EXISTS order_custom_fields (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),

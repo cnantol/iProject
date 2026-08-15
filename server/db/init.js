@@ -69,16 +69,9 @@ export function initDb(dir) {
 
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS workflow_step_fields (
-      id INTEGER PRIMARY KEY,
-      step_key TEXT NOT NULL,
-      field_id INTEGER NOT NULL REFERENCES custom_fields(id),
-      sort_order INTEGER DEFAULT 0,
-      UNIQUE(step_key, field_id)
-    );
-  `);
-  db.exec('CREATE INDEX IF NOT EXISTS idx_workflow_step_fields_step ON workflow_step_fields(step_key)');
+  db.exec('DROP TABLE IF EXISTS workflow_step_fields');
+  db.exec('DROP TABLE IF EXISTS workflow_transitions');
+  db.exec('DROP TABLE IF EXISTS workflow_steps');
 
   const quotationColumns = db.prepare('PRAGMA table_info(quotations)').all();
   if (!quotationColumns.some((col) => col.name === 'quote_no')) {
@@ -276,63 +269,5 @@ export function initDb(dir) {
     );
   }
 
-  seedWorkflow(db);
   return db;
-}
-
-export function seedWorkflow(database) {
-  const steps = [
-    ['customer_info', '客户信息', 1],
-    ['proposal', '方案阶段', 2],
-    ['quotation', '报价阶段', 3],
-    ['approval_pending', '并行审批', 4],
-    ['bid_decision', '中标结果', 5],
-    ['finance', '财务信息', 6],
-    ['shipping_invoicing', '发货+开票', 7],
-    ['commission', '佣金结算', 8],
-    ['closed', '项目闭环', 9],
-    ['lost_closed', '未中标关闭', 10],
-    ['cancelled', '合同取消', 11]
-  ];
-  const count = database.prepare('SELECT COUNT(*) AS c FROM workflow_steps').get().c;
-  if (count === 0) {
-    const insert = database.prepare('INSERT INTO workflow_steps (step_key, step_name, sort_order, is_active) VALUES (?,?,?,1)');
-    const tx = database.transaction((rows) => {
-      for (const row of rows) insert.run(...row);
-    });
-    tx(steps);
-  }
-
-  const transitionCount = database.prepare('SELECT COUNT(*) AS c FROM workflow_transitions').get().c;
-  if (transitionCount === 0) {
-    const rows = [
-      ['customer_info', 'proposal', 'user_action', 'end_customer_id,contract_customer_id,project_name,project_owner'],
-      ['proposal', 'quotation', 'user_action', 'proposal_skipped'],
-      ['quotation', 'approval_pending', 'user_action', 'selected_round_id'],
-      ['approval_pending', 'bid_decision', 'system_auto', 'sales_force,oa_contract'],
-      ['approval_pending', 'quotation', 'system_auto', 'approval rejected'],
-      ['bid_decision', 'finance', 'user_action', 'bid_result=won'],
-      ['bid_decision', 'lost_closed', 'user_action', 'bid_result=lost'],
-      ['bid_decision', 'cancelled', 'user_action', 'bid_result=cancelled'],
-      ['finance', 'shipping_invoicing', 'user_action', 'sales_order,total_amount,customer_pos'],
-      ['shipping_invoicing', 'commission', 'condition_met', 'delivered=1,invoiced=1'],
-      ['commission', 'closed', 'system_auto', 'commission_matched=1']
-    ];
-    const insert = database.prepare('INSERT INTO workflow_transitions (from_step, to_step, condition_type, condition_field) VALUES (?,?,?,?)');
-    const tx = database.transaction((list) => {
-      for (const row of list) insert.run(...row);
-    });
-    tx(rows);
-  }
-  database
-    .prepare("INSERT OR IGNORE INTO workflow_steps (step_key, step_name, sort_order, is_active) VALUES ('cancelled','合同取消',11,1)")
-    .run();
-  const hasCancelTransition = database
-    .prepare("SELECT 1 FROM workflow_transitions WHERE from_step = 'bid_decision' AND to_step = 'cancelled' LIMIT 1")
-    .get();
-  if (!hasCancelTransition) {
-    database
-      .prepare("INSERT INTO workflow_transitions (from_step, to_step, condition_type, condition_field) VALUES ('bid_decision','cancelled','user_action','bid_result=cancelled')")
-      .run();
-  }
 }

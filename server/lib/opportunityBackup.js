@@ -54,11 +54,17 @@ function toLocalDateTime(value) {
   return `${local.getUTCFullYear()}-${pad(local.getUTCMonth() + 1)}-${pad(local.getUTCDate())} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}:${pad(local.getUTCSeconds())}`;
 }
 
-export function buildOpportunityRow(order) {
-  const pos = order.id == null ? [] : getDb()
-    .prepare('SELECT po_number FROM customer_pos WHERE order_id = ? ORDER BY id')
-    .all(order.id);
-  const poNumbers = pos.map((row) => row.po_number).filter(Boolean).join('/') || null;
+export function buildOpportunityRow(order, poNumbers) {
+  const numbers = poNumbers == null
+    ? (order.id == null
+        ? []
+        : getDb()
+            .prepare('SELECT po_number FROM customer_pos WHERE order_id = ? ORDER BY id')
+            .all(order.id)
+            .map((row) => row.po_number)
+            .filter(Boolean))
+    : (Array.isArray(poNumbers) ? poNumbers : [poNumbers]);
+  const poText = numbers.filter(Boolean).join('/') || null;
   return [
     order.order_id || '',
     order.year || '',
@@ -74,7 +80,7 @@ export function buildOpportunityRow(order) {
     order.payment_terms || '',
     order.sales_order || '',
     order.total_amount == null ? '' : order.total_amount,
-    poNumbers,
+    poText,
     boolText(order.delivered),
     order.delivered_date || '',
     boolText(order.invoiced),
@@ -145,8 +151,21 @@ export async function buildOpportunitiesWorkbook(orders) {
     };
   });
 
+  const ids = orders.map((order) => order.id).filter((id) => id != null);
+  const poMap = new Map();
+  if (ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    const poRows = getDb()
+      .prepare(`SELECT order_id, po_number FROM customer_pos WHERE order_id IN (${placeholders}) ORDER BY order_id, id`)
+      .all(...ids);
+    for (const po of poRows) {
+      const list = poMap.get(po.order_id) || [];
+      list.push(po.po_number);
+      poMap.set(po.order_id, list);
+    }
+  }
   orders.forEach((order, index) => {
-    const row = worksheet.addRow(buildOpportunityRow(order));
+    const row = worksheet.addRow(buildOpportunityRow(order, poMap.get(order.id) || []));
     row.height = 18;
     row.eachCell((cell, colNumber) => {
       const colIndex = colNumber - 1;
