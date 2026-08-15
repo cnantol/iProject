@@ -1,6 +1,8 @@
 # 多阶段构建不是必须：本项目含 better-sqlite3 原生模块 + 中文字体，
-# 用单阶段 node:20-bookworm 一次编译运行最稳，避免原生依赖跨阶段链接出错。
-FROM node:20-bookworm
+# 用单阶段 node:22-bookworm 一次编译运行最稳，避免原生依赖跨阶段链接出错。
+# 注意：必须用 node 22 —— package.json 锁定 pnpm@11.9.0，要求 Node >= 22.13；
+# 用 node 20 会因 node:sqlite 内置模块缺失导致 pnpm install 崩溃。
+FROM node:22-bookworm
 
 WORKDIR /app
 
@@ -21,7 +23,9 @@ RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 COPY . .
 
 # 安装依赖并构建前端；better-sqlite3 在此阶段编译
-RUN pnpm install && pnpm build
+# 注意：直接进 client 构建，避免触发根 package.json 的 prebuild(eslint)，
+# 否则任意 lint 报错都会让镜像构建中断。lint 应在 CI 执行。
+RUN pnpm install && cd client && pnpm build
 
 ENV NODE_ENV=production
 ENV PORT=3001
