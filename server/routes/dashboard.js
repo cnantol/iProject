@@ -13,7 +13,7 @@ router.get('/', (req, res) => {
     .prepare("SELECT COALESCE(SUM(total_amount), 0) AS s FROM orders WHERE status = 'closed' AND bid_result = 'won' AND total_amount IS NOT NULL")
     .get().s;
   const totalOrderAmount = db
-    .prepare('SELECT COALESCE(SUM(total_amount), 0) AS s FROM orders WHERE total_amount IS NOT NULL')
+    .prepare("SELECT COALESCE(SUM(total_amount), 0) AS s FROM orders WHERE total_amount IS NOT NULL AND status <> 'cancelled'")
     .get().s;
   const inProgressAmount = db
     .prepare(
@@ -39,6 +39,7 @@ router.get('/', (req, res) => {
               COUNT(o.id) AS order_count
        FROM orders o
        WHERE o.total_amount IS NOT NULL AND o.year IS NOT NULL AND o.month IS NOT NULL
+         AND o.status <> 'cancelled'
          AND o.year || '-' || printf('%02d', CAST(o.month AS INTEGER)) BETWEEN ? AND ?
        GROUP BY month_key`
     )

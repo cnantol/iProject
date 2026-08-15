@@ -242,7 +242,7 @@ router.get('/waiting', (req, res) => {
 
 router.get('/overview', (req, res) => {
   const db = getDb();
-  const matched = "commission_matched = 1 AND commission_amount IS NOT NULL";
+  const matched = "commission_matched = 1 AND commission_amount IS NOT NULL AND status <> 'cancelled'";
   const deviationWhere =
     "status = 'closed' AND commission_amount > 0 AND total_amount > 0 " +
     "AND ABS(commission_amount - total_amount * 0.01) > total_amount * 0.01 * 0.02";
