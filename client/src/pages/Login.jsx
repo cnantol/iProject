@@ -4,7 +4,6 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -19,21 +18,23 @@ import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { useAuth } from '../context/AuthContext';
 import { useThemeMode } from '../context/ThemeContext';
 import { errorMessage } from '../api';
-import { useAppLogo } from '../context/AppLogoContext';
 
 export default function Login() {
   const { login } = useAuth();
-  const { mode, preference, setPreference } = useThemeMode();
-  const { src } = useAppLogo();
-  const [logoFailed, setLogoFailed] = useState(false);
-  const themeLogo = mode === 'dark' ? '/logo-dark.svg' : '/logo.svg';
-  const logo = logoFailed || src === '/logo.svg' ? themeLogo : src;
+  const { preference, setPreference } = useThemeMode();
   const navigate = useNavigate();
   const location = useLocation();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const modeLabel = preference === 'dark' ? '深色' : preference === 'light' ? '浅色' : '自动';
+  const ModeIcon = preference === 'dark' ? DarkModeIcon : preference === 'light' ? LightModeIcon : BrightnessAutoIcon;
+
+  const cyclePreference = () => {
+    setPreference(preference === 'system' ? 'light' : preference === 'light' ? 'dark' : 'system');
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -57,37 +58,58 @@ export default function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: (theme) =>
-          theme.palette.mode === 'dark'
-            ? 'linear-gradient(160deg, #0D141B 0%, #101A26 100%)'
-            : 'linear-gradient(160deg, #F4F6FA 0%, #EAF0F6 100%)',
-        p: 2
+        p: 2,
+        bgcolor: (theme) => (theme.palette.mode === 'dark' ? '#000000' : '#F5F5F7')
       }}
     >
-      <IconButton
-        onClick={() => setPreference(preference === 'system' ? 'light' : preference === 'light' ? 'dark' : 'system')}
-        aria-label="切换主题模式"
-        title="切换主题模式"
+      <Button
+        size="small"
+        startIcon={<ModeIcon fontSize="small" />}
+        onClick={cyclePreference}
         sx={{
           position: 'absolute',
-          top: 16,
-          right: 16,
-          color: 'text.secondary'
+          top: 18,
+          right: 20,
+          color: 'text.secondary',
+          textTransform: 'none',
+          fontWeight: 600,
+          borderRadius: 1.5,
+          '&:hover': { bgcolor: 'action.hover' }
         }}
       >
-        {preference === 'system' ? <BrightnessAutoIcon /> : preference === 'dark' ? <DarkModeIcon /> : <LightModeIcon />}
-      </IconButton>
-      <Card sx={{ position: 'relative', overflow: 'hidden', width: '100%', maxWidth: 440, p: { xs: 3, md: 4 }, boxShadow: (theme) => (theme.palette.mode === 'dark' ? '0 18px 48px rgba(0,0,0,0.45)' : '0 18px 48px rgba(20,50,85,0.10)') }}>
-        <Stack spacing={3}>
-          <Box sx={{ textAlign: 'center' }}>
-            <Box component="img" src={logo} alt="iProject" onError={() => setLogoFailed(true)} sx={{ height: 76, maxWidth: '100%', width: 'auto', objectFit: 'contain', mb: 1.5 }} />
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              全链路项目管理专家
-            </Typography>
-          </Box>
-          {error && <Alert severity="error">{error}</Alert>}
+        外观：{modeLabel}
+      </Button>
+
+      <Stack spacing={2.5} sx={{ width: '100%', maxWidth: 520 }}>
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: 0 }}>
+            iProject
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
+            全链路项目管理专家
+          </Typography>
+        </Box>
+
+        <Card
+          elevation={0}
+          sx={(theme) => ({
+            width: '100%',
+            p: { xs: 3.5, sm: 5 },
+            borderRadius: '14px',
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: theme.palette.mode === 'dark' ? '#1C1C1E' : '#FFFFFF',
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 18px 48px rgba(0,0,0,0.45)'
+              : '0 12px 40px rgba(0,0,0,0.07)'
+          })}
+        >
+          <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
+            登录
+          </Typography>
+          {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 1.5 }}>{error}</Alert>}
           <form onSubmit={handleSubmit}>
-            <Stack spacing={2}>
+            <Stack spacing={2.5}>
               <TextField
                 label="用户名"
                 value={username}
@@ -95,6 +117,20 @@ export default function Login() {
                 autoComplete="username"
                 required
                 fullWidth
+                sx={(theme) => ({
+                  '& .MuiInputBase-root': { minHeight: 52 },
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 1.5,
+                    bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#FFFFFF',
+                    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+                    '& fieldset': {
+                      borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'
+                    },
+                    '&:hover fieldset': { borderColor: '#0071E3' },
+                    '&.Mui-focused fieldset': { borderColor: '#0071E3', borderWidth: 1.5 }
+                  },
+                  '& .MuiInputLabel-root.Mui-focused': { color: '#0071E3' }
+                })}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -111,6 +147,20 @@ export default function Login() {
                 autoComplete="current-password"
                 required
                 fullWidth
+                sx={(theme) => ({
+                  '& .MuiInputBase-root': { minHeight: 52 },
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 1.5,
+                    bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : '#FFFFFF',
+                    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+                    '& fieldset': {
+                      borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)'
+                    },
+                    '&:hover fieldset': { borderColor: '#0071E3' },
+                    '&.Mui-focused fieldset': { borderColor: '#0071E3', borderWidth: 1.5 }
+                  },
+                  '& .MuiInputLabel-root.Mui-focused': { color: '#0071E3' }
+                })}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -119,14 +169,30 @@ export default function Login() {
                   )
                 }}
               />
-              <Button type="submit" variant="contained" size="large" startIcon={<LoginIcon />} disabled={loading} fullWidth>
-                {loading ? <CircularProgress size={22} color="inherit" /> : '登录系统'}
+              <Button
+                type="submit"
+                variant="contained"
+                size="large"
+                startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <LoginIcon />}
+                disabled={loading}
+                fullWidth
+                sx={{
+                  height: 48,
+                  borderRadius: 1.5,
+                  bgcolor: '#0071E3',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: 16,
+                  boxShadow: '0 4px 12px rgba(0,113,227,0.25)',
+                  '&:hover': { bgcolor: '#0077ED', boxShadow: '0 6px 16px rgba(0,113,227,0.32)' }
+                }}
+              >
+                {loading ? '登录中...' : '登录'}
               </Button>
-
             </Stack>
           </form>
-        </Stack>
-      </Card>
+        </Card>
+      </Stack>
     </Box>
   );
 }
