@@ -5,6 +5,7 @@ import { nowUtc, normalizeDate, normalizeSo } from '../utils.js';
 import { hasFrameworkForCustomer } from '../routes/materials.js';
 
 const DEFAULT_FILE = '/Users/lijian/Desktop/WorkBuddy/20260812Atlas Copco.xlsx';
+const IMPORTED_CLOSED_DATE = '2026-08-18 00:00:00';
 const MONTH_MAP = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
   jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12
@@ -165,7 +166,7 @@ function parseRows(rows, limit) {
         commissionAmount = commissionStatus === 'yes'
           ? (Number.isFinite(Number(commissionAmountRaw)) ? Math.max(0, Number(commissionAmountRaw)) : 0)
           : 0;
-        commissionDate = null;
+        commissionDate = IMPORTED_CLOSED_DATE;
       }
     } else if (cancelled) {
       status = 'cancelled';
@@ -179,7 +180,7 @@ function parseRows(rows, limit) {
       commissionAmount = commissionStatus === 'yes'
         ? (Number.isFinite(Number(commissionAmountRaw)) ? Math.max(0, Number(commissionAmountRaw)) : 0)
         : 0;
-      commissionDate = null;
+      commissionDate = IMPORTED_CLOSED_DATE;
     } else if (finalDelivered === 1 && finalInvoiced === 1) {
       status = 'commission';
     } else if (finalDelivered === 1 || finalInvoiced === 1 || poNumber) {
@@ -197,7 +198,7 @@ function parseRows(rows, limit) {
       deliveredDate = finalDelivered === 1 ? deliveredDate : null;
       invoicedDate = finalInvoiced === 1 ? invoicedDate : null;
     }
-    const closedAt = null;
+    const closedAt = status === 'closed' ? IMPORTED_CLOSED_DATE : null;
 
     result.push({
       rowNumber,

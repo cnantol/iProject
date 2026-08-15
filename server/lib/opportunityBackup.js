@@ -9,32 +9,34 @@ export const OPPORTUNITY_BACKUP_HEADERS = [
   'ID',
   'Year',
   'Month',
-  'Contract Customer',
   'End Customer',
-  'SO',
+  'Contract Customer',
   'Order Type',
-  'Prn',
-  'Total Amount',
-  'PO',
   'Workshop',
   'Project Name',
   'Project Owner',
-  'Payment Method',
   'Remark',
-  'Pending Issue',
-  'Payment Received',
+  'Prn',
+  'Payment Method',
+  'SO',
+  'Total Amount',
+  'PO',
   'Delivered',
   'Delivered Date',
   'Invoiced',
   'Invoiced Date',
   'Order status',
   'Commission Status',
-  'Commission Amount'
+  'Commission Amount',
+  'Commission Date',
+  'Closed Time',
+  'Created Time',
+  'Updated Time'
 ];
 
-const COLUMN_WIDTHS = [10, 8, 8, 30, 30, 16, 10, 14, 16, 16, 14, 22, 20, 12, 30, 12, 14, 10, 14, 10, 14, 18, 16, 16];
-const CENTER_COLUMNS = new Set([0, 1, 2, 6, 17, 19, 21, 22]);
-const NUMBER_COLUMNS = new Set([8, 23]);
+const COLUMN_WIDTHS = [10, 8, 8, 30, 30, 10, 14, 22, 20, 30, 14, 12, 16, 16, 22, 10, 14, 10, 14, 18, 16, 16, 16, 16, 20, 20];
+const CENTER_COLUMNS = new Set([0, 1, 2, 5, 15, 17, 19, 20, 22, 23, 24, 25]);
+const NUMBER_COLUMNS = new Set([13, 21]);
 
 function boolText(value) {
   if (Number(value) === 1) return 'Y';
@@ -42,36 +44,48 @@ function boolText(value) {
   return '';
 }
 
+function toLocalDateTime(value) {
+  if (!value) return '';
+  const text = String(value);
+  const date = new Date(text.includes('T') ? text : `${text.replace(' ', 'T')}Z`);
+  if (Number.isNaN(date.getTime())) return text;
+  const local = new Date(date.getTime() + 8 * 3600 * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${local.getUTCFullYear()}-${pad(local.getUTCMonth() + 1)}-${pad(local.getUTCDate())} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}:${pad(local.getUTCSeconds())}`;
+}
+
 export function buildOpportunityRow(order) {
   const pos = order.id == null ? [] : getDb()
     .prepare('SELECT po_number FROM customer_pos WHERE order_id = ? ORDER BY id')
     .all(order.id);
-  const poNumbers = pos.map((row) => row.po_number).filter(Boolean).join('、') || null;
+  const poNumbers = pos.map((row) => row.po_number).filter(Boolean).join('/') || null;
   return [
     order.order_id || '',
     order.year || '',
     order.month || '',
-    order.contract_customer_name || '',
     order.end_customer_name || '',
-    order.sales_order || '',
+    order.contract_customer_name || '',
     order.order_type || '',
-    order.project_no || '',
-    order.total_amount == null ? '' : order.total_amount,
-    poNumbers,
     order.workshop || '',
     order.project_name || '',
     order.project_owner || '',
-    order.payment_terms || '',
     order.project_remark || '',
-    null,
-    null,
+    order.project_no || '',
+    order.payment_terms || '',
+    order.sales_order || '',
+    order.total_amount == null ? '' : order.total_amount,
+    poNumbers,
     boolText(order.delivered),
     order.delivered_date || '',
     boolText(order.invoiced),
     order.invoiced_date || '',
     order.status || '',
     Number(order.commission_matched) === 1 ? 'Yes' : '',
-    order.commission_amount == null ? '' : order.commission_amount
+    order.commission_amount == null ? '' : order.commission_amount,
+    toLocalDateTime(order.commission_date),
+    toLocalDateTime(order.closed_at),
+    toLocalDateTime(order.created_at),
+    toLocalDateTime(order.updated_at)
   ];
 }
 
@@ -115,7 +129,7 @@ export async function buildOpportunitiesWorkbook(orders) {
   const worksheet = workbook.addWorksheet('Atlas Copco');
   worksheet.columns = COLUMN_WIDTHS.map((width) => ({ width }));
   worksheet.views = [{ state: 'frozen', ySplit: 1 }];
-  worksheet.autoFilter = 'A1:X1';
+  worksheet.autoFilter = 'A1:Z1';
 
   const headerRow = worksheet.addRow(OPPORTUNITY_BACKUP_HEADERS);
   headerRow.height = 24;
