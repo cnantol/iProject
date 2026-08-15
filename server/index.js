@@ -20,6 +20,7 @@ import customerPosRoutes from './routes/customerPos.js';
 import attachmentRoutes from './routes/attachments.js';
 import shippingRoutes from './routes/shipping.js';
 import invoiceRoutes from './routes/invoices.js';
+import orderNotesRoutes from './routes/orderNotes.js';
 import commissionRoutes from './routes/commission.js';
 import todoRoutes from './routes/todos.js';
 import dashboardRoutes from './routes/dashboard.js';
@@ -71,6 +72,7 @@ export function createApp() {
   app.use('/api/orders', authenticate, attachmentRoutes);
   app.use('/api/orders', authenticate, shippingRoutes);
   app.use('/api/orders', authenticate, invoiceRoutes);
+  app.use('/api/orders', authenticate, orderNotesRoutes);
   app.use('/api/commission', authenticate, commissionRoutes);
   app.use('/api/todos', authenticate, todoRoutes);
   app.use('/api/dashboard', authenticate, dashboardRoutes);

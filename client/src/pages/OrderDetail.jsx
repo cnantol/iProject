@@ -35,6 +35,7 @@ import StepShipping from '../components/StepShipping';
 import StepInvoicing from '../components/StepInvoicing';
 import StepCommission from '../components/StepCommission';
 import StepClose from '../components/StepClose';
+import OrderNotesPanel from '../components/OrderNotesPanel';
 
 function InfoTile({ label, value, color, darkColor, children }) {
   return (
@@ -175,6 +176,7 @@ export default function OrderDetail() {
   const renderStep = () => {
     const key = activeKey;
     const common = { order: stepOrder, readOnly: isStepReadOnly(order, key), onChanged: load, onAdvance: load };
+    if (key === 'notes') return <OrderNotesPanel orderId={order.id} />;
     if (key === 'customer_info') return <StepCustomerInfo {...common} onFrameworkChange={setLocalFramework} />;
     if (key === 'proposal') return <StepProposal {...common} />;
     if (key === 'quotation') return <StepQuotation {...common} />;

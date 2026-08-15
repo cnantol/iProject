@@ -181,6 +181,17 @@ try {
   assert.strictEqual(idConsistency.ok, true);
   assert.strictEqual(idConsistency.mismatched.length, 0);
   assert.strictEqual(created.order.status, 'customer_info');
+  const note = must(
+    await call('POST', `/api/orders/${orderId}/notes`, { token, body: { content: 'Project Log 测试' } }),
+    201,
+    '新增 Project Log'
+  );
+  assert.strictEqual(note.item.content, 'Project Log 测试');
+  const noteList = must(await call('GET', `/api/orders/${orderId}/notes`, { token }), 200, 'Project Log 列表');
+  assert.strictEqual(noteList.items.length, 1);
+  assert.strictEqual(noteList.items[0].id, note.item.id);
+  must(await call('DELETE', `/api/orders/${orderId}/notes/${note.item.id}`, { token }), 200, '删除 Project Log');
+  ok('Project Log');
   const backupFile = path.join(dataDir, 'opportunity-backup.xlsx');
   assert.ok(fs.existsSync(backupFile), '新建商机应自动生成备份 Excel');
   const backupWorkbook = xlsx.read(fs.readFileSync(backupFile), { type: 'buffer' });
@@ -610,6 +621,14 @@ try {
   const dash = must(await call('GET', '/api/dashboard', { token }), 200, '看板');
   assert.ok(dash.totalOrders >= 2);
   assert.ok(Number.isFinite(Number(dash.inProgressAmount)));
+  assert.ok(Array.isArray(dash.inProgressMonthly.months));
+  assert.ok(Array.isArray(dash.inProgressMonthly.customers));
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(dash, 'inProgressByCustomer'), false, '看板接口不应返回旧进行中客户汇总');
+  assert.ok(Array.isArray(dash.monthlySales.months));
+  assert.strictEqual(dash.monthlySales.months.length, 12);
+  assert.ok(Number.isFinite(Number(dash.monthlySales.totalAmount)));
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(dash.monthlySales, 'customers'), false, '看板接口不应返回客户月度分布');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(dash, 'customerTotals'), false, '看板接口不应返回旧客户排行');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(dash, 'totalCommission'), false, '看板接口不应返回佣金总额');
   const commissionOverview = must(await call('GET', '/api/commission/overview', { token }), 200, '佣金整体状况');
   assert.ok(Number.isFinite(Number(commissionOverview.summary.matchedAmount)));

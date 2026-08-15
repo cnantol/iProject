@@ -372,7 +372,7 @@ export default function Settings() {
       {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
       {notice && <Alert severity="success" onClose={() => setNotice('')}>{notice}</Alert>}
 
-      <Grid container spacing={2}>
+      <Grid container spacing={2} style={{ marginLeft: -16, marginRight: -16 }}>
         <Grid item xs={12} md={6}>
           <SectionCard icon={<PersonIcon fontSize="small" />} title="账户设置" subtitle="修改用户名或密码前需验证当前密码">
             <Stack spacing={1.5}>

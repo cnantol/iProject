@@ -1131,6 +1131,7 @@ function deleteBusinessData(db) {
   const tables = [
     'order_custom_fields',
     'order_attachments',
+    'order_notes',
     'quotation_items',
     'approval_records',
     'quotations',

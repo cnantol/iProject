@@ -8,7 +8,6 @@ import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Grid from '@mui/material/Grid';
-import LinearProgress from '@mui/material/LinearProgress';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Stack from '@mui/material/Stack';
@@ -31,6 +30,8 @@ import InsightsIcon from '@mui/icons-material/Insights';
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import api from '../api';
 import { fmtMoney, fmtDate, daysSinceDate } from '../utils/helpers';
+import MonthlySalesCharts from '../components/MonthlySalesCharts';
+import StackedMonthlyBarChart from '../components/StackedMonthlyBarChart';
 
 function StatCard({ label, value, accent, badge, icon }) {
   return (
@@ -160,44 +161,31 @@ export default function Dashboard() {
           <Card sx={{ height: '100%' }}>
             <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: 'primary.main' }} />
             <CardContent>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
-                <Typography variant="h6">进行中汇总</Typography>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+                  <Typography variant="h6">进行中汇总</Typography>
+                </Stack>
+                <Chip
+                  size="small"
+                  label={`合计 ¥ ${fmtMoney(data.inProgressMonthly?.totalAmount)}`}
+                  sx={{
+                    bgcolor: 'rgba(25,118,210,0.10)',
+                    color: '#1976D2',
+                    fontWeight: 700,
+                    border: '1px solid rgba(25,118,210,0.30)'
+                  }}
+                />
               </Stack>
               <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.75 }}>
-                按最终客户
+                按月份与最终客户
               </Typography>
-              {(data.inProgressByCustomer || []).length === 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 1, textAlign: 'center' }}>
-                  暂无进行中商机
-                </Typography>
-              ) : (
-                <Stack spacing={1}>
-                  {(data.inProgressByCustomer || []).map((row, index) => {
-                    const maxCustomer = Math.max(1, ...(data.inProgressByCustomer || []).map((r) => Number(r.count)));
-                    return (
-                      <Box key={row.customer_name || `customer-${index}`}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.25, gap: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-                            {row.customer_name || '未分配客户'}
-                          </Typography>
-                          <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexShrink: 0 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 800, color: '#00897B', whiteSpace: 'nowrap' }}>
-                              ¥ {fmtMoney(row.total_amount)}
-                            </Typography>
-                            <Chip size="small" label={`${row.count} 个`} variant="outlined" color="primary" sx={{ fontWeight: 700 }} />
-                          </Stack>
-                        </Stack>
-                        <LinearProgress
-                          variant="determinate"
-                          value={(Number(row.count) / maxCustomer) * 100}
-                          sx={{ height: 7, borderRadius: 2, bgcolor: 'rgba(0,137,123,0.12)', '& .MuiLinearProgress-bar': { bgcolor: '#00897B' } }}
-                        />
-                      </Box>
-                    );
-                  })}
-                </Stack>
-              )}
+              <StackedMonthlyBarChart
+                months={data.inProgressMonthly?.months || []}
+                customers={data.inProgressMonthly?.customers || []}
+                ariaLabel="进行中商机月度客户金额柱状图"
+                emptyText="暂无进行中商机"
+              />
             </CardContent>
           </Card>
         </Grid>
@@ -357,59 +345,23 @@ export default function Dashboard() {
           <Card>
             <Box sx={{ height: 4, borderRadius: '10px 10px 0 0', bgcolor: '#C9A227' }} />
             <CardContent>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: '#C9A227' }} />
-                  <Typography variant="h6">最终客户金额排行</Typography>
+                  <Typography variant="h6">最近一年月度销售额</Typography>
                 </Stack>
+                <Chip
+                  size="small"
+                  label={`最近一年合计 ¥ ${fmtMoney(data.monthlySales?.totalAmount)}`}
+                  sx={{
+                    bgcolor: 'rgba(201,162,39,0.12)',
+                    color: '#8A6D00',
+                    fontWeight: 700,
+                    border: '1px solid rgba(201,162,39,0.35)'
+                  }}
+                />
               </Stack>
-              {(data.customerTotals || []).length === 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-                  暂无数据
-                </Typography>
-              ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                      <TableCell sx={{ width: 70 }}>排名</TableCell>
-                      <TableCell>最终客户</TableCell>
-                      <TableCell align="right">订单数</TableCell>
-                      <TableCell align="right">总金额</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {(data.customerTotals || []).map((item, index) => (
-                      <TableRow key={item.customer_name || `customer-${index}`} hover>
-                        <TableCell>
-                          <Box
-                            sx={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: 1.5,
-                              bgcolor: index === 0 ? '#C9A227' : '#C9A22733',
-                              color: index === 0 ? '#fff' : '#8A6D00',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 800,
-                              fontSize: 13
-                            }}
-                          >
-                            {index === 0 ? <EmojiEventsIcon sx={{ fontSize: 16 }} /> : index + 1}
-                          </Box>
-                        </TableCell>
-                        <TableCell sx={{ fontWeight: index === 0 ? 800 : 600, color: index === 0 ? '#8A6D00' : 'text.primary' }}>
-                          {item.customer_name || '未分配客户'}
-                        </TableCell>
-                        <TableCell align="right">{item.order_count} 个</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 800, whiteSpace: 'nowrap', color: index === 0 ? '#8A6D00' : 'text.primary' }}>
-                          ¥ {fmtMoney(item.total_amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+              <MonthlySalesCharts data={data.monthlySales || { months: [], customers: [] }} />
             </CardContent>
           </Card>
         </Grid>

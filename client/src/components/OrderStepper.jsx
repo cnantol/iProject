@@ -8,6 +8,7 @@ import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import CancelIcon from '@mui/icons-material/Cancel';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import EventNoteIcon from '@mui/icons-material/EventNote';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import LockIcon from '@mui/icons-material/Lock';
@@ -34,16 +35,16 @@ const fillLine = keyframes({
 });
 
 const STEP_ICONS = {
-  customer_info: <PersonIcon sx={{ fontSize: 18 }} />,
-  proposal: <DescriptionIcon sx={{ fontSize: 18 }} />,
-  quotation: <RequestQuoteIcon sx={{ fontSize: 18 }} />,
-  approval_pending: <FactCheckIcon sx={{ fontSize: 18 }} />,
-  bid_decision: <EmojiEventsIcon sx={{ fontSize: 18 }} />,
-  finance: <AccountBalanceIcon sx={{ fontSize: 18 }} />,
-  shipping_invoicing: <LocalShippingIcon sx={{ fontSize: 18 }} />,
-  commission: <PaidIcon sx={{ fontSize: 18 }} />,
-  closed: <LockIcon sx={{ fontSize: 18 }} />,
-  cancelled: <CancelIcon sx={{ fontSize: 18 }} />
+  customer_info: <PersonIcon sx={{ fontSize: 24 }} />,
+  proposal: <DescriptionIcon sx={{ fontSize: 24 }} />,
+  quotation: <RequestQuoteIcon sx={{ fontSize: 24 }} />,
+  approval_pending: <FactCheckIcon sx={{ fontSize: 24 }} />,
+  bid_decision: <EmojiEventsIcon sx={{ fontSize: 24 }} />,
+  finance: <AccountBalanceIcon sx={{ fontSize: 24 }} />,
+  shipping_invoicing: <LocalShippingIcon sx={{ fontSize: 24 }} />,
+  commission: <PaidIcon sx={{ fontSize: 24 }} />,
+  closed: <LockIcon sx={{ fontSize: 24 }} />,
+  cancelled: <CancelIcon sx={{ fontSize: 24 }} />
 };
 
 export default function OrderStepper({ order, activeKey, onSelect }) {
@@ -80,8 +81,8 @@ export default function OrderStepper({ order, activeKey, onSelect }) {
                 <Box
                   onClick={() => !disabled && onSelect(step.key)}
                   sx={(theme) => ({
-                    width: 34,
-                    height: 34,
+                    width: 48,
+                    height: 48,
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
@@ -98,7 +99,7 @@ export default function OrderStepper({ order, activeKey, onSelect }) {
                     '&:hover': disabled ? undefined : { transform: 'scale(1.06)' }
                   })}
                 >
-                  {done ? <CheckIcon sx={{ fontSize: 18 }} /> : STEP_ICONS[step.key] || index + 1}
+                  {done ? <CheckIcon sx={{ fontSize: 24 }} /> : STEP_ICONS[step.key] || index + 1}
                 </Box>
                 <Typography
                   variant="caption"
@@ -127,7 +128,7 @@ export default function OrderStepper({ order, activeKey, onSelect }) {
                     flex: 1,
                     minWidth: 10,
                     height: 4,
-                    mt: '15px',
+                    mt: '22px',
                     borderRadius: 4,
                     overflow: 'hidden',
                     position: 'relative',
@@ -151,6 +152,52 @@ export default function OrderStepper({ order, activeKey, onSelect }) {
             </Fragment>
           );
         })}
+        <Fragment>
+          <Box
+            aria-hidden
+            sx={{ flex: 1, minWidth: 10, height: 0, borderTop: '2px dashed rgba(25,118,210,0.45)', mt: '23px' }}
+          />
+          <Box sx={{ width: 96, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <Box
+              onClick={() => onSelect('notes')}
+              sx={{
+                width: 28,
+                height: 28,
+                mt: '10px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: activeKey === 'notes' ? '#FFFFFF' : 'primary.main',
+                backgroundColor: activeKey === 'notes' ? '#1976D2' : 'rgba(25,118,210,0.10)',
+                border: activeKey === 'notes' ? 'none' : '2px dashed rgba(25,118,210,0.45)',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease, color 0.2s ease, transform 0.2s ease',
+                '&:hover': { transform: 'scale(1.06)' }
+              }}
+            >
+              <EventNoteIcon sx={{ fontSize: 16 }} />
+            </Box>
+            <Typography
+              variant="caption"
+              sx={{
+                marginTop: '17px',
+                minHeight: 34,
+                display: 'block',
+                textAlign: 'center',
+                lineHeight: 1.3,
+                fontSize: 12.5,
+                fontWeight: activeKey === 'notes' ? 800 : 600,
+                color: activeKey === 'notes' ? 'primary.main' : 'text.primary'
+              }}
+            >
+              Project Log
+            </Typography>
+            {activeKey === 'notes' && (
+              <Chip size="small" color="primary" label="记录中" sx={{ mt: 0.5, height: 20, fontSize: 11, fontWeight: 700 }} />
+            )}
+          </Box>
+        </Fragment>
       </Box>
     </Box>
   );

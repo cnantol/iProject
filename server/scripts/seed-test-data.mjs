@@ -132,6 +132,7 @@ function cleanupTestOrders(db) {
       db.prepare('UPDATE orders SET selected_round_id = NULL WHERE id = ?').run(row.id);
       db.prepare('DELETE FROM quotations WHERE order_id = ?').run(row.id);
       db.prepare('DELETE FROM order_attachments WHERE order_id = ?').run(row.id);
+      db.prepare('DELETE FROM order_notes WHERE order_id = ?').run(row.id);
       db.prepare('DELETE FROM todos WHERE order_ref = ?').run(row.id);
       db.prepare('DELETE FROM orders WHERE id = ?').run(row.id);
       fs.rmSync(path.join(getUploadDir(), String(row.id)), { recursive: true, force: true });

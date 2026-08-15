@@ -184,6 +184,17 @@ CREATE TABLE IF NOT EXISTS order_attachments (
   uploaded_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS order_notes (
+  id INTEGER PRIMARY KEY,
+  order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_notes_order ON order_notes(order_id);
+
 CREATE TABLE IF NOT EXISTS shipping_batches (
   id INTEGER PRIMARY KEY,
   order_id INTEGER REFERENCES orders(id),

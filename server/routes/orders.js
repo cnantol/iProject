@@ -424,6 +424,7 @@ router.delete('/:id', (req, res) => {
     db.prepare('DELETE FROM proposal_selections WHERE proposal_version_id IN (SELECT id FROM proposal_versions WHERE order_id = ?)').run(order.id);
     db.prepare('DELETE FROM proposal_versions WHERE order_id = ?').run(order.id);
     db.prepare('DELETE FROM todos WHERE order_ref = ?').run(order.id);
+    db.prepare('DELETE FROM order_notes WHERE order_id = ?').run(order.id);
     db.prepare('DELETE FROM orders WHERE id = ?').run(order.id);
   });
   tx();

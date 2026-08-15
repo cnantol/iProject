@@ -1111,20 +1111,20 @@ function OverviewStat({ label, value, accent, icon, sub, highlight = false }) {
           borderRadius: 2,
         border: '1px solid',
         borderColor: highlight ? 'rgba(0,105,92,0.35)' : 'divider',
-        bgcolor: highlight ? '#00695C' : 'background.paper',
-        boxShadow: highlight ? '0 8px 24px rgba(0,105,92,0.16)' : 'none',
+        bgcolor: 'background.paper',
+        boxShadow: 'none',
         transition: 'box-shadow 0.2s ease',
         '&:hover': { boxShadow: '0 5px 16px rgba(15,23,42,0.10)' }
       }}
     >
-      <Box sx={{ height: 4, bgcolor: highlight ? 'rgba(255,255,255,0.35)' : accent }} />
+      <Box sx={{ height: 4, bgcolor: accent }} />
       <CardContent sx={{ flex: 1, p: 2.25, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5}>
           <Box sx={{ minWidth: 0 }}>
             <Typography
               variant="overline"
               sx={{
-                color: highlight ? 'rgba(255,255,255,0.8)' : 'text.secondary',
+                color: 'text.secondary',
                 fontWeight: 700,
                 lineHeight: 1.4
               }}
@@ -1136,7 +1136,7 @@ function OverviewStat({ label, value, accent, icon, sub, highlight = false }) {
               sx={{
                 mt: 0.5,
                 fontWeight: 800,
-                color: highlight ? '#fff' : accent,
+                color: accent,
                 whiteSpace: 'nowrap',
                 lineHeight: 1.25
               }}
@@ -1150,7 +1150,7 @@ function OverviewStat({ label, value, accent, icon, sub, highlight = false }) {
                   mt: 0.75,
                   display: 'block',
                   fontWeight: 700,
-                  color: highlight ? 'rgba(255,255,255,0.85)' : 'text.secondary',
+                  color: 'text.secondary',
                   whiteSpace: 'nowrap',
                   lineHeight: 1.2
                 }}
@@ -1167,8 +1167,8 @@ function OverviewStat({ label, value, accent, icon, sub, highlight = false }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              bgcolor: highlight ? 'rgba(255,255,255,0.16)' : `${accent}18`,
-              color: highlight ? '#fff' : accent,
+              bgcolor: `${accent}18`,
+              color: accent,
               flexShrink: 0
             }}
           >
