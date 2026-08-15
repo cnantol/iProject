@@ -3,13 +3,18 @@ import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { fmtMoney, fmtDateTime } from '../utils/helpers';
+import { fmtMoney, fmtDateTime, fmtSignedMoney, fmtSignedPercent } from '../utils/helpers';
 import { STATUS_LABELS } from '../utils/constants';
 import { useFieldLabels } from '../utils/fieldLabels';
 import StepWrapper from './StepWrapper';
 
 export default function StepClose({ order }) {
   const { t } = useFieldLabels();
+  const expectedCommission = Number.isFinite(Number(order.commission_expected))
+    ? Number(order.commission_expected)
+    : Number(order.total_amount) * 0.01;
+  const commissionDeviation = Number(order.commission_amount) - expectedCommission;
+  const commissionDeviationRatio = expectedCommission > 0 ? (commissionDeviation / expectedCommission) * 100 : 0;
   const closed = order.status === 'closed';
   const lostClosed = order.status === 'lost_closed';
   const cancelled = order.status === 'cancelled';
@@ -33,7 +38,7 @@ export default function StepClose({ order }) {
       </Alert>
       {order.commission_status === 'warn' && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          佣金金额与订单金额的 1% 规则偏差超过 2%，请核对佣金金额（当前 {order.commission_amount}，按 1% 应为 {Number(order.commission_expected).toFixed(2)}）。
+          佣金金额与订单金额的 1% 规则偏差超过 2%，请核对佣金金额（当前 ¥{fmtMoney(order.commission_amount)}，按 1% 应为 ¥{fmtMoney(expectedCommission)}，偏差 {fmtSignedMoney(commissionDeviation)} / {fmtSignedPercent(commissionDeviationRatio)}）。
         </Alert>
       )}
       <Grid container spacing={2}>

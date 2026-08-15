@@ -29,12 +29,14 @@ import Typography from '@mui/material/Typography';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import CheckIcon from '@mui/icons-material/Check';
 import PaymentsIcon from '@mui/icons-material/Payments';
+import PieChartIcon from '@mui/icons-material/PieChart';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 import InboxIcon from '@mui/icons-material/Inbox';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
-import { fmtDateTime, fmtMoney } from '../utils/helpers';
+import { fmtDateTime, fmtMoney, fmtSignedMoney, fmtSignedPercent } from '../utils/helpers';
 import { useFieldLabels } from '../utils/fieldLabels';
 import { tableHeadTokens } from '../theme/md3Theme';
 
@@ -273,11 +275,12 @@ export default function CommissionPage() {
             }
           };
         }}>
-        <Tab icon={<PaymentsIcon />} iconPosition="start" label="佣金结算" />
+        <Tab icon={<PieChartIcon />} iconPosition="start" label="佣金总览" />
         <Tab icon={<WarningAmberIcon />} iconPosition="start" label="佣金偏差" />
+        <Tab icon={<PaymentsIcon />} iconPosition="start" label="佣金结算" />
       </Tabs>
 
-      {tab === 0 && (
+      {tab === 2 && (
         <>
           {error && <Alert severity="error" onClose={() => setError('')} sx={{ borderRadius: 1.5 }}>{error}</Alert>}
           {result && (
@@ -743,6 +746,7 @@ export default function CommissionPage() {
         </>
       )}
 
+      {tab === 0 && <CommissionOverview />}
       {tab === 1 && <CommissionDeviations />}
 
       <Dialog open={!!manualTarget} onClose={() => setManualTarget(null)} maxWidth="sm" fullWidth>
@@ -891,12 +895,6 @@ function signedMoney(v) {
   if (!Number.isFinite(n)) return '-';
   const body = fmtMoney(Math.abs(n));
   return n < 0 ? `-¥${body}` : `¥${body}`;
-}
-
-function signedRatio(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '-';
-  return `${n.toFixed(2)}%`;
 }
 
 function CommissionDeviations() {
@@ -1052,11 +1050,11 @@ function CommissionDeviations() {
                         letterSpacing: 0.3,
                       }}
                     >
-                      {signedMoney(item.diff_amount)}
+                      {fmtSignedMoney(item.diff_amount)}
                     </TableCell>
                     <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                       <Typography variant="body2" sx={{ fontWeight: 800, fontSize: 13, color: signColor(diffRound) }}>
-                        {item.diff_ratio != null ? signedRatio(item.diff_ratio) : '-'}
+                        {item.diff_ratio != null ? fmtSignedPercent(item.diff_ratio) : '-'}
                       </Typography>
                     </TableCell>
                   </TableRow>
@@ -1101,4 +1099,346 @@ function CommissionDeviations() {
   );
 }
 
-export { CommissionDeviations };
+function OverviewStat({ label, value, accent, icon, sub, highlight = false }) {
+  return (
+      <Card
+        sx={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 124,
+          overflow: 'hidden',
+          borderRadius: 2,
+        border: '1px solid',
+        borderColor: highlight ? 'rgba(0,105,92,0.35)' : 'divider',
+        bgcolor: highlight ? '#00695C' : 'background.paper',
+        boxShadow: highlight ? '0 8px 24px rgba(0,105,92,0.16)' : 'none',
+        transition: 'box-shadow 0.2s ease',
+        '&:hover': { boxShadow: '0 5px 16px rgba(15,23,42,0.10)' }
+      }}
+    >
+      <Box sx={{ height: 4, bgcolor: highlight ? 'rgba(255,255,255,0.35)' : accent }} />
+      <CardContent sx={{ flex: 1, p: 2.25, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="overline"
+              sx={{
+                color: highlight ? 'rgba(255,255,255,0.8)' : 'text.secondary',
+                fontWeight: 700,
+                lineHeight: 1.4
+              }}
+            >
+              {label}
+            </Typography>
+            <Typography
+              variant={highlight ? 'h5' : 'h6'}
+              sx={{
+                mt: 0.5,
+                fontWeight: 800,
+                color: highlight ? '#fff' : accent,
+                whiteSpace: 'nowrap',
+                lineHeight: 1.25
+              }}
+            >
+              {value}
+            </Typography>
+            {sub && (
+              <Typography
+                variant="caption"
+                sx={{
+                  mt: 0.75,
+                  display: 'block',
+                  fontWeight: 700,
+                  color: highlight ? 'rgba(255,255,255,0.85)' : 'text.secondary',
+                  whiteSpace: 'nowrap',
+                  lineHeight: 1.2
+                }}
+              >
+                {sub}
+              </Typography>
+            )}
+          </Box>
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: highlight ? 'rgba(255,255,255,0.16)' : `${accent}18`,
+              color: highlight ? '#fff' : accent,
+              flexShrink: 0
+            }}
+          >
+            {icon}
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+function niceAxisMax(value) {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return step * magnitude;
+}
+
+function smoothLinePath(points) {
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[i - 1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  }
+  return d;
+}
+
+function YearCommissionChart({ data }) {
+  const rows = (data || []).map((row) => ({
+    year: String(row.year || ''),
+    amount: Number(row.amount) || 0,
+    count: Number(row.count) || 0
+  }));
+  if (rows.length === 0) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 240, color: 'text.secondary' }}>
+        暂无数据
+      </Box>
+    );
+  }
+
+  const W = 560;
+  const H = 260;
+  const PL = 84;
+  const PR = 18;
+  const PT = 30;
+  const PB = 44;
+  const innerW = W - PL - PR;
+  const innerH = H - PT - PB;
+  const axisMax = niceAxisMax(Math.max(...rows.map((row) => row.amount), 1));
+  const xFor = (index) => (rows.length === 1 ? PL + innerW / 2 : PL + (innerW * index) / (rows.length - 1));
+  const yFor = (amount) => PT + innerH * (1 - amount / axisMax);
+  const pts = rows.map((row, index) => ({ ...row, x: xFor(index), y: yFor(row.amount) }));
+  const baseline = PT + innerH;
+  const line = smoothLinePath(pts);
+  const area = `${line} L ${pts[pts.length - 1].x} ${baseline} L ${pts[0].x} ${baseline} Z`;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => axisMax * ratio);
+
+  return (
+    <Box sx={{ width: '100%', overflow: 'hidden' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="按年份佣金曲线图" style={{ display: 'block', width: '100%', height: 'auto' }}>
+        {ticks.map((tick) => (
+          <g key={tick}>
+            <line
+              x1={PL}
+              x2={W - PR}
+              y1={yFor(tick)}
+              y2={yFor(tick)}
+              stroke="rgba(120, 144, 156, 0.25)"
+              strokeDasharray="4 4"
+            />
+            <text x={PL - 10} y={yFor(tick) + 4} textAnchor="end" fontSize={11} fill="#78909C">
+              {fmtMoney(tick)}
+            </text>
+          </g>
+        ))}
+        <path d={area} fill="rgba(25, 118, 210, 0.08)" />
+        <path d={line} fill="none" stroke="#1976D2" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+        {pts.map((point) => (
+          <g key={point.year}>
+            <circle cx={point.x} cy={point.y} r={4.5} fill="#FFFFFF" stroke="#1976D2" strokeWidth={2.5}>
+              <title>{`${point.year}年 · ${point.count}个商机 · 佣金 ${fmtMoney(point.amount)} 元`}</title>
+            </circle>
+            <text x={point.x} y={point.y - 12} textAnchor="middle" fontSize={11} fontWeight={700} fill="#37474F">
+              {fmtMoney(point.amount)}
+            </text>
+          </g>
+        ))}
+        {pts.map((point) => (
+          <text key={`${point.year}-axis`} x={point.x} y={H - PB + 24} textAnchor="middle" fontSize={13} fontWeight={700} fill="#546E7A">
+            {point.year}年
+          </text>
+        ))}
+      </svg>
+    </Box>
+  );
+}
+
+function CommissionOverview() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: result } = await api.get('/commission/overview');
+      setData(result);
+      setError('');
+    } catch (err) {
+      setError(errorMessage(err, '加载失败'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const summary = data?.summary || {};
+  const cards = [
+    { label: '已结算佣金总额', value: `¥ ${fmtMoney(summary.matchedAmount)}`, accent: '#00897B', icon: <PaymentsIcon />, highlight: true },
+    { label: '已匹配商机', value: summary.matchedCount ?? 0, accent: '#2E7D32', icon: <CheckIcon /> },
+    { label: '待结算商机', value: summary.waitingCount ?? 0, accent: '#F57C00', icon: <InboxIcon /> },
+    { label: '待结算预计佣金', value: `¥ ${fmtMoney(summary.waitingExpected)}`, accent: '#C9A227', icon: <ScheduleIcon /> },
+    { label: '佣金偏差商机', value: summary.deviationCount ?? 0, accent: '#C62828', icon: <WarningAmberIcon /> },
+    {
+      label: '正 / 负偏差金额',
+      value: fmtSignedMoney(summary.positiveDeviationAmount),
+      accent: '#D32F2F',
+      icon: <WarningAmberIcon />,
+      sub: `负偏差 ${fmtSignedMoney(summary.negativeDeviationAmount)}`
+    }
+  ];
+  const tableHeadSx = (theme) => {
+    const tk = tableHeadTokens[theme.palette.mode];
+    return { bgcolor: tk.bg, color: tk.color, fontWeight: 800, borderBottom: '2px solid', borderColor: tk.border };
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  if (error) {
+    return <Alert severity="error" onClose={() => setError('')} sx={{ borderRadius: 1.5 }}>{error}</Alert>;
+  }
+  if (!data) return null;
+
+  return (
+    <Stack spacing={2}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+          gap: 2
+        }}
+      >
+        {cards.map((card) => (
+          <OverviewStat key={card.label} {...card} />
+        ))}
+      </Box>
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+          gap: 2,
+          alignItems: 'stretch'
+        }}
+      >
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+                <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'primary.main' }} />
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>按年份佣金</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>单位：元</Typography>
+              </Stack>
+              <YearCommissionChart data={data.byYear || []} />
+            </CardContent>
+          </Card>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+                <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: 'success.main' }} />
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>客户佣金 Top 8</Typography>
+              </Stack>
+              <Table size="small" sx={(theme) => ({ '& .MuiTableCell-head': tableHeadSx(theme) })}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>客户</TableCell>
+                    <TableCell align="right">商机数</TableCell>
+                    <TableCell align="right">佣金金额</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(data.byCustomer || []).length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} align="center" sx={{ py: 2.5, color: 'text.secondary' }}>暂无数据</TableCell>
+                    </TableRow>
+                  ) : (
+                    (data.byCustomer || []).map((row) => (
+                      <TableRow key={row.customer_name} hover>
+                        <TableCell sx={{ fontWeight: 600 }}>{row.customer_name}</TableCell>
+                        <TableCell align="right">{row.count}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>¥ {fmtMoney(row.amount)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+      </Box>
+
+      <Card sx={{ borderRadius: 2 }}>
+        <CardContent>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+            <Box sx={{ width: 4, height: 22, borderRadius: 2, bgcolor: '#C9A227' }} />
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>最近结算记录</Typography>
+            <Chip size="small" label="最近 10 条" variant="outlined" sx={{ ml: 'auto', fontWeight: 700 }} />
+          </Stack>
+          <Box sx={{ overflow: 'auto' }}>
+            <Table size="small" sx={(theme) => ({ minWidth: 760, '& .MuiTableCell-head': tableHeadSx(theme) })}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>商机编号</TableCell>
+                  <TableCell>项目名称</TableCell>
+                  <TableCell>最终客户</TableCell>
+                  <TableCell align="right">订单金额</TableCell>
+                  <TableCell align="right">佣金金额</TableCell>
+                  <TableCell>结算时间</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(data.recent || []).length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>暂无结算记录</TableCell>
+                  </TableRow>
+                ) : (
+                  (data.recent || []).map((row) => (
+                    <TableRow key={row.id} hover>
+                      <TableCell sx={{ fontWeight: 800, color: 'primary.main', whiteSpace: 'nowrap' }}>{row.order_id}</TableCell>
+                      <TableCell sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.project_name || '-'}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.end_customer_name || '-'}</TableCell>
+                      <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>¥ {fmtMoney(row.total_amount)}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>¥ {fmtMoney(row.commission_amount)}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{fmtDateTime(row.commission_date)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Box>
+        </CardContent>
+      </Card>
+    </Stack>
+  );
+}
+
+export { CommissionDeviations, CommissionOverview };

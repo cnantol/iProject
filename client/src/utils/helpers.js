@@ -6,6 +6,20 @@ export function fmtMoney(value, digits = 2) {
   return num.toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+export function fmtSignedMoney(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '-';
+  if (round2(num) === 0) return '¥0.00';
+  return `${num > 0 ? '+' : '-'}¥${fmtMoney(Math.abs(num))}`;
+}
+
+export function fmtSignedPercent(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '-';
+  if (round2(num) === 0) return '0.00%';
+  return `${num > 0 ? '+' : ''}${num.toFixed(2)}%`;
+}
+
 export function round2(n) {
   const num = Number(n);
   if (!Number.isFinite(num)) return 0;

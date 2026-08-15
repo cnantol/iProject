@@ -15,8 +15,11 @@ router.get('/', (req, res) => {
   const totalOrderAmount = db
     .prepare('SELECT COALESCE(SUM(total_amount), 0) AS s FROM orders WHERE total_amount IS NOT NULL')
     .get().s;
-  const totalCommission = db
-    .prepare('SELECT COALESCE(SUM(commission_amount), 0) AS s FROM orders WHERE commission_amount IS NOT NULL')
+  const inProgressAmount = db
+    .prepare(
+      `SELECT COALESCE(SUM(total_amount), 0) AS s FROM orders
+       WHERE status NOT IN ('closed','lost_closed','cancelled') AND total_amount IS NOT NULL`
+    )
     .get().s;
   const customerTotals = db
     .prepare(
@@ -63,7 +66,7 @@ router.get('/', (req, res) => {
     closedCount: closed,
     totalAmount,
     totalOrderAmount,
-    totalCommission,
+    inProgressAmount,
     customerTotals,
     inProgressByCustomer,
     invoiceAging,

@@ -240,6 +240,79 @@ router.get('/waiting', (req, res) => {
   return res.json({ items, total, page, limit });
 });
 
+router.get('/overview', (req, res) => {
+  const db = getDb();
+  const matched = "commission_matched = 1 AND commission_amount IS NOT NULL";
+  const deviationWhere =
+    "status = 'closed' AND commission_amount > 0 AND total_amount > 0 " +
+    "AND ABS(commission_amount - total_amount * 0.01) > total_amount * 0.01 * 0.02";
+  const summary = {
+    matchedCount: db.prepare(`SELECT COUNT(*) AS c FROM orders WHERE ${matched}`).get().c,
+    matchedAmount: Number(
+      db.prepare(`SELECT COALESCE(SUM(commission_amount), 0) AS s FROM orders WHERE ${matched}`).get().s
+    ),
+    waitingCount: db
+      .prepare("SELECT COUNT(*) AS c FROM orders WHERE status = 'commission' AND commission_matched = 0")
+      .get().c,
+    waitingExpected: Number(
+      db
+        .prepare(
+          "SELECT COALESCE(SUM(total_amount * 0.01), 0) AS s FROM orders " +
+            "WHERE status = 'commission' AND commission_matched = 0 AND total_amount IS NOT NULL"
+        )
+        .get().s
+    ),
+    deviationCount: db.prepare(`SELECT COUNT(*) AS c FROM orders WHERE ${deviationWhere}`).get().c,
+    positiveDeviationAmount: Number(
+      db
+        .prepare(
+          `SELECT COALESCE(SUM(commission_amount - total_amount * 0.01), 0) AS s FROM orders
+           WHERE status = 'closed' AND commission_amount > 0 AND total_amount > 0
+             AND commission_amount - total_amount * 0.01 > total_amount * 0.01 * 0.02`
+        )
+        .get().s
+    ),
+    negativeDeviationAmount: Number(
+      db
+        .prepare(
+          `SELECT COALESCE(SUM(commission_amount - total_amount * 0.01), 0) AS s FROM orders
+           WHERE status = 'closed' AND commission_amount > 0 AND total_amount > 0
+             AND total_amount * 0.01 - commission_amount > total_amount * 0.01 * 0.02`
+        )
+        .get().s
+    ),
+  };
+  const byYear = db
+    .prepare(
+      `SELECT o.year AS year, COUNT(*) AS count, COALESCE(SUM(o.commission_amount), 0) AS amount
+       FROM orders o WHERE ${matched}
+       GROUP BY o.year ORDER BY o.year DESC`
+    )
+    .all();
+  const byCustomer = db
+    .prepare(
+      `SELECT COALESCE(ec.customer_name, '未填写客户') AS customer_name,
+              COUNT(*) AS count, COALESCE(SUM(o.commission_amount), 0) AS amount
+       FROM orders o
+       LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
+       WHERE ${matched}
+       GROUP BY COALESCE(ec.customer_name, '未填写客户')
+       ORDER BY amount DESC, count DESC LIMIT 8`
+    )
+    .all();
+  const recent = db
+    .prepare(
+      `SELECT o.id, o.order_id, o.project_name, o.total_amount, o.commission_amount, o.commission_date,
+              ec.customer_name AS end_customer_name
+       FROM orders o
+       LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
+       WHERE ${matched}
+       ORDER BY o.commission_date DESC, o.id DESC LIMIT 10`
+    )
+    .all();
+  return res.json({ summary, byYear, byCustomer, recent });
+});
+
 router.get('/deviations', (req, res) => {
   const db = getDb();
   const page = Math.max(1, Number(req.query.page) || 1);

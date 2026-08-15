@@ -27,7 +27,7 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import AutoGraphIcon from '@mui/icons-material/AutoGraph';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
-import PaidIcon from '@mui/icons-material/Paid';
+import InsightsIcon from '@mui/icons-material/Insights';
 import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
 import api from '../api';
 import { fmtMoney, fmtDate, daysSinceDate } from '../utils/helpers';
@@ -151,7 +151,7 @@ export default function Dashboard() {
           <StatCard label="闭环总金额" value={`¥ ${fmtMoney(data.totalAmount)}`} accent="#004E9A" icon={<PaymentsOutlinedIcon />} />
         </Grid>
         <Grid item xs={12} sm={6} md={4}>
-          <StatCard label="佣金总金额" value={`¥ ${fmtMoney(data.totalCommission)}`} accent="#C9A227" icon={<PaidIcon />} />
+          <StatCard label="进行中金额" value={`¥ ${fmtMoney(data.inProgressAmount)}`} accent="#F57C00" icon={<InsightsIcon />} />
         </Grid>
       </Grid>
 

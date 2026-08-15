@@ -266,7 +266,7 @@ router.get('/', (req, res) => {
        FROM orders o
        LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
        LEFT JOIN contract_customers cc ON cc.id = o.contract_customer_id
-       ${whereSql} ORDER BY o.year DESC, o.month DESC, o.order_id DESC LIMIT ? OFFSET ?`
+       ${whereSql} ORDER BY o.year DESC, o.month DESC, o.id DESC LIMIT ? OFFSET ?`
     )
     .all(...params, limit, (page - 1) * limit);
   return res.json({ items: items.map(withCommissionCheck), total, page, limit, activeCount, archivedCount });

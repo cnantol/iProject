@@ -609,6 +609,15 @@ try {
   assert.ok(overdue.count >= 1);
   const dash = must(await call('GET', '/api/dashboard', { token }), 200, '看板');
   assert.ok(dash.totalOrders >= 2);
+  assert.ok(Number.isFinite(Number(dash.inProgressAmount)));
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(dash, 'totalCommission'), false, '看板接口不应返回佣金总额');
+  const commissionOverview = must(await call('GET', '/api/commission/overview', { token }), 200, '佣金整体状况');
+  assert.ok(Number.isFinite(Number(commissionOverview.summary.matchedAmount)));
+  assert.ok(Number.isFinite(Number(commissionOverview.summary.waitingExpected)));
+  assert.ok(Number.isFinite(Number(commissionOverview.summary.positiveDeviationAmount)));
+  assert.ok(Number.isFinite(Number(commissionOverview.summary.negativeDeviationAmount)));
+  assert.ok(Array.isArray(commissionOverview.byYear));
+  assert.ok(Array.isArray(commissionOverview.recent));
   const history = must(await call('GET', '/api/sales-history', { token }), 200, '历史销售');
   assert.ok(history.items.length >= 1);
   assert.ok(history.total >= 1);
