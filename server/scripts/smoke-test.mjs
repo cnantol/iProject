@@ -67,10 +67,13 @@ function makeInvoicePdf() {
     doc.on('error', reject);
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.text('增值税电子普通发票');
-    doc.text('发票号码：123456789012345678');
-    doc.text('开票日期：2026年5月1日');
-    doc.text('价税合计（小写）：¥123.45');
-    doc.text('合计金额：123.45');
+    doc.text('发票号码：');
+    doc.text('开票日期：');
+    doc.text('123456789012345678');
+    doc.text('2026年5月1日');
+    doc.text('价税合计（大写） （小写）');
+    doc.text('合 计 ¥ 100.00 ¥ 13.00');
+    doc.text('价税合计（小写）：¥113.00');
     doc.end();
   });
 }
@@ -365,7 +368,10 @@ try {
   assert.strictEqual(recognized.recognized, true);
   assert.strictEqual(recognized.invoice_no, '123456789012345678');
   assert.strictEqual(recognized.invoice_date, '2026-05-01');
-  assert.strictEqual(Number(recognized.amount), 123.45);
+  assert.strictEqual(Number(recognized.amount), 100);
+  assert.strictEqual(Number(recognized.tax_amount), 13);
+  assert.strictEqual(Number(recognized.tax_rate), 13);
+  assert.strictEqual(Number(recognized.total_amount_incl_tax), 113);
   const over = must(
     await call('POST', `/api/orders/${orderId}/invoices`, {
       token,

@@ -212,6 +212,9 @@ CREATE TABLE IF NOT EXISTS invoice_records (
   po_id INTEGER REFERENCES customer_pos(id),
   invoice_no TEXT,
   amount REAL CHECK (amount > 0),
+  tax_amount REAL,
+  tax_rate REAL,
+  total_amount_incl_tax REAL,
   invoice_date TEXT,
   remark TEXT,
   created_at TEXT

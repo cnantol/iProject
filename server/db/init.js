@@ -85,6 +85,17 @@ export function initDb(dir) {
     db.exec('ALTER TABLE quotations ADD COLUMN quote_no TEXT');
   }
 
+  const invoiceColumns = db.prepare('PRAGMA table_info(invoice_records)').all();
+  if (!invoiceColumns.some((col) => col.name === 'tax_amount')) {
+    db.exec('ALTER TABLE invoice_records ADD COLUMN tax_amount REAL');
+  }
+  if (!invoiceColumns.some((col) => col.name === 'tax_rate')) {
+    db.exec('ALTER TABLE invoice_records ADD COLUMN tax_rate REAL');
+  }
+  if (!invoiceColumns.some((col) => col.name === 'total_amount_incl_tax')) {
+    db.exec('ALTER TABLE invoice_records ADD COLUMN total_amount_incl_tax REAL');
+  }
+
   const ensureShortName = (table) => {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all();
     if (!columns.some((col) => col.name === 'short_name')) {

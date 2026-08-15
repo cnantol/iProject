@@ -2,26 +2,35 @@ import { Router } from 'express';
 import fs from 'node:fs';
 import { PDFParse } from 'pdf-parse';
 import { getDb } from '../db/init.js';
-import { nowUtc, todayLocal, badRequest, notFound, pick, isMoney, isValidDate, writeAudit, cleanupUploadedFiles, resolveAttachmentFilePath } from '../utils.js';
+import { round2, nowUtc, todayLocal, badRequest, notFound, pick, isMoney, isValidDate, writeAudit, cleanupUploadedFiles, resolveAttachmentFilePath } from '../utils.js';
 import { maybeAutoAdvance } from './orders.js';
 
 const router = Router();
-const FIELDS = ['po_id', 'invoice_no', 'amount', 'invoice_date', 'remark'];
+const FIELDS = ['po_id', 'invoice_no', 'amount', 'invoice_date', 'remark', 'tax_amount', 'tax_rate', 'total_amount_incl_tax'];
 
 function extractInvoiceFields(text) {
   const result = {
     invoice_no: null,
     invoice_date: null,
     amount: null,
-    confidence: { invoice_no: 0, invoice_date: 0, amount: 0 }
+    tax_amount: null,
+    tax_rate: null,
+    total_amount_incl_tax: null,
+    confidence: { invoice_no: 0, invoice_date: 0, amount: 0, tax_amount: 0, total_amount_incl_tax: 0 }
   };
-  const noMatch = text.match(/发票号码?\s*[:：]?\s*([0-9]{8,20})/)
+  const findAfterLabel = (labelPattern, valuePattern) => {
+    const label = text.match(labelPattern);
+    if (!label) return null;
+    return text.slice(label.index + label[0].length).match(valuePattern);
+  };
+  const noMatch = findAfterLabel(/发票号码?\s*[:：]?\s*/, /([0-9]{20})/)
+    || findAfterLabel(/发票号码?\s*[:：]?\s*/, /([0-9]{8,20})/)
     || text.match(/No\.?\s*[:：]?\s*([0-9]{8,20})/);
   if (noMatch) {
     result.invoice_no = noMatch[1];
     result.confidence.invoice_no = 1;
   }
-  const dateMatch = text.match(/开票日期\s*[:：]?\s*(\d{4})[年/\-.](\d{1,2})[月/\-.](\d{1,2})日?/);
+  const dateMatch = findAfterLabel(/开票日期\s*[:：]?\s*/, /(\d{4})[年/\-.](\d{1,2})[月/\-.](\d{1,2})日?/);
   if (dateMatch) {
     const y = Number(dateMatch[1]);
     const m = Number(dateMatch[2]);
@@ -31,30 +40,68 @@ function extractInvoiceFields(text) {
       result.confidence.invoice_date = 1;
     }
   }
-  const amountPatterns = [
+  const sumMatch = text.match(/合\s*计\s*[¥￥]?\s*([0-9][0-9,]*\.\d{2})\s*[¥￥]\s*([0-9][0-9,]*\.\d{2})/);
+  if (sumMatch) {
+    const exTax = Number(sumMatch[1].replace(/,/g, ''));
+    const taxAmount = Number(sumMatch[2].replace(/,/g, ''));
+    if (Number.isFinite(exTax) && exTax > 0 && Number.isFinite(taxAmount) && taxAmount >= 0) {
+      result.amount = exTax;
+      result.tax_amount = taxAmount;
+      result.confidence.amount = 1;
+      result.confidence.tax_amount = 1;
+    }
+  }
+  const inclPatterns = [
     /价税合计\s*[（(]\s*小写\s*[)）]\s*[:：]?\s*[¥￥]?\s*([0-9][0-9,]*\.\d{2})/,
-    /价税合计\s*[:：]?\s*[¥￥]?\s*([0-9][0-9,]*\.\d{2})/,
-    /合计金额\s*[:：]?\s*[¥￥]?\s*([0-9][0-9,]*\.\d{2})/
+    /价税合计\s*[:：]?\s*[¥￥]?\s*([0-9][0-9,]*\.\d{2})/
   ];
-  for (const pattern of amountPatterns) {
-    const amountMatch = text.match(pattern);
-    if (amountMatch) {
-      const amount = Number(amountMatch[1].replace(/,/g, ''));
-      if (Number.isFinite(amount) && amount > 0) {
-        result.amount = amount;
-        result.confidence.amount = 1;
+  for (const pattern of inclPatterns) {
+    const inclMatch = text.match(pattern);
+    if (inclMatch) {
+      const incl = Number(inclMatch[1].replace(/,/g, ''));
+      if (Number.isFinite(incl) && incl > 0) {
+        result.total_amount_incl_tax = incl;
+        result.confidence.total_amount_incl_tax = 1;
         break;
       }
     }
+  }
+  let taxRate = null;
+  if (result.amount !== null && result.tax_amount !== null) {
+    taxRate = round2((result.tax_amount / result.amount) * 100);
+  } else if (result.total_amount_incl_tax !== null && result.amount !== null) {
+    taxRate = round2((result.total_amount_incl_tax / result.amount - 1) * 100);
+  }
+  if (taxRate === null) {
+    const rateMatch = text.match(/(\d+(?:\.\d+)?)\s*%/);
+    if (rateMatch) taxRate = Number(rateMatch[1]);
+  }
+  result.tax_rate = taxRate;
+  if (result.amount === null && result.total_amount_incl_tax !== null && taxRate !== null && taxRate > 0) {
+    result.amount = round2(result.total_amount_incl_tax / (1 + taxRate / 100));
+    result.tax_amount = round2(result.total_amount_incl_tax - result.amount);
+    result.confidence.amount = 0.5;
   }
   if (result.amount === null) {
     const candidates = [...text.matchAll(/([0-9][0-9,]*\.\d{2})/g)]
       .map((m) => Number(m[1].replace(/,/g, '')))
       .filter((n) => Number.isFinite(n) && n > 0);
     if (candidates.length > 0) {
-      result.amount = Math.max(...candidates);
-      result.confidence.amount = 0.5;
+      const max = Math.max(...candidates);
+      if (taxRate !== null && taxRate > 0) {
+        result.amount = round2(max / (1 + taxRate / 100));
+        result.tax_amount = round2(max - result.amount);
+        result.total_amount_incl_tax = max;
+        result.confidence.amount = 0.5;
+      } else {
+        result.amount = max;
+        result.total_amount_incl_tax = max;
+        result.confidence.amount = 0.5;
+      }
     }
+  }
+  if (result.amount !== null && result.total_amount_incl_tax === null && result.tax_amount !== null) {
+    result.total_amount_incl_tax = round2(result.amount + result.tax_amount);
   }
   return result;
 }
@@ -163,6 +210,12 @@ router.post('/:orderId/invoices', (req, res) => {
   if (!po) return badRequest(res, '所选 PO 不存在');
   if (!data.invoice_no || !String(data.invoice_no).trim()) return badRequest(res, '发票号必填');
   if (!isMoney(data.amount)) return badRequest(res, '开票金额必须大于 0');
+  const taxAmount = data.tax_amount === undefined || data.tax_amount === null || data.tax_amount === '' ? null : Number(data.tax_amount);
+  const taxRate = data.tax_rate === undefined || data.tax_rate === null || data.tax_rate === '' ? null : Number(data.tax_rate);
+  const inclTotal = data.total_amount_incl_tax === undefined || data.total_amount_incl_tax === null || data.total_amount_incl_tax === '' ? null : Number(data.total_amount_incl_tax);
+  if (taxAmount !== null && (!Number.isFinite(taxAmount) || taxAmount < 0)) return badRequest(res, '税额格式无效');
+  if (taxRate !== null && (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100)) return badRequest(res, '税率格式无效');
+  if (inclTotal !== null && (!Number.isFinite(inclTotal) || inclTotal <= 0)) return badRequest(res, '含税金额格式无效');
   if (data.invoice_date !== undefined && data.invoice_date !== null && data.invoice_date !== '' && !isValidDate(data.invoice_date)) {
     return badRequest(res, '开票日期格式必须为 YYYY-MM-DD');
   }
@@ -177,12 +230,18 @@ router.post('/:orderId/invoices', (req, res) => {
   let invoiceId;
   const tx = db.transaction(() => {
     const info = db
-      .prepare('INSERT INTO invoice_records (order_id, po_id, invoice_no, amount, invoice_date, remark, created_at) VALUES (?,?,?,?,?,?,?)')
+      .prepare(
+        `INSERT INTO invoice_records (order_id, po_id, invoice_no, amount, tax_amount, tax_rate, total_amount_incl_tax,
+          invoice_date, remark, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`
+      )
       .run(
         order.id,
         po.id,
         String(data.invoice_no).trim(),
         Number(data.amount),
+        taxAmount,
+        taxRate,
+        inclTotal,
         data.invoice_date || todayLocal(),
         data.remark ?? null,
         nowUtc()

@@ -37,7 +37,16 @@ import StepWrapper from './StepWrapper';
 export default function StepInvoicing({ order, readOnly, onChanged }) {
   const confirm = useConfirm();
   const [invoices, setInvoices] = useState(order.invoices || []);
-  const [form, setForm] = useState({ po_id: '', invoice_no: '', amount: '', invoice_date: '', remark: '' });
+  const [form, setForm] = useState({
+    po_id: '',
+    invoice_no: '',
+    amount: '',
+    invoice_date: '',
+    remark: '',
+    tax_amount: '',
+    tax_rate: '',
+    total_amount_incl_tax: ''
+  });
   const [invoiced, setInvoiced] = useState(Number(order.invoiced) === 1);
   const [invoicedDate, setInvoicedDate] = useState(order.invoiced_date || '');
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -85,10 +94,18 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
     }
     setError('');
     try {
-      const payload = { ...form, po_id: Number(form.po_id), amount: Number(form.amount), confirm: wouldExceed ? 1 : 0 };
+      const payload = {
+        ...form,
+        po_id: Number(form.po_id),
+        amount: Number(form.amount),
+        confirm: wouldExceed ? 1 : 0,
+        tax_amount: form.tax_amount === '' ? undefined : Number(form.tax_amount),
+        tax_rate: form.tax_rate === '' ? undefined : Number(form.tax_rate),
+        total_amount_incl_tax: form.total_amount_incl_tax === '' ? undefined : Number(form.total_amount_incl_tax)
+      };
       if (pendingAttachmentId) payload.attachment_id = pendingAttachmentId;
       await api.post(`/orders/${order.id}/invoices`, payload);
-      setForm({ po_id: '', invoice_no: '', amount: '', invoice_date: '', remark: '' });
+      setForm({ po_id: '', invoice_no: '', amount: '', invoice_date: '', remark: '', tax_amount: '', tax_rate: '', total_amount_incl_tax: '' });
       setPendingAttachmentId(null);
       setRecognitionInfo(null);
       onChanged();
@@ -124,7 +141,10 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
         ...prev,
         invoice_no: data.invoice_no || prev.invoice_no,
         invoice_date: data.invoice_date || prev.invoice_date,
-        amount: data.amount != null ? String(data.amount) : prev.amount
+        amount: data.amount != null ? String(data.amount) : prev.amount,
+        tax_amount: data.tax_amount != null ? String(data.tax_amount) : '',
+        tax_rate: data.tax_rate != null ? String(data.tax_rate) : '',
+        total_amount_incl_tax: data.total_amount_incl_tax != null ? String(data.total_amount_incl_tax) : ''
       }));
     } catch (err) {
       setError(errorMessage(err, '发票识别失败'));
@@ -197,7 +217,11 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
           {recognitionInfo.message}
           {recognitionInfo.recognized && (
             <Box component="span" sx={{ display: 'block', mt: 0.5 }}>
-              发票号：{recognitionInfo.invoice_no || '-'} ｜ 开票日期：{recognitionInfo.invoice_date || '-'} ｜ 金额：{recognitionInfo.amount != null ? `¥ ${fmtMoney(recognitionInfo.amount)}` : '-'}
+              发票号：{recognitionInfo.invoice_no || '-'} ｜ 开票日期：{recognitionInfo.invoice_date || '-'} ｜
+              未税金额：{recognitionInfo.amount != null ? `¥ ${fmtMoney(recognitionInfo.amount)}` : '-'} ｜
+              税额：{recognitionInfo.tax_amount != null ? `¥ ${fmtMoney(recognitionInfo.tax_amount)}` : '-'} ｜
+              税率：{recognitionInfo.tax_rate != null ? `${recognitionInfo.tax_rate}%` : '-'} ｜
+              含税：{recognitionInfo.total_amount_incl_tax != null ? `¥ ${fmtMoney(recognitionInfo.total_amount_incl_tax)}` : '-'}
             </Box>
           )}
         </Alert>
@@ -248,7 +272,7 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
           <TableRow>
             <TableCell>发票号</TableCell>
             <TableCell>PO 号</TableCell>
-            <TableCell align="right">金额</TableCell>
+            <TableCell align="right">金额（未税）</TableCell>
             <TableCell>开票日期</TableCell>
             <TableCell>备注</TableCell>
             <TableCell sx={{ width: 120 }}>操作</TableCell>
@@ -259,7 +283,16 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
             <TableRow key={row.id}>
               <TableCell sx={{ fontWeight: 600 }}>{row.invoice_no}</TableCell>
               <TableCell>{row.po_number}</TableCell>
-              <TableCell align="right">{fmtMoney(row.amount)}</TableCell>
+              <TableCell align="right">
+                <Typography variant="body2" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {fmtMoney(row.amount)}
+                </Typography>
+                {row.total_amount_incl_tax != null && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', whiteSpace: 'nowrap' }}>
+                    含税 {fmtMoney(row.total_amount_incl_tax)}
+                  </Typography>
+                )}
+              </TableCell>
               <TableCell>{fmtDate(row.invoice_date)}</TableCell>
               <TableCell>{row.remark || '-'}</TableCell>
               <TableCell>
@@ -315,7 +348,7 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
               <TextField label="发票号" fullWidth size="small" value={form.invoice_no} onChange={(e) => setForm((prev) => ({ ...prev, invoice_no: e.target.value }))} />
             </Grid>
             <Grid item xs={12} md={3}>
-              <TextField label="金额" type="number" fullWidth size="small" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} />
+              <TextField label="金额（未税）" type="number" fullWidth size="small" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} />
             </Grid>
             <Grid item xs={12} md={3}>
               <TextField
@@ -327,6 +360,36 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
                 onChange={(e) => setForm((prev) => ({ ...prev, invoice_date: e.target.value }))}
                 InputLabelProps={{ shrink: true }}
                 required
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField
+                label="税额"
+                type="number"
+                fullWidth
+                size="small"
+                value={form.tax_amount}
+                onChange={(e) => setForm((prev) => ({ ...prev, tax_amount: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField
+                label="税率（%）"
+                type="number"
+                fullWidth
+                size="small"
+                value={form.tax_rate}
+                onChange={(e) => setForm((prev) => ({ ...prev, tax_rate: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField
+                label="含税金额"
+                type="number"
+                fullWidth
+                size="small"
+                value={form.total_amount_incl_tax}
+                onChange={(e) => setForm((prev) => ({ ...prev, total_amount_incl_tax: e.target.value }))}
               />
             </Grid>
             <Grid item xs={12}>
