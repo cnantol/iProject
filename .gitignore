@@ -11,6 +11,9 @@ server/db/data/
 *.sqlite-wal
 *.sqlite-shm
 
+# WorkBuddy 项目记忆（本地工作记录，不进仓库）
+.workbuddy/
+
 # 备份目录仅保留 .tar.gz 文件，禁止就地解包
 backups/
 !backups/*.tar.gz

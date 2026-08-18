@@ -26,9 +26,13 @@ import { PAYMENT_TERMS } from '../utils/constants';
 import { fmtMoney } from '../utils/helpers';
 import { downloadFile } from '../utils/download';
 import { useFieldLabels } from '../utils/fieldLabels';
+import useFileUpload from '../hooks/useFileUpload';
+import UploadStatus from './UploadStatus';
+import { useConfirm } from './ConfirmDialog';
 import StepWrapper from './StepWrapper';
 
 export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
+  const confirm = useConfirm();
   const { t } = useFieldLabels();
   const [salesOrder, setSalesOrder] = useState(order.sales_order || '');
   const [paymentTerms, setPaymentTerms] = useState(order.payment_terms || 'COD');
@@ -39,6 +43,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
   const [attachments, setAttachments] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const uploadCtrl = useFileUpload();
   const editable = !readOnly && order.status === 'finance';
   const isCustomPayment = !PAYMENT_TERMS.includes(paymentTerms);
   const posLocked = !editable;
@@ -111,15 +116,23 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
 
   const uploadAttachment = async (event) => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('stage', 'finance');
+    await uploadCtrl.upload(file, {
+      url: `/orders/${order.id}/attachments`,
+      fields: { stage: 'finance' },
+      onSuccess: () => onChanged()
+    });
+  };
+
+  const deleteAttachment = async (attachmentId) => {
+    if (!(await confirm('确认删除该合同附件？删除后需重新上传。'))) return;
+    setError('');
     try {
-      await api.post(`/orders/${order.id}/attachments`, formData);
+      await api.delete(`/orders/${order.id}/attachments/${attachmentId}`);
       onChanged();
     } catch (err) {
-      setError(errorMessage(err, '上传失败'));
+      setError(errorMessage(err, '删除失败'));
     }
   };
 
@@ -323,16 +336,30 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
       <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
         客户盖章合同
       </Typography>
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
         {attachments.map((item) => (
-          <Chip key={item.id} label={item.file_name} clickable onClick={() => openDownload(`/api/orders/${order.id}/attachments/${item.id}/download`)} />
+          <Chip
+            key={item.id}
+            label={item.file_name}
+            clickable
+            title="点击下载"
+            onClick={() => openDownload(`/api/orders/${order.id}/attachments/${item.id}/download`)}
+            onDelete={!posLocked ? () => deleteAttachment(item.id) : undefined}
+            deleteIcon={<DeleteIcon fontSize="small" />}
+          />
         ))}
         {!posLocked && (
-          <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} sx={{ borderRadius: 2 }}>
+          <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} sx={{ borderRadius: 2 }} disabled={uploadCtrl.status === 'uploading'}>
             上传合同
             <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadAttachment} />
           </Button>
         )}
+        <UploadStatus
+          status={uploadCtrl.status}
+          progress={uploadCtrl.progress}
+          fileName={uploadCtrl.fileName}
+          error={uploadCtrl.error}
+        />
       </Stack>
 
       {editable && (

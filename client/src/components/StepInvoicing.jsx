@@ -32,6 +32,8 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
 import { useConfirm } from './ConfirmDialog';
 import { fmtMoney, fmtDate } from '../utils/helpers';
+import useFileUpload from '../hooks/useFileUpload';
+import UploadStatus from './UploadStatus';
 import StepWrapper from './StepWrapper';
 
 export default function StepInvoicing({ order, readOnly, onChanged }) {
@@ -56,6 +58,7 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
   const [pendingAttachmentId, setPendingAttachmentId] = useState(null);
   const invoiceFileRef = useRef(null);
   const [error, setError] = useState('');
+  const uploadCtrl = useFileUpload();
   const editable = !readOnly && order.status === 'shipping_invoicing';
 
   const pos = order.pos || [];
@@ -127,31 +130,32 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
       setError('发票文件不能超过 20MB');
       return;
     }
-    setRecognizing(true);
     setError('');
     setRecognitionInfo(null);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('stage', 'invoicing');
-      const { data: attachment } = await api.post(`/orders/${order.id}/attachments`, formData);
-      setPendingAttachmentId(attachment.id);
-      const { data } = await api.post(`/orders/${order.id}/invoices/recognize`, { attachment_id: attachment.id });
-      setRecognitionInfo(data);
-      setForm((prev) => ({
-        ...prev,
-        invoice_no: data.invoice_no || prev.invoice_no,
-        invoice_date: data.invoice_date || prev.invoice_date,
-        amount: data.amount != null ? String(data.amount) : prev.amount,
-        tax_amount: data.tax_amount != null ? String(data.tax_amount) : '',
-        tax_rate: data.tax_rate != null ? String(data.tax_rate) : '',
-        total_amount_incl_tax: data.total_amount_incl_tax != null ? String(data.total_amount_incl_tax) : ''
-      }));
-    } catch (err) {
-      setError(errorMessage(err, '发票识别失败'));
-    } finally {
-      setRecognizing(false);
-    }
+    setRecognizing(true);
+    await uploadCtrl.upload(file, {
+      url: `/orders/${order.id}/attachments`,
+      fields: { stage: 'invoicing' },
+      onSuccess: async ({ data: attachment }) => {
+        setPendingAttachmentId(attachment.id);
+        try {
+          const { data } = await api.post(`/orders/${order.id}/invoices/recognize`, { attachment_id: attachment.id });
+          setRecognitionInfo(data);
+          setForm((prev) => ({
+            ...prev,
+            invoice_no: data.invoice_no || prev.invoice_no,
+            invoice_date: data.invoice_date || prev.invoice_date,
+            amount: data.amount != null ? String(data.amount) : prev.amount,
+            tax_amount: data.tax_amount != null ? String(data.tax_amount) : '',
+            tax_rate: data.tax_rate != null ? String(data.tax_rate) : '',
+            total_amount_incl_tax: data.total_amount_incl_tax != null ? String(data.total_amount_incl_tax) : ''
+          }));
+        } catch (err) {
+          setError(errorMessage(err, '发票识别失败'));
+        }
+      }
+    });
+    setRecognizing(false);
   };
 
   const deleteInvoice = async (invoiceId) => {
@@ -325,12 +329,19 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
               component="label"
               variant="outlined"
               size="small"
-              startIcon={recognizing ? <CircularProgress size={16} /> : <UploadFileIcon />}
-              disabled={recognizing}
+              startIcon={recognizing || uploadCtrl.status === 'uploading' ? <CircularProgress size={16} /> : <UploadFileIcon />}
+              disabled={recognizing || uploadCtrl.status === 'uploading'}
             >
-              {recognizing ? '识别中...' : '上传 PDF 自动识别'}
+              {recognizing ? '识别中...' : uploadCtrl.status === 'uploading' ? '上传中...' : '上传 PDF 自动识别'}
               <input ref={invoiceFileRef} type="file" hidden accept="application/pdf,.pdf" onChange={handleInvoiceUpload} />
             </Button>
+            <UploadStatus
+              status={uploadCtrl.status}
+              progress={uploadCtrl.progress}
+              fileName={uploadCtrl.fileName}
+              error={uploadCtrl.error}
+              successText="发票上传成功"
+            />
           </Stack>
           <Grid container spacing={2} alignItems="flex-end">
             <Grid item xs={12} md={3}>

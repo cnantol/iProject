@@ -29,6 +29,8 @@ import api, { errorMessage } from '../api';
 import { downloadFile } from '../utils/download';
 import { ATTACHMENT_ACCEPT } from '../utils/constants';
 import { useFieldLabels } from '../utils/fieldLabels';
+import useFileUpload from '../hooks/useFileUpload';
+import UploadStatus from './UploadStatus';
 import StepWrapper from './StepWrapper';
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -47,6 +49,7 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onFramewo
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [localFramework, setLocalFramework] = useState(null);
+  const uploadCtrl = useFileUpload();
 
   useEffect(() => {
     setForm({
@@ -128,18 +131,17 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onFramewo
 
   const uploadAttachment = async (event) => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('stage', 'customer_info');
-    try {
-      await api.post(`/orders/${order.id}/attachments`, formData);
-      const { data } = await api.get(`/orders/${order.id}/attachments`);
-      setAttachments(data.items.filter((item) => item.stage === 'customer_info'));
-      onChanged();
-    } catch (err) {
-      setError(errorMessage(err, '上传失败'));
-    }
+    await uploadCtrl.upload(file, {
+      url: `/orders/${order.id}/attachments`,
+      fields: { stage: 'customer_info' },
+      onSuccess: async () => {
+        const { data } = await api.get(`/orders/${order.id}/attachments`);
+        setAttachments(data.items.filter((item) => item.stage === 'customer_info'));
+        onChanged();
+      }
+    });
   };
 
   const deleteAttachment = async (attachmentId) => {
@@ -344,10 +346,18 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onFramewo
           ))}
         </List>
         {!readOnly && (
-          <Button component="label" variant="outlined" startIcon={<UploadFileIcon />} size="small" sx={{ mt: 1.5 }}>
-            上传技术要求文件
-            <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadAttachment} />
-          </Button>
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
+            <Button component="label" variant="outlined" startIcon={<UploadFileIcon />} size="small" disabled={uploadCtrl.status === 'uploading'}>
+              上传技术要求文件
+              <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadAttachment} />
+            </Button>
+            <UploadStatus
+              status={uploadCtrl.status}
+              progress={uploadCtrl.progress}
+              fileName={uploadCtrl.fileName}
+              error={uploadCtrl.error}
+            />
+          </Stack>
         )}
       </Paper>
       {!readOnly && (

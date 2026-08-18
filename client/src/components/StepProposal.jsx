@@ -40,6 +40,8 @@ import { useFieldLabels } from '../utils/fieldLabels';
 import { useConfirm } from './ConfirmDialog';
 import { MATERIAL_TYPE_LABELS, ORDER_TYPES, ATTACHMENT_ACCEPT } from '../utils/constants';
 import { downloadFile } from '../utils/download';
+import useFileUpload from '../hooks/useFileUpload';
+import UploadStatus from './UploadStatus';
 import StepWrapper from './StepWrapper';
 
 const EMPTY_SELECTION = { material_no: '', description: '', material_type: 'standard', qty: '', unit: 'pcs', remark: '' };
@@ -60,6 +62,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
   const [pasteText, setPasteText] = useState('');
   const [metaForm, setMetaForm] = useState({ order_type: 'A', project_no: '' });
   const [metaError, setMetaError] = useState('');
+  const uploadCtrl = useFileUpload();
 
   const activeVersion = useMemo(() => versions.find((version) => version.id === activeVersionId) || versions[versions.length - 1], [versions, activeVersionId]);
 
@@ -205,20 +208,13 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
 
   const uploadFile = async (event) => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file || !activeVersion) return;
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('stage', 'proposal');
-    formData.append('reference_type', 'proposal_version');
-    formData.append('reference_id', String(activeVersion.id));
-    try {
-      await api.post(`/orders/${order.id}/attachments`, formData);
-      event.target.value = '';
-      onChanged();
-    } catch (err) {
-      event.target.value = '';
-      setError(errorMessage(err, '上传失败'));
-    }
+    await uploadCtrl.upload(file, {
+      url: `/orders/${order.id}/attachments`,
+      fields: { stage: 'proposal', reference_type: 'proposal_version', reference_id: String(activeVersion.id) },
+      onSuccess: () => onChanged()
+    });
   };
 
   const deleteAttachment = async (attachmentId) => {
@@ -447,10 +443,16 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
             </FormControl>
             {activeVersion && (
               <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, rowGap: 1, flex: 1, minWidth: 0 }}>
-                <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} disabled={readOnly} sx={{ flexShrink: 0 }}>
+                <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} disabled={readOnly || uploadCtrl.status === 'uploading'} sx={{ flexShrink: 0 }}>
                   上传方案文件
                   <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadFile} />
                 </Button>
+                <UploadStatus
+                  status={uploadCtrl.status}
+                  progress={uploadCtrl.progress}
+                  fileName={uploadCtrl.fileName}
+                  error={uploadCtrl.error}
+                />
                 {!readOnly && (
                   <IconButton
                     size="small"
