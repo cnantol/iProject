@@ -48,6 +48,27 @@ export const MATERIAL_TYPE_LABELS = { standard: '标准', non_standard: '非标'
 
 export const ATTACHMENT_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.msg';
 
+// 附件所属步骤（与 order_attachments.stage 对应），用于附件管理页分组展示
+export const ATTACHMENT_STAGE_ORDER = ['customer_info', 'proposal', 'finance', 'invoicing'];
+export const ATTACHMENT_STAGE_LABELS = {
+  customer_info: '客户信息',
+  proposal: '方案阶段',
+  finance: '财务信息',
+  invoicing: '开票管理'
+};
+export const ATTACHMENT_STAGE_COLORS = {
+  customer_info: '#1976D2',
+  proposal: '#7B1FA2',
+  finance: '#455A64',
+  invoicing: '#0288D1'
+};
+
+// 附件关联对象类型标签
+export const ATTACHMENT_REF_LABELS = {
+  proposal_version: '方案版本',
+  invoice_record: '发票记录'
+};
+
 export const IMPORT_TARGET_LABELS = {
   end_customer: '最终客户导入',
   contract_customer: '合同客户导入',

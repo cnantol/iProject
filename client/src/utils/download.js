@@ -43,3 +43,18 @@ export async function downloadFile(path, filename) {
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/**
+ * 以 blob 方式拉取附件，供内联预览（图片 <img> / PDF <iframe>）使用。
+ * 下载接口使用 Bearer 下载令牌鉴权，<iframe src> 直接内联无法携带令牌，
+ * 因此改为前端取 blob 再用 object URL 渲染，避免任何后端改动。
+ * @returns {Promise<Blob>}
+ */
+export async function previewFileBlob(path) {
+  const token = await getDownloadToken();
+  const { data } = await downloadApi.get(path, {
+    responseType: 'blob',
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return data;
+}

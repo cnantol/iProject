@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import fs from 'node:fs';
+import path from 'node:path';
 import { getDb } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
 import { authenticateDownload } from '../middleware/auth.js';
@@ -10,7 +11,8 @@ import {
   writeAudit,
   cleanupUploadedFiles,
   moveUploadedFile,
-  resolveAttachmentFilePath
+  resolveAttachmentFilePath,
+  getOrderAttachmentDir
 } from '../utils.js';
 
 const router = Router();
@@ -101,6 +103,90 @@ router.delete('/:orderId/attachments/:attachmentId', (req, res) => {
   if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
   db.prepare('DELETE FROM order_attachments WHERE id = ?').run(row.id);
   return res.json({ message: '附件已删除' });
+});
+
+// 孤儿文件扫描: 列出磁盘上存在、但数据库 order_attachments 无对应记录的附件。
+// 仅扫描 uploads/<orderId>/<stage>/ 目录, 不会泄露其它订单或系统文件。
+router.get('/:orderId/orphans', (req, res) => {
+  const db = getDb();
+  const order = db.prepare('SELECT id FROM orders WHERE id = ?').get(Number(req.params.orderId));
+  if (!order) return notFound(res);
+  const orderId = order.id;
+  const recorded = new Set(
+    db.prepare('SELECT file_path FROM order_attachments WHERE order_id = ?').all(orderId).map((r) => r.file_path)
+  );
+  const orphans = [];
+  for (const stage of STAGES) {
+    const dir = getOrderAttachmentDir(orderId, stage);
+    if (!fs.existsSync(dir)) continue;
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const ent of entries) {
+      if (!ent.isFile() || ent.name === '.DS_Store') continue;
+      const rel = `${orderId}/${stage}/${ent.name}`;
+      if (recorded.has(rel)) continue; // 已在数据库中, 属正常附件
+      let size = 0;
+      try {
+        size = fs.statSync(path.join(dir, ent.name)).size;
+      } catch {
+        /* 忽略 */
+      }
+      orphans.push({
+        stage,
+        file_name: ent.name,
+        file_path: rel,
+        file_type: (path.extname(ent.name).slice(1) || 'file').toLowerCase(),
+        size
+      });
+    }
+  }
+  return res.json({ items: orphans });
+});
+
+// 删除孤儿文件。严格的路径校验: file_path 必须为 <orderId>/<stage>/<name> 形式,
+// 解析后的绝对路径必须落在 uploads/<orderId>/ 之下, 且确为孤儿(数据库无记录)才允许删除, 杜绝越权/穿越。
+router.delete('/:orderId/orphans', (req, res) => {
+  const db = getDb();
+  const order = db.prepare('SELECT id FROM orders WHERE id = ?').get(Number(req.params.orderId));
+  if (!order) return notFound(res);
+  const orderId = order.id;
+  const rel = req.body?.file_path;
+  if (typeof rel !== 'string') return badRequest(res, '缺少 file_path');
+  const parts = rel.split('/');
+  if (parts.length !== 3 || String(orderId) !== parts[0] || !STAGES.includes(parts[1])) {
+    return badRequest(res, 'file_path 格式无效');
+  }
+  const fileName = parts[2];
+  if (fileName !== path.basename(fileName) || fileName.includes('..')) {
+    return badRequest(res, '文件名无效');
+  }
+  const dir = getOrderAttachmentDir(orderId, parts[1]);
+  const abs = path.join(dir, fileName);
+  // 防穿越: 解析后必须仍在 stage 目录内
+  if (path.relative(dir, abs) !== fileName) {
+    return badRequest(res, '非法路径');
+  }
+  // 确为孤儿: 数据库中无该记录, 避免误删正常附件
+  const recorded = db.prepare('SELECT id FROM order_attachments WHERE order_id = ? AND file_path = ?').get(orderId, rel);
+  if (recorded) return badRequest(res, '该文件已在附件记录中，无法作为孤儿删除');
+  if (!fs.existsSync(abs)) return notFound(res, '文件不存在');
+  try {
+    fs.unlinkSync(abs);
+  } catch {
+    return badRequest(res, '删除失败');
+  }
+  writeAudit(db, {
+    userId: req.user?.id ?? null,
+    action: 'orphan_attachment_delete',
+    entityType: 'order_attachment',
+    entityId: null,
+    detail: { order_id: orderId, file_path: rel }
+  });
+  return res.json({ message: '孤儿文件已删除' });
 });
 
 export default router;

@@ -19,6 +19,7 @@ const TodoList = lazy(() => import('./pages/TodoList'));
 const Settings = lazy(() => import('./pages/Settings'));
 const OrderCorrection = lazy(() => import('./pages/OrderCorrection'));
 const QuoteStyleDesigner = lazy(() => import('./pages/QuoteStyleDesigner'));
+const AttachmentManager = lazy(() => import('./pages/AttachmentManager'));
 
 function PrivateRoute() {
   const { isAuthenticated } = useAuth();
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/orders" element={<OrderList />} />
             <Route path="/orders/new" element={<OrderCreate />} />
             <Route path="/orders/:id" element={<OrderDetail />} />
+            <Route path="/orders/:id/attachments" element={<AttachmentManager />} />
             <Route path="/materials" element={<MaterialList />} />
             <Route path="/commission" element={<CommissionPage />} />
             <Route path="/sales-history" element={<SalesHistory />} />

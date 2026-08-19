@@ -17,6 +17,7 @@ import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CancelIcon from '@mui/icons-material/Cancel';
+import FolderIcon from '@mui/icons-material/Folder';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WorkspacePremiumIcon from '@mui/icons-material/WorkspacePremium';
@@ -165,6 +166,7 @@ export default function OrderDetail() {
   };
   const showShippingTabs = order.status === 'shipping_invoicing' && ['shipping', 'invoicing', 'shipping_invoicing'].includes(activeKey);
   const canDelete = ['customer_info', 'proposal', 'quotation'].includes(order.status);
+  const attachmentCount = detail?.attachments?.length || 0;
   const handleStepSelect = (key) => {
     if (key === 'shipping_invoicing' && order.status === 'shipping_invoicing') {
       setActiveKey('shipping');
@@ -265,6 +267,12 @@ export default function OrderDetail() {
         )}
         <Button startIcon={<RefreshIcon />} onClick={load}>
           刷新
+        </Button>
+        <Button
+          startIcon={<FolderIcon />}
+          onClick={() => navigate(`/orders/${order.id}/attachments`)}
+        >
+          附件管理{attachmentCount > 0 ? ` (${attachmentCount})` : ''}
         </Button>
       </Stack>
       {error && <Alert severity="error">{error}</Alert>}
