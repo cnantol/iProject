@@ -100,7 +100,14 @@ router.delete('/:orderId/attachments/:attachmentId', (req, res) => {
     return badRequest(res, '该附件已绑定发票，请通过发票记录删除');
   }
   const filePath = resolveAttachmentFilePath(row);
-  if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  if (filePath && fs.existsSync(filePath)) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      // 文件删除失败不阻断记录删除：残留文件会出现在「未记录文件」卡片中，可再由用户清理
+      console.error('[attachment-delete] unlink failed:', filePath, err?.code || '', err?.message || '');
+    }
+  }
   db.prepare('DELETE FROM order_attachments WHERE id = ?').run(row.id);
   return res.json({ message: '附件已删除' });
 });

@@ -304,7 +304,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_materials_uniq ON materials(end_customer_id, material_no, valid_from);
 CREATE INDEX IF NOT EXISTS idx_materials_valid_from ON materials(valid_from);
 CREATE INDEX IF NOT EXISTS idx_materials_end_customer_valid ON materials(end_customer_id, valid_from);
-CREATE INDEX IF NOT EXISTS idx_guide_prices_material_no ON guide_prices(material_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_round ON quotations(order_id, round_no);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_po ON customer_pos(order_id, po_number);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_no ON invoice_records(order_id, invoice_no);
@@ -339,9 +338,7 @@ BEGIN
   SELECT CASE WHEN NEW.valid_to IS NOT NULL AND NEW.valid_to < NEW.valid_from THEN RAISE(ABORT,'valid_to < valid_from') END;
 END;
 
-CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_status_bid ON orders(status, bid_result);
-CREATE INDEX IF NOT EXISTS idx_customer_pos_order ON customer_pos(order_id);
 CREATE INDEX IF NOT EXISTS idx_proposal_versions_order ON proposal_versions(order_id);
 CREATE INDEX IF NOT EXISTS idx_proposal_selections_version ON proposal_selections(proposal_version_id);
 CREATE INDEX IF NOT EXISTS idx_quotation_items_quotation ON quotation_items(quotation_id);
@@ -350,6 +347,7 @@ CREATE INDEX IF NOT EXISTS idx_approval_records_quotation ON approval_records(qu
 CREATE INDEX IF NOT EXISTS idx_invoice_records_order ON invoice_records(order_id);
 CREATE INDEX IF NOT EXISTS idx_shipping_batches_order ON shipping_batches(order_id);
 CREATE INDEX IF NOT EXISTS idx_order_attachments_order ON order_attachments(order_id);
+CREATE INDEX IF NOT EXISTS idx_orders_commission_date ON orders(commission_date);
 CREATE INDEX IF NOT EXISTS idx_order_custom_fields_order ON order_custom_fields(order_id);
 CREATE INDEX IF NOT EXISTS idx_todos_due ON todos(due_date);
 CREATE INDEX IF NOT EXISTS idx_todos_order_ref ON todos(order_ref);

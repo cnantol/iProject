@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { getDb } from '../db/init.js';
-import { nowUtc, badRequest, notFound, pick, isMoney } from '../utils.js';
+import { nowUtc, badRequest, notFound, pick, isMoney, parsePage } from '../utils.js';
 
 const router = Router();
 const FIELDS = ['material_no', 'description', 'guide_unit_price_ex_vat', 'unit', 'remark'];
 
 router.get('/', (req, res) => {
   const q = String(req.query.q || '').trim();
-  const page = Math.max(1, Number(req.query.page) || 1);
+  const page = parsePage(req.query.page);
   const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
   let where = ' WHERE 1=1';
   const params = [];
@@ -59,7 +59,7 @@ router.put('/:id', (req, res) => {
     getDb()
       .prepare('UPDATE guide_prices SET material_no=?, description=?, guide_unit_price_ex_vat=?, unit=?, remark=?, updated_at=? WHERE id=?')
       .run(
-        data.material_no?.trim() ?? row.material_no,
+        data.material_no == null ? row.material_no : String(data.material_no).trim() || row.material_no,
         data.description ?? row.description,
         data.guide_unit_price_ex_vat !== undefined ? Number(data.guide_unit_price_ex_vat) : row.guide_unit_price_ex_vat,
         data.unit ?? row.unit,

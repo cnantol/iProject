@@ -1,9 +1,45 @@
 import { STEP_KEY_INDEX, isClosedStatus } from './orderStatus.js';
 
 export function fmtMoney(value, digits = 2) {
+  if (value === null || value === undefined || value === '') return '-';
   const num = Number(value);
   if (!Number.isFinite(num)) return '-';
   return num.toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+// 图表坐标轴取整: 1/2/5 × 10^n 阶梯
+export function niceAxisMax(value) {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return step * magnitude;
+}
+
+// 金额紧凑显示: ≥1万 显示为 x.x万
+export function compactYuan(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '0';
+  if (Math.abs(num) >= 10000) return `${(num / 10000).toFixed(1)}万`;
+  return fmtMoney(num);
+}
+
+// 平滑曲线路径(三次贝塞尔插值)
+export function smoothLinePath(points) {
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[i - 1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  }
+  return d;
 }
 
 export function fmtSignedMoney(value) {

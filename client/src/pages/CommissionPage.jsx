@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -36,7 +36,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api, { errorMessage } from '../api';
-import { fmtDateTime, fmtMoney, fmtSignedMoney, fmtSignedPercent } from '../utils/helpers';
+import { fmtDateTime, fmtMoney, fmtSignedMoney, fmtSignedPercent, niceAxisMax, smoothLinePath } from '../utils/helpers';
 import { useFieldLabels } from '../utils/fieldLabels';
 import { tableHeadTokens } from '../theme/md3Theme';
 
@@ -75,13 +75,18 @@ export default function CommissionPage() {
 
   const [clearing, setClearing] = useState(false);
 
+  // 请求序号守卫: 只采纳最后一次请求的结果, 防止快速翻页/切 tab 时旧响应覆盖新数据
+  const loadSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
       const [waitRes, importRes] = await Promise.all([
         api.get('/commission/waiting', { params: { page: waitingPage, limit: waitingPageSize } }),
         api.get('/commission/imports')
       ]);
+      if (seq !== loadSeq.current) return;
       setWaiting(waitRes.data.items || []);
       setWaitingTotal(waitRes.data.total || 0);
       setImports(importRes.data.items || []);
@@ -89,9 +94,10 @@ export default function CommissionPage() {
       if (waitingPage > maxPage) setWaitingPage(maxPage);
       setError('');
     } catch (err) {
+      if (seq !== loadSeq.current) return;
       setError(errorMessage(err, '加载失败'));
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [waitingPage, waitingPageSize]);
 
@@ -908,18 +914,22 @@ function CommissionDeviations() {
   const [sortDir, setSortDir] = useState('desc');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const loadSeq = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
       const { data } = await api.get('/commission/deviations', { params: { page, limit: pageSize, sort: sortField, order: sortDir } });
+      if (seq !== loadSeq.current) return;
       setItems(data.items || []);
       setTotal(data.total || 0);
       setError('');
     } catch (err) {
+      if (seq !== loadSeq.current) return;
       setError(errorMessage(err, '加载失败'));
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [page, pageSize, sortField, sortDir]);
 
@@ -1180,31 +1190,6 @@ function OverviewStat({ label, value, accent, icon, sub, highlight = false }) {
   );
 }
 
-function niceAxisMax(value) {
-  if (!Number.isFinite(value) || value <= 0) return 1;
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  const normalized = value / magnitude;
-  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  return step * magnitude;
-}
-
-function smoothLinePath(points) {
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
-  let d = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const p0 = points[i - 1] || points[i];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[i + 2] || p2;
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
-  }
-  return d;
-}
-
 function YearCommissionChart({ data }) {
   const rows = (data || []).map((row) => ({
     year: String(row.year || ''),
@@ -1412,13 +1397,15 @@ function CommissionOverview() {
                   <TableCell>最终客户</TableCell>
                   <TableCell align="right">订单金额</TableCell>
                   <TableCell align="right">佣金金额</TableCell>
+                  <TableCell align="right">预期金额</TableCell>
+                  <TableCell align="right">差异</TableCell>
                   <TableCell>结算时间</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {(data.recent || []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>暂无结算记录</TableCell>
+                    <TableCell colSpan={8} align="center" sx={{ py: 3, color: 'text.secondary' }}>暂无结算记录</TableCell>
                   </TableRow>
                 ) : (
                   (data.recent || []).map((row) => (
@@ -1428,6 +1415,10 @@ function CommissionOverview() {
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.end_customer_name || '-'}</TableCell>
                       <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>¥ {fmtMoney(row.total_amount)}</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>¥ {fmtMoney(row.commission_amount)}</TableCell>
+                      <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>¥ {fmtMoney(row.expected_commission)}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 800, whiteSpace: 'nowrap', color: signColor(round2num(row.diff_amount)) }}>
+                        {fmtSignedMoney(row.diff_amount)}
+                      </TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>{fmtDateTime(row.commission_date)}</TableCell>
                     </TableRow>
                   ))

@@ -10,6 +10,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import ToggleButton from '@mui/material/ToggleButton';
+import { fmtDateTime } from '../utils/helpers';
 import Tooltip from '@mui/material/Tooltip';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Grid from '@mui/material/Grid';
@@ -53,7 +54,6 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
   const [activeVersionId, setActiveVersionId] = useState(null);
   const [newVersion, setNewVersion] = useState({ version_label: '', remark: '' });
   const [rows, setRows] = useState([]);
-  const [_editing] = useState(null);
   const [skipOpen, setSkipOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -69,7 +69,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
   useEffect(() => {
     if (activeVersion) {
       setActiveVersionId(activeVersion.id);
-      setRows((activeVersion.selections || []).map((row) => ({ ...row, _qty: String(row.qty) })));
+      setRows((activeVersion.selections || []).map((row) => ({ ...row })));
     } else {
       setRows([]);
     }
@@ -488,7 +488,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
                   {(activeVersion.attachments || []).map((file) => (
                     <TableRow key={file.id} hover>
                       <TableCell sx={{ wordBreak: 'break-all' }}>{file.file_name}</TableCell>
-                      <TableCell>{file.uploaded_at || ''}</TableCell>
+                      <TableCell>{fmtDateTime(file.uploaded_at)}</TableCell>
                       <TableCell align="right">
                         <Tooltip title="下载">
                           <IconButton size="small" onClick={() => openDownload(`/api/orders/${order.id}/attachments/${file.id}/download`)}>

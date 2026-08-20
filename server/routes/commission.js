@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import xlsx from 'xlsx';
 import { getDb } from '../db/init.js';
 import { upload } from '../middleware/upload.js';
-import { nowUtc, badRequest, notFound, normalizeSo, isNonNegativeNumber, writeAudit, cleanupUploadedFiles } from '../utils.js';
+import { nowUtc, badRequest, notFound, normalizeSo, isNonNegativeNumber, writeAudit, cleanupUploadedFiles, parsePage } from '../utils.js';
 
 const router = Router();
 
@@ -198,7 +198,7 @@ router.post('/upload', upload.fields([{ name: 'file', maxCount: 1 }]), (req, res
 
 router.get('/waiting', (req, res) => {
   const db = getDb();
-  const page = Math.max(1, Number(req.query.page) || 1);
+  const page = parsePage(req.query.page);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
   const total = db
     .prepare("SELECT COUNT(*) AS c FROM orders WHERE status = 'commission' AND commission_matched = 0")
@@ -303,6 +303,8 @@ router.get('/overview', (req, res) => {
   const recent = db
     .prepare(
       `SELECT o.id, o.order_id, o.project_name, o.total_amount, o.commission_amount, o.commission_date,
+              ROUND(o.total_amount * 0.01, 4) AS expected_commission,
+              ROUND(o.commission_amount - o.total_amount * 0.01, 4) AS diff_amount,
               ec.customer_name AS end_customer_name
        FROM orders o
        LEFT JOIN end_customers ec ON ec.id = o.end_customer_id
@@ -315,7 +317,7 @@ router.get('/overview', (req, res) => {
 
 router.get('/deviations', (req, res) => {
   const db = getDb();
-  const page = Math.max(1, Number(req.query.page) || 1);
+  const page = parsePage(req.query.page);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
   const sortField = req.query.sort === 'diff_ratio' ? 'diff_ratio' : 'diff_amount';
   const sortDir = req.query.order === 'asc' ? 'ASC' : 'DESC';

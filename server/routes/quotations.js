@@ -104,10 +104,23 @@ router.get('/:orderId/quotations', (req, res) => {
     createRound(db, order, null);
     rows = db.prepare('SELECT * FROM quotations WHERE order_id = ? ORDER BY round_no').all(order.id);
   }
-  const result = rows.map((round) => {
-    const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id').all(round.id);
-    return { ...round, items };
-  });
+  const result = (() => {
+    const roundIds = rows.map((round) => round.id);
+    const itemsByRound = new Map();
+    if (roundIds.length > 0) {
+      // 批量查询各轮次 items, 避免 N+1
+      const placeholders = roundIds.map(() => '?').join(',');
+      const items = db
+        .prepare(`SELECT * FROM quotation_items WHERE quotation_id IN (${placeholders}) ORDER BY id`)
+        .all(...roundIds);
+      for (const it of items) {
+        const list = itemsByRound.get(it.quotation_id) || [];
+        list.push(it);
+        itemsByRound.set(it.quotation_id, list);
+      }
+    }
+    return rows.map((round) => ({ ...round, items: itemsByRound.get(round.id) || [] }));
+  })();
   return res.json({ items: result });
 });
 
@@ -506,4 +519,3 @@ router.post('/:orderId/quotations/:roundId/sync-from-proposal', (req, res) => {
 });
 
 export default router;
-export { resolvePrice, createRound, recomputeTotal };

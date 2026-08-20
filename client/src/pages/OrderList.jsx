@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -78,6 +78,12 @@ export default function OrderList() {
   const { t } = useFieldLabels();
   const saved = loadSaved();
   const [search, setSearch] = useState(saved.search || '');
+  const [debouncedSearch, setDebouncedSearch] = useState(saved.search || '');
+  // 输入防抖: 停止输入 300ms 后才触发查询, 避免每按键一次请求
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
   const [scope, setScope] = useState(saved.scope || 'active');
   const [page, setPage] = useState(saved.page && Number(saved.page) > 0 ? Number(saved.page) : 1);
   const [pageSize, setPageSize] = useState(saved.page_size && Number(saved.page_size) > 0 ? Number(saved.page_size) : 10);
@@ -85,6 +91,8 @@ export default function OrderList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
+  // 请求序号守卫: 只采纳最后一次请求的结果, 防止慢响应覆盖新数据
+  const loadSeq = useRef(0);
   // 状态调色板:通过 theme 回调按 mode 返回对应色值,避免顶层 isDark 取值时机不当导致白屏
   const BLOCK = {
     closed:    { darkBg: 'rgba(129, 199, 132, 0.16)', lightBg: 'rgba(46, 125, 50, 0.12)',  darkColor: '#81C784', lightColor: '#2E7D32' },
@@ -99,20 +107,23 @@ export default function OrderList() {
     return { bg: dark ? p.darkBg : p.lightBg, color: dark ? p.darkColor : p.lightColor };
   };
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
       const params = { page, limit: pageSize };
       params.scope = scope;
-      if (search.trim()) params.search = search.trim();
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       const { data: result } = await api.get('/orders', { params });
+      if (seq !== loadSeq.current) return; // 已有更新的请求, 丢弃本次结果
       setData(result);
       setError('');
     } catch (err) {
+      if (seq !== loadSeq.current) return;
       setError(err.response?.data?.error || '加载失败');
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
-  }, [page, pageSize, search, scope]);
+  }, [page, pageSize, debouncedSearch, scope]);
 
   useEffect(() => {
     load();

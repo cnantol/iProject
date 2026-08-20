@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { getDb } from '../db/init.js';
+import { parsePage } from '../utils.js';
 
 const router = Router();
 
 router.get('/', (req, res) => {
   const db = getDb();
-  const pageInput = Number(req.query.page);
+  const page = parsePage(req.query.page);
   const limitInput = Number(req.query.limit);
-  const page = Number.isFinite(pageInput) ? Math.max(1, pageInput) : 1;
   const limit = Number.isFinite(limitInput) ? Math.min(200, Math.max(1, limitInput)) : 50;
   const where = [];
   const params = [];

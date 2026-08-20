@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -165,11 +165,21 @@ export default function AttachmentManager() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [preview, setPreview] = useState(null); // { url, kind, fileName }
+  const [preview, setPreview] = useState(null); // { url, kind, fileName, id }
   const [previewLoading, setPreviewLoading] = useState(false);
   const [workingId, setWorkingId] = useState(null);
   const [orphans, setOrphans] = useState([]);
   const [orphanWorkingPath, setOrphanWorkingPath] = useState(null);
+
+  // 预览对象 URL 生命周期管理: 换预览前/关闭时/组件卸载时统一释放, 避免 Blob 泄漏
+  const previewUrlRef = useRef(null);
+  const releasePreviewUrl = useCallback(() => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+  }, []);
+  useEffect(() => releasePreviewUrl, [releasePreviewUrl]);
 
   const versionMap = useMemo(() => {
     const map = new Map();
@@ -222,6 +232,8 @@ export default function AttachmentManager() {
     try {
       const blob = await previewFileBlob(downloadUrl(item));
       const url = URL.createObjectURL(blob);
+      releasePreviewUrl(); // 释放上一个预览的 URL, 避免连续预览泄漏
+      previewUrlRef.current = url;
       setPreview({ url, kind, fileName: item.file_name, id: item.id });
     } catch {
       setError('预览失败，请尝试下载');
@@ -255,7 +267,7 @@ export default function AttachmentManager() {
   };
 
   const closePreview = () => {
-    if (preview?.url) URL.revokeObjectURL(preview.url);
+    releasePreviewUrl();
     setPreview(null);
   };
 
@@ -311,7 +323,12 @@ export default function AttachmentManager() {
         {order && (
           <Chip label={`商机 ${order.order_id}`} size="small" variant="outlined" />
         )}
-        <Chip label={`共 ${items.length} 个`} size="small" color="primary" variant="outlined" />
+        <Chip
+          label={`共 ${ATTACHMENT_STAGE_ORDER.reduce((sum, stage) => sum + (grouped[stage]?.length || 0), 0)} 个`}
+          size="small"
+          color="primary"
+          variant="outlined"
+        />
         <Box sx={{ flex: 1 }} />
         <Button startIcon={<RefreshIcon />} onClick={load}>
           刷新

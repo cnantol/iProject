@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/init.js';
-import { nowUtc, todayLocal, badRequest, notFound, pick, isMoney, isValidDate } from '../utils.js';
+import { nowUtc, todayLocal, badRequest, notFound, pick, isMoney, isValidDate, parsePage } from '../utils.js';
 
 const router = Router();
 const FIELDS = ['end_customer_id', 'material_no', 'description', 'unit_price_ex_vat', 'unit', 'agreement_no', 'valid_from', 'valid_to', 'remark'];
@@ -69,7 +69,7 @@ function frameworkSourceCustomer(customerId) {
 router.get('/', (req, res) => {
   const q = String(req.query.q || '').trim();
   const customerId = req.query.end_customer_id ? Number(req.query.end_customer_id) : null;
-  const page = Math.max(1, Number(req.query.page) || 1);
+  const page = parsePage(req.query.page);
   const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
   let where = ' WHERE 1=1';
   const params = [];
@@ -254,4 +254,4 @@ export function recomputeOrderFrameworkFlags(db) {
   tx(orders);
 }
 
-export { hasFrameworkForCustomer, frameworkCustomerIds, latestFramework, frameworkSourceCustomer };
+export { hasFrameworkForCustomer, frameworkCustomerIds, frameworkSourceCustomer };

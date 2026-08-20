@@ -61,7 +61,6 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
   const [pasteText, setPasteText] = useState('');
   const [syncVersionId, setSyncVersionId] = useState(null);
   const [syncState, setSyncState] = useState('idle');
-  const [busy, _setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
@@ -87,7 +86,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
   useEffect(() => {
     if (activeRound) {
       setActiveRoundId(activeRound.id);
-      setRows((activeRound.items || []).map((item) => ({ ...item, _qty: String(item.qty), _unit_price: item.unit_price_ex_vat == null ? '' : String(item.unit_price_ex_vat) })));
+      setRows((activeRound.items || []).map((item) => ({ ...item })));
       setDirty(false);
     }
   }, [activeRound]);
@@ -266,9 +265,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
       const { data } = await api.post(`/orders/${order.id}/quotations/${activeRound.id}/sync-from-proposal`, { version_id: syncVersionId || undefined });
       setRows(
         (data.items || []).map((item) => ({
-          ...item,
-          _qty: String(item.qty),
-          _unit_price: item.unit_price_ex_vat == null ? '' : String(item.unit_price_ex_vat)
+          ...item
         }))
       );
       setNotice(`同步完成：明细 ${(data.items || []).length} 条，合计 ¥ ${fmtMoney(data.total_amount)}`);
@@ -383,7 +380,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
             </FormControl>
             {activeRound && (
               <Chip
-                label={`合计：¥ ${fmtMoney(rows.length > 0 ? displayTotal : activeRound.total_amount)}`}
+                label={`合计：¥ ${fmtMoney(rows.some((row) => lineAmount(row) != null) ? displayTotal : activeRound.total_amount)}`}
                 color={roundLocked ? 'success' : 'default'}
                 variant={roundLocked ? 'filled' : 'outlined'}
                 sx={{ whiteSpace: 'nowrap' }}
@@ -553,7 +550,7 @@ export default function StepQuotation({ order, readOnly, onChanged }) {
               <Button
                 variant="contained"
                 onClick={submitRound}
-                disabled={busy || !readyToSubmit}
+                disabled={!readyToSubmit}
                 title={readyToSubmit ? undefined : '请先保存并完善全部明细后再提交'}
               >
                 提交本轮报价

@@ -330,6 +330,18 @@ export default function QuoteStyleDesigner() {
   const [pdfOpen, setPdfOpen] = useState(false);
   const [pdfUrl, setPdfUrl] = useState('');
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  // PDF 预览对象 URL 生命周期管理: 关闭/卸载时统一释放, 避免 Blob 泄漏
+  const pdfUrlRef = useRef('');
+  const closePdfPreview = useCallback(() => {
+    setPdfOpen(false);
+    setPdfUrl('');
+    if (pdfUrlRef.current) {
+      URL.revokeObjectURL(pdfUrlRef.current);
+      pdfUrlRef.current = '';
+    }
+  }, []);
+  useEffect(() => () => { if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current); }, []);
   const [draftAvailable, setDraftAvailable] = useState(false);
   const [customFieldKey, setCustomFieldKey] = useState('');
   const [dragItem, setDragItem] = useState(null);
@@ -490,7 +502,8 @@ export default function QuoteStyleDesigner() {
     anchor.href = url;
     anchor.download = 'quotation-template.json';
     anchor.click();
-    URL.revokeObjectURL(url);
+    // 延迟释放, 避免个别浏览器在下载开始前 revoke 导致中断
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const importJson = async (event) => {
@@ -520,6 +533,8 @@ export default function QuoteStyleDesigner() {
         anchor.click();
         setTimeout(() => URL.revokeObjectURL(url), 2000);
       } else {
+        if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
+        pdfUrlRef.current = url;
         setPdfUrl(url);
         setPdfOpen(true);
       }
@@ -1193,12 +1208,12 @@ export default function QuoteStyleDesigner() {
         </Box>
       </Stack>
 
-      <Dialog open={pdfOpen} onClose={() => { setPdfOpen(false); setPdfUrl(''); }} maxWidth="md" fullWidth>
+      <Dialog open={pdfOpen} onClose={closePdfPreview} maxWidth="md" fullWidth>
         <Box sx={{ height: 4, bgcolor: 'primary.main' }} />
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <PictureAsPdfIcon color="primary" />
           <Typography variant="h6" sx={{ fontWeight: 800, flex: 1 }}>PDF 预览</Typography>
-          <IconButton onClick={() => { setPdfOpen(false); setPdfUrl(''); }}><CloseIcon /></IconButton>
+          <IconButton onClick={closePdfPreview}><CloseIcon /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ height: '70vh', p: 0 }}>
           {pdfUrl ? <Box component="iframe" title="PDF 预览" src={pdfUrl} sx={{ width: '100%', height: '100%', border: 0 }} /> : <CircularProgress />}

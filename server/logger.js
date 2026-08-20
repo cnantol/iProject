@@ -42,7 +42,3 @@ export const logger = {
 export function runWithRequest(ctx, fn) {
   return als.run(ctx, fn);
 }
-
-export function currentRequestId() {
-  return als.getStore()?.requestId;
-}

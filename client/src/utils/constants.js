@@ -63,12 +63,6 @@ export const ATTACHMENT_STAGE_COLORS = {
   invoicing: '#0288D1'
 };
 
-// 附件关联对象类型标签
-export const ATTACHMENT_REF_LABELS = {
-  proposal_version: '方案版本',
-  invoice_record: '发票记录'
-};
-
 export const IMPORT_TARGET_LABELS = {
   end_customer: '最终客户导入',
   contract_customer: '合同客户导入',

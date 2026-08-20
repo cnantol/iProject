@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs';
 import { getDataDir, getDb } from '../db/init.js';
 import { logger } from '../logger.js';
 
-export const OPPORTUNITY_BACKUP_HEADERS = [
+const OPPORTUNITY_BACKUP_HEADERS = [
   'ID',
   'Year',
   'Month',
@@ -54,7 +54,7 @@ function toLocalDateTime(value) {
   return `${local.getUTCFullYear()}-${pad(local.getUTCMonth() + 1)}-${pad(local.getUTCDate())} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}:${pad(local.getUTCSeconds())}`;
 }
 
-export function buildOpportunityRow(order, poNumbers) {
+function buildOpportunityRow(order, poNumbers) {
   const numbers = poNumbers == null
     ? (order.id == null
         ? []

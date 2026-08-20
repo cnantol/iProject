@@ -9,6 +9,14 @@ export function authenticate(req, res, next) {
   }
   try {
     const payload = jwt.verify(token, getJwtSecret());
+    if (payload.purpose) {
+      // 用途隔离: 下载令牌(10 分钟)仅可用于下载类接口, 不得访问业务接口。
+      // 下载路径放行后由路由内的 authenticateDownload 再校验用途。
+      const isDownloadPath = /\/download$|\/pdf$|\/template$/.test(req.path);
+      if (!isDownloadPath) {
+        return res.status(403).json({ error: '下载令牌不能访问业务接口，请重新登录' });
+      }
+    }
     const user = getDb().prepare('SELECT id, username FROM users WHERE id = ?').get(payload.id);
     if (!user) {
       return res.status(401).json({ error: '登录已过期，请重新登录' });

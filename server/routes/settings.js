@@ -9,7 +9,7 @@ import { getDb, getDataDir, getUploadDir, closeDb, initDb, rotateJwtSecret } fro
 import { logger } from '../logger.js';
 import { upload, uploadRestore, RESTORE_MAX_FILE_SIZE } from '../middleware/upload.js';
 import { authenticateDownload } from '../middleware/auth.js';
-import { nowUtc, badRequest, notFound, isMoney, isNonNegativeNumber, normalizeDate, normalizeSo, writeAudit, headerIndex, cell } from '../utils.js';
+import { nowUtc, badRequest, notFound, isMoney, isNonNegativeNumber, normalizeDate, normalizeSo, writeAudit, headerIndex, cell, asyncHandler } from '../utils.js';
 import { checkSalesOrderUnique } from './orders.js';
 import { hasFrameworkForCustomer } from './materials.js';
 import { templateFilePath } from '../lib/quotationTemplate.js';
@@ -30,7 +30,7 @@ router.get('/order-id-consistency', (req, res) => {
   const mismatched = db
     .prepare(
       `SELECT id, order_id FROM orders
-       WHERE order_id != printf('%04d', id) OR order_id NOT GLOB '[0-9][0-9][0-9][0-9]'
+       WHERE order_id != printf('%04d', id) OR order_id NOT GLOB '[0-9][0-9][0-9][0-9]*'
        ORDER BY id`
     )
     .all();
@@ -704,8 +704,11 @@ router.post('/import/:id/undo', (req, res) => {
         const count = db.prepare(`SELECT COUNT(*) AS c FROM ${table} WHERE ${column} IN (${placeholders})`).get(...orderIds).c;
         if (count > 0) throw new Error(`导入的商机已存在关联数据（${table}），为安全起见已阻止撤回`);
       }
+      // order_notes 有 ON DELETE CASCADE: 删除订单会级联删除备注, 提前统计并在结果中提示
+      const notesCount = db.prepare(`SELECT COUNT(*) AS c FROM order_notes WHERE order_id IN (${orderIds.map(() => '?').join(',')})`).get(...orderIds).c;
       const info = db.prepare(`DELETE FROM orders WHERE id IN (${orderIds.map(() => '?').join(',')})`).run(...orderIds);
       deleted.push(`${info.changes} 个商机`);
+      if (notesCount > 0) deleted.push(`${notesCount} 条订单备注`);
     } else if (log.target_type === 'end_customer' || log.target_type === 'contract_customer') {
       const table = log.target_type === 'end_customer' ? 'end_customers' : 'contract_customers';
       const ids = toIds(log.target_type);
@@ -1168,16 +1171,16 @@ function deleteBusinessData(db) {
   fs.mkdirSync(getUploadDir(), { recursive: true });
 }
 
-router.post('/reset-business', async (req, res) => {
+router.post('/reset-business', asyncHandler(async (req, res) => {
   const db = getDb();
   const { password } = req.body || {};
   if (!(await verifyPassword(db, password))) return badRequest(res, '管理员密码不正确');
   writeAudit(db, { userId: req.user.id, action: 'reset_business', entityType: 'settings', detail: { scope: 'business' } });
   deleteBusinessData(db);
   return res.json({ message: '业务数据已重置' });
-});
+}));
 
-router.post('/reset-factory', async (req, res) => {
+router.post('/reset-factory', asyncHandler(async (req, res) => {
   const db = getDb();
   const { password } = req.body || {};
   if (!(await verifyPassword(db, password))) return badRequest(res, '管理员密码不正确');
@@ -1192,6 +1195,6 @@ router.post('/reset-factory', async (req, res) => {
   }
   rotateJwtSecret();
   return res.json({ message: '系统已恢复出厂设置，请重新登录' });
-});
+}));
 
 export default router;

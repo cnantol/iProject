@@ -27,17 +27,37 @@ router.get('/:orderId/versions', (req, res) => {
   if (!loadOrder(db, req.params.orderId)) return notFound(res);
   const versions = db
     .prepare('SELECT * FROM proposal_versions WHERE order_id = ? ORDER BY sort_order, id')
-    .all(Number(req.params.orderId))
-    .map((version) => {
-      const selections = db
-        .prepare('SELECT * FROM proposal_selections WHERE proposal_version_id = ? ORDER BY sort_order, id')
-        .all(version.id);
-      const attachments = db
-        .prepare("SELECT * FROM order_attachments WHERE order_id = ? AND reference_type = 'proposal_version' AND reference_id = ? ORDER BY uploaded_at")
-        .all(version.order_id, version.id);
-      return { ...version, selections, attachments };
-    });
-  return res.json({ items: versions });
+    .all(Number(req.params.orderId));
+  const ids = versions.map((version) => version.id);
+  if (ids.length === 0) return res.json({ items: [] });
+  // 批量查询, 避免每个版本各查 2 次(N+1)
+  const placeholders = ids.map(() => '?').join(',');
+  const selections = db
+    .prepare(`SELECT * FROM proposal_selections WHERE proposal_version_id IN (${placeholders}) ORDER BY sort_order, id`)
+    .all(...ids);
+  const attachments = db
+    .prepare(
+      `SELECT * FROM order_attachments WHERE order_id = ? AND reference_type = 'proposal_version' AND reference_id IN (${placeholders}) ORDER BY uploaded_at`
+    )
+    .all(Number(req.params.orderId), ...ids);
+  const selByVersion = new Map();
+  for (const s of selections) {
+    const list = selByVersion.get(s.proposal_version_id) || [];
+    list.push(s);
+    selByVersion.set(s.proposal_version_id, list);
+  }
+  const attByVersion = new Map();
+  for (const a of attachments) {
+    const list = attByVersion.get(a.reference_id) || [];
+    list.push(a);
+    attByVersion.set(a.reference_id, list);
+  }
+  const items = versions.map((version) => ({
+    ...version,
+    selections: selByVersion.get(version.id) || [],
+    attachments: attByVersion.get(version.id) || []
+  }));
+  return res.json({ items });
 });
 
 router.post('/:orderId/versions', (req, res) => {

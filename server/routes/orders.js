@@ -14,7 +14,9 @@ import {
   isValidDate,
   writeAudit,
   cleanupUploadedFiles,
-  resolveAttachmentFilePath
+  resolveAttachmentFilePath,
+  asyncHandler,
+  parsePage
 } from '../utils.js';
 import { hasFrameworkForCustomer, frameworkSourceCustomer } from './materials.js';
 import { appendOpportunityRow, buildOpportunitiesWorkbook } from '../lib/opportunityBackup.js';
@@ -208,15 +210,14 @@ function upsertCustomValues(db, orderId, customValues) {
 router.get('/', (req, res) => {
   const db = getDb();
   const { search, status, end_customer_id, contract_customer_id, year, month, scope } = req.query;
-  const page = Math.max(1, Number(req.query.page) || 1);
+  const page = parsePage(req.query.page);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
   const base = [];
   const baseParams = [];
   if (search) {
     // 支持空格分词多条件搜索（AND 逻辑），每个条件在全字段中匹配
     const terms = String(search).trim().split(/\s+/).filter(Boolean);
-    const termConditions = terms.map((term) => {
-      const _like = `%${term}%`;
+    const termConditions = terms.map(() => {
       return '(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ? OR o.project_no LIKE ? OR o.year LIKE ? OR o.month LIKE ? OR EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?) OR EXISTS (SELECT 1 FROM end_customers ec WHERE ec.id = o.end_customer_id AND ec.customer_name LIKE ?) OR EXISTS (SELECT 1 FROM contract_customers cc WHERE cc.id = o.contract_customer_id AND cc.customer_name LIKE ?))';
     });
     if (termConditions.length > 0) {
@@ -228,12 +229,18 @@ router.get('/', (req, res) => {
     }
   }
   if (end_customer_id) {
-    base.push('o.end_customer_id = ?');
-    baseParams.push(Number(end_customer_id));
+    const id = Number(end_customer_id);
+    if (Number.isFinite(id)) {
+      base.push('o.end_customer_id = ?');
+      baseParams.push(id);
+    }
   }
   if (contract_customer_id) {
-    base.push('o.contract_customer_id = ?');
-    baseParams.push(Number(contract_customer_id));
+    const id = Number(contract_customer_id);
+    if (Number.isFinite(id)) {
+      base.push('o.contract_customer_id = ?');
+      baseParams.push(id);
+    }
   }
   if (year) {
     base.push('o.year = ?');
@@ -241,7 +248,7 @@ router.get('/', (req, res) => {
   }
   if (month) {
     base.push('o.month = ?');
-    baseParams.push(String(month));
+    baseParams.push(String(month).padStart(2, '0'));
   }
   const baseWhere = base.join(' AND ');
   const filter = [];
@@ -278,7 +285,7 @@ router.get('/', (req, res) => {
   return res.json({ items: items.map(withCommissionCheck), total, page, limit, activeCount, archivedCount });
 });
 
-router.get('/export', async (req, res) => {
+router.get('/export', asyncHandler(async (req, res) => {
   const db = getDb();
   const orders = db
     .prepare(
@@ -294,7 +301,7 @@ router.get('/export', async (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="opportunities-backup.xlsx"');
   res.setHeader('Cache-Control', 'no-store');
   return res.send(buffer);
-});
+}));
 
 router.get('/:id', (req, res) => {
   const detail = loadOrderDetail(getDb(), req.params.id);
@@ -307,8 +314,12 @@ router.post('/', (req, res) => {
   const db = getDb();
   const body = req.body || {};
   const data = pick(body, STEP1_FIELDS);
-  if (!data.end_customer_id) return badRequest(res, '最终客户必选');
-  if (!data.contract_customer_id) return badRequest(res, '合同客户必选');
+  const endCustomerId = Number(data.end_customer_id);
+  const contractCustomerId = Number(data.contract_customer_id);
+  if (!Number.isFinite(endCustomerId) || endCustomerId <= 0) return badRequest(res, '最终客户必选');
+  if (!Number.isFinite(contractCustomerId) || contractCustomerId <= 0) return badRequest(res, '合同客户必选');
+  if (!db.prepare('SELECT id FROM end_customers WHERE id = ?').get(endCustomerId)) return badRequest(res, '最终客户不存在');
+  if (!db.prepare('SELECT id FROM contract_customers WHERE id = ?').get(contractCustomerId)) return badRequest(res, '合同客户不存在');
   if (!data.project_name || !String(data.project_name).trim()) return badRequest(res, '项目名称必填');
   if (!data.project_owner || !String(data.project_owner).trim()) return badRequest(res, '项目负责人必填');
   if (data.month !== undefined && data.month !== null && data.month !== '') {
@@ -317,7 +328,7 @@ router.post('/', (req, res) => {
     data.month = month;
   }
 
-  const hasFramework = hasFrameworkForCustomer(Number(data.end_customer_id)) ? 1 : 0;
+  const hasFramework = hasFrameworkForCustomer(endCustomerId) ? 1 : 0;
   const ts = nowUtc();
   const insert = db.prepare(
     `INSERT INTO orders (order_id, year, month, end_customer_id, contract_customer_id, order_type, project_no, workshop,
@@ -330,8 +341,8 @@ router.post('/', (req, res) => {
       `PENDING-${Date.now()}-${crypto.randomUUID()}`,
       data.year ? String(data.year) : null,
       data.month ? String(data.month) : null,
-      Number(data.end_customer_id),
-      Number(data.contract_customer_id),
+      endCustomerId,
+      contractCustomerId,
       String(data.order_type || 'A'),
       data.project_no ? String(data.project_no) : null,
       data.workshop ? String(data.workshop) : null,
@@ -350,7 +361,8 @@ router.post('/', (req, res) => {
 
   upsertCustomValues(db, orderId, body.customValues);
   const detail = loadOrderDetail(db, orderId);
-  appendOpportunityRow(detail.order);
+  // 商机备份追加改为异步执行, 避免同步读+重写整个 xlsx 阻塞建单响应
+  setImmediate(() => appendOpportunityRow(detail.order));
   return res.status(201).json(detail);
 });
 
@@ -363,6 +375,20 @@ router.patch('/:id', (req, res) => {
 
   if (['customer_info', 'proposal'].includes(order.status)) {
     const data = pick(body, STEP1_FIELDS);
+    if (data.end_customer_id !== undefined) {
+      const id = Number(data.end_customer_id);
+      if (!Number.isFinite(id) || id <= 0 || !db.prepare('SELECT id FROM end_customers WHERE id = ?').get(id)) {
+        return badRequest(res, '最终客户不存在');
+      }
+    }
+    if (data.contract_customer_id !== undefined) {
+      const id = Number(data.contract_customer_id);
+      if (!Number.isFinite(id) || id <= 0 || !db.prepare('SELECT id FROM contract_customers WHERE id = ?').get(id)) {
+        return badRequest(res, '合同客户不存在');
+      }
+    }
+    if (data.project_name !== undefined && !String(data.project_name).trim()) return badRequest(res, '项目名称必填');
+    if (data.project_owner !== undefined && !String(data.project_owner).trim()) return badRequest(res, '项目负责人必填');
     if (data.end_customer_id !== undefined && Number(data.end_customer_id) !== Number(order.end_customer_id)) {
       data.has_framework = hasFrameworkForCustomer(Number(data.end_customer_id)) ? 1 : 0;
     }

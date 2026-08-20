@@ -115,18 +115,22 @@ export default function OrderCorrection() {
   const selectTokenRef = useRef(0);
   const planTokenRef = useRef(0);
   const searchTimerRef = useRef(null);
+  const searchTokenRef = useRef(0);
 
   const searchOrders = useCallback(async (keyword) => {
+    const seq = ++searchTokenRef.current;
     setSearching(true);
     try {
       const params = { scope: 'active', limit: 20 };
       if (keyword.trim()) params.search = keyword.trim();
       const { data } = await api.get('/orders', { params });
+      if (seq !== searchTokenRef.current) return; // 丢弃过期响应
       setOptions(data.items || []);
     } catch (err) {
+      if (seq !== searchTokenRef.current) return;
       setError(errorMessage(err, '查询商机失败'));
     } finally {
-      setSearching(false);
+      if (seq === searchTokenRef.current) setSearching(false);
     }
   }, []);
 

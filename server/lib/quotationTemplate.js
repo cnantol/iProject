@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, getDataDir } from '../db/init.js';
-import { todayLocal } from '../utils.js';
+import { todayLocal, nowUtc } from '../utils.js';
 
 const TEMPLATE_FILE = 'quotation-template.json';
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
@@ -382,7 +382,7 @@ function resolveQuoteNo(db, order, round, template, customerNames) {
   }
   const row = db.prepare('SELECT quote_no FROM quotations WHERE id = ?').get(round.id);
   if (!row || row.quote_no !== quoteNo) {
-    db.prepare('UPDATE quotations SET quote_no = ?, updated_at = ? WHERE id = ?').run(quoteNo, new Date().toISOString(), round.id);
+    db.prepare('UPDATE quotations SET quote_no = ?, updated_at = ? WHERE id = ?').run(quoteNo, nowUtc(), round.id);
   }
   return quoteNo;
 }

@@ -112,16 +112,25 @@ export function initDb(dir) {
   // - guide_prices.material_no: 通用价格查询
   // - orders.sales_order: 佣金匹配 + 商机唯一性
   // - orders.(status, commission_matched): 佣金待匹配批次扫描
-  db.exec('CREATE INDEX IF NOT EXISTS idx_login_attempts_key ON login_attempts(lock_key)');
-  db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
-  db.exec('CREATE INDEX IF NOT EXISTS idx_materials_customer_material ON materials(end_customer_id, material_no)');
-  db.exec('CREATE INDEX IF NOT EXISTS idx_guide_prices_material ON guide_prices(material_no)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_sales_order ON orders(sales_order)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_status_commission ON orders(status, commission_matched)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_orders_status_bid ON orders(status, bid_result)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_orders_commission_date ON orders(commission_date)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_order_attachments_reference ON order_attachments(reference_type, reference_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_audit_logs_action_entity ON audit_logs(action, entity_type, entity_id)');
+  // 清理历史冗余索引: UNIQUE / 复合索引已覆盖同等查询能力(幂等, 旧库只跑一次)
+  for (const name of [
+    'idx_guide_prices_material_no',
+    'idx_guide_prices_material',
+    'idx_users_username',
+    'idx_login_attempts_key',
+    'idx_orders_status',
+    'idx_materials_customer_material',
+    'idx_customer_pos_order'
+  ]) {
+    db.exec(`DROP INDEX IF EXISTS ${name}`);
+  }
 
   const ensureOrdersTotalNonNegative = () => {
     const ddlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get();
@@ -161,6 +170,45 @@ export function initDb(dir) {
     }
   };
   ensureOrdersTotalNonNegative();
+
+  const ensureAttachmentCascade = () => {
+    const ddlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'order_attachments'").get();
+    const ddl = ddlRow && ddlRow.sql ? String(ddlRow.sql) : '';
+    // 已带 ON DELETE CASCADE 则无需迁移
+    if (/REFERENCES\s+orders\(id\)\s+ON DELETE CASCADE/i.test(ddl)) return;
+    const indexSqls = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'order_attachments' AND sql IS NOT NULL")
+      .all()
+      .map((row) => row.sql);
+    const triggerSqls = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'order_attachments' AND sql IS NOT NULL")
+      .all()
+      .map((row) => row.sql);
+    const newDdl = ddl
+      .replace(/REFERENCES\s+orders\(id\)/i, 'REFERENCES orders(id) ON DELETE CASCADE')
+      .replace(/CREATE TABLE "?order_attachments"?/, 'CREATE TABLE order_attachments_migrated');
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec('BEGIN');
+    try {
+      db.exec(newDdl);
+      db.exec('INSERT INTO order_attachments_migrated SELECT * FROM order_attachments');
+      db.exec('DROP TABLE order_attachments');
+      db.exec('ALTER TABLE order_attachments_migrated RENAME TO order_attachments');
+      for (const sql of indexSqls) db.exec(sql);
+      for (const sql of triggerSqls) db.exec(sql);
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+    const issues = db.pragma('foreign_key_check');
+    if (issues.length > 0) {
+      throw new Error('order_attachments 表迁移后外键校验失败');
+    }
+  };
+  ensureAttachmentCascade();
 
   const ensureCommissionManualNonNegative = () => {
     const ddlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'commission_manual_records'").get();

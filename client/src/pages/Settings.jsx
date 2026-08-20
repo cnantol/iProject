@@ -465,7 +465,7 @@ export default function Settings() {
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="body2" noWrap sx={{ fontWeight: 700 }}>{item.filename}</Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {fmtDateTime(item.modified_at)} · {(item.size / 1024 / 1024).toFixed(1)} MB
+                          {fmtDateTime(item.modified_at)} · {Number.isFinite(item.size) ? `${(item.size / 1024 / 1024).toFixed(1)} MB` : '-'}
                         </Typography>
                       </Box>
                       <IconButton size="small" title="下载" onClick={() => openDownload(item.downloadUrl)}>

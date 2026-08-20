@@ -52,7 +52,6 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
   const [invoiced, setInvoiced] = useState(Number(order.invoiced) === 1);
   const [invoicedDate, setInvoicedDate] = useState(order.invoiced_date || '');
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [_pendingToggle, setPendingToggle] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
   const [recognitionInfo, setRecognitionInfo] = useState(null);
   const [pendingAttachmentId, setPendingAttachmentId] = useState(null);
@@ -174,7 +173,6 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
       return;
     }
     if (checked && invoiceTotal < poTotal) {
-      setPendingToggle(true);
       setConfirmOpen(true);
       return;
     }
@@ -192,7 +190,6 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
 
   const confirmManual = async () => {
     setConfirmOpen(false);
-    setPendingToggle(false);
     try {
       if (!invoicedDate) {
         setError('请先填写开票日期');

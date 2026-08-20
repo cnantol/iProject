@@ -1,24 +1,9 @@
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { fmtMoney } from '../utils/helpers';
+import { fmtMoney, niceAxisMax, compactYuan } from '../utils/helpers';
 
 const CUSTOMER_COLORS = ['#1976D2', '#2E7D32', '#F57C00', '#C9A227', '#7B1FA2', '#00897B', '#78909C'];
-
-function niceAxisMax(value) {
-  if (!Number.isFinite(value) || value <= 0) return 1;
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  const normalized = value / magnitude;
-  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  return step * magnitude;
-}
-
-function compactYuan(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return '0';
-  if (Math.abs(num) >= 10000) return `${(num / 10000).toFixed(1)}万`;
-  return fmtMoney(num);
-}
 
 export default function StackedMonthlyBarChart({ months, customers, ariaLabel, emptyText = '暂无数据' }) {
   const monthRows = (months || []).map((month) => ({ key: month.key, label: month.label || month.key, total: Number(month.total) || 0 }));

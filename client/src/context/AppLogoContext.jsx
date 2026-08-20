@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
-const AppLogoContext = createContext({ src: '/logo.svg', setLogo: () => {}, resetLogo: () => {}, refresh: () => {} });
+const AppLogoContext = createContext({ src: '/logo.svg', setLogo: () => {}, resetLogo: () => {} });
 
 export function AppLogoProvider({ children }) {
   const [src, setSrc] = useState('/logo.svg');
@@ -19,7 +19,7 @@ export function AppLogoProvider({ children }) {
   const setLogo = (logo) => setSrc(logo || '/logo.svg');
   const resetLogo = () => setSrc('/logo.svg');
 
-  return <AppLogoContext.Provider value={{ src, setLogo, resetLogo, refresh }}>{children}</AppLogoContext.Provider>;
+  return <AppLogoContext.Provider value={{ src, setLogo, resetLogo }}>{children}</AppLogoContext.Provider>;
 }
 
 export function useAppLogo() {

@@ -233,3 +233,20 @@ export function resolveAttachmentFilePath(row) {
   // 旧版兼容: file_path 直接是文件名
   return path.join(getUploadDir(), row.file_path);
 }
+
+/**
+ * 包装 async 路由处理器：捕获 Promise 拒绝并交给 Express 错误中间件，
+ * 避免 Express 4 不捕获 async 异常导致的 unhandled rejection / 进程崩溃。
+ */
+export function asyncHandler(fn) {
+  return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+}
+
+/**
+ * 解析分页页码：校验有限数值、取整、限制在 [1, max]，防止 OFFSET 溢出。
+ */
+export function parsePage(value, fallback = 1, max = 100000) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(1, Math.floor(n)));
+}

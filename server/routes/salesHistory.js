@@ -1,20 +1,19 @@
 import { Router } from 'express';
 import { getDb } from '../db/init.js';
-import { round2 } from '../utils.js';
+import { round2, parsePage } from '../utils.js';
 
 const router = Router();
 
 router.get('/', (req, res) => {
   const db = getDb();
   const q = String(req.query.search || '').trim();
-  const page = Math.max(1, Number(req.query.page) || 1);
+  const page = parsePage(req.query.page);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
   const where = ["o.status = 'closed'", "o.bid_result = 'won'", 'q.id = o.selected_round_id'];
   const params = [];
   if (q) {
     const terms = q.split(/\s+/).filter(Boolean);
-    const termConditions = terms.map((term) => {
-      const _like = `%${term}%`;
+    const termConditions = terms.map(() => {
       return '(o.order_id LIKE ? OR o.project_name LIKE ? OR o.sales_order LIKE ? OR o.project_owner LIKE ? OR o.year LIKE ? OR o.month LIKE ? OR ec.customer_name LIKE ? OR cc.customer_name LIKE ? OR qi.material_no LIKE ? OR qi.description LIKE ? OR EXISTS (SELECT 1 FROM customer_pos cp WHERE cp.order_id = o.id AND cp.po_number LIKE ?))';
     });
     if (termConditions.length > 0) {
