@@ -345,20 +345,18 @@ export default function StepCustomerInfo({ order, readOnly, onChanged, onFramewo
             </ListItem>
           ))}
         </List>
-        {!readOnly && (
-          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
-            <Button component="label" variant="outlined" startIcon={<UploadFileIcon />} size="small" disabled={uploadCtrl.status === 'uploading'}>
-              上传技术要求文件
-              <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadAttachment} />
-            </Button>
-            <UploadStatus
-              status={uploadCtrl.status}
-              progress={uploadCtrl.progress}
-              fileName={uploadCtrl.fileName}
-              error={uploadCtrl.error}
-            />
-          </Stack>
-        )}
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
+          <Button component="label" variant="outlined" startIcon={<UploadFileIcon />} size="small" disabled={uploadCtrl.status === 'uploading'}>
+            上传技术要求文件
+            <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadAttachment} />
+          </Button>
+          <UploadStatus
+            status={uploadCtrl.status}
+            progress={uploadCtrl.progress}
+            fileName={uploadCtrl.fileName}
+            error={uploadCtrl.error}
+          />
+        </Stack>
       </Paper>
       {!readOnly && (
         <Stack direction="row" spacing={1.5} sx={{ mt: 3, justifyContent: 'flex-end', flexWrap: 'wrap', rowGap: 1 }}>

@@ -348,12 +348,10 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
             deleteIcon={<DeleteIcon fontSize="small" />}
           />
         ))}
-        {!posLocked && (
-          <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} sx={{ borderRadius: 2 }} disabled={uploadCtrl.status === 'uploading'}>
-            上传合同
-            <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadAttachment} />
-          </Button>
-        )}
+        <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} sx={{ borderRadius: 2 }} disabled={uploadCtrl.status === 'uploading'}>
+          上传合同
+          <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadAttachment} />
+        </Button>
         <UploadStatus
           status={uploadCtrl.status}
           progress={uploadCtrl.progress}

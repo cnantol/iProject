@@ -316,11 +316,10 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
         </TableBody>
       </Table>
 
-      {editable && (
-        <Paper variant="outlined" sx={{ mt: 2.5, p: 2, borderRadius: 2, borderColor: 'divider' }}>
-          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-            <Box sx={{ width: 4, height: 20, borderRadius: 2, bgcolor: 'secondary.main' }} />
-            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>新增发票</Typography>
+      <Paper variant="outlined" sx={{ mt: 2.5, p: 2, borderRadius: 2, borderColor: 'divider' }}>
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+          <Box sx={{ width: 4, height: 20, borderRadius: 2, bgcolor: 'secondary.main' }} />
+          <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>{editable ? '新增发票' : '发票附件'}</Typography>
             <Box sx={{ flex: 1 }} />
             <Button
               component="label"
@@ -339,7 +338,8 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
               error={uploadCtrl.error}
               successText="发票上传成功"
             />
-          </Stack>
+        </Stack>
+        {editable && (
           <Grid container spacing={2} alignItems="flex-end">
             <Grid item xs={12} md={3}>
               <FormControl fullWidth size="small">
@@ -410,8 +410,8 @@ export default function StepInvoicing({ order, readOnly, onChanged }) {
               </Button>
             </Grid>
           </Grid>
-        </Paper>
-      )}
+        )}
+      </Paper>
 
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
         <DialogTitle>确认手动标记开票完成</DialogTitle>

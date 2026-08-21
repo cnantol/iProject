@@ -443,7 +443,7 @@ export default function StepProposal({ order, readOnly, onChanged, onAdvance }) 
             </FormControl>
             {activeVersion && (
               <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, rowGap: 1, flex: 1, minWidth: 0 }}>
-                <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} disabled={readOnly || uploadCtrl.status === 'uploading'} sx={{ flexShrink: 0 }}>
+                <Button component="label" variant="outlined" size="small" startIcon={<UploadFileIcon />} disabled={uploadCtrl.status === 'uploading'} sx={{ flexShrink: 0 }}>
                   上传方案文件
                   <input type="file" hidden accept={ATTACHMENT_ACCEPT} onChange={uploadFile} />
                 </Button>
