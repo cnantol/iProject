@@ -116,10 +116,20 @@ router.put('/:orderId/approvals/:recordId', (req, res) => {
     if (order.status !== 'approval_pending') return badRequest(res, '商机当前不在审批阶段');
     let changed = false;
     const tx = db.transaction(() => {
-      // 先 supersede 同线下其他 pending/rejected 与另一线 pending（保留 approved 追溯）
-    db.prepare(
-      "UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND id <> ? AND status IN ('pending','rejected')"
-    ).run(order.id, record.id);
+      // 同订单其它 pending/rejected 记录作废（保留历史追溯）
+      db.prepare(
+        "UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND id <> ? AND status IN ('pending','rejected')"
+      ).run(order.id, record.id);
+      // 整轮并行审批作废：同一轮次已通过的审批线也重置为可重新提交（驳回后需两条线重新送审）
+      if (record.quotation_id != null) {
+        db.prepare(
+          "UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND id <> ? AND quotation_id = ? AND status = 'approved'"
+        ).run(order.id, record.id, record.quotation_id);
+      } else {
+        db.prepare(
+          "UPDATE approval_records SET status = 'superseded' WHERE order_id = ? AND id <> ? AND quotation_id IS NULL AND status = 'approved'"
+        ).run(order.id, record.id);
+      }
       db.prepare('UPDATE approval_records SET status = ?, approver_id = ?, responded_at = ?, remark = ? WHERE id = ?')
         .run('rejected', req.user.id, nowUtc(), remark, record.id);
       if (order.selected_round_id) {
