@@ -18,14 +18,8 @@ import {
 const router = Router();
 const STAGES = ['customer_info', 'proposal', 'finance', 'invoicing'];
 
-// 允许上传附件的 status → stage 映射。任何 stage 上传都必须落在对应状态区间,
-// 否则拒绝并返回 400。该约束比前端 readOnly 更严,避免任何绕过 UI 的请求污染附件桶。
-const STAGE_ALLOWED_STATUSES = {
-  customer_info: ['customer_info', 'proposal'],
-  proposal: ['customer_info', 'proposal', 'quotation', 'approval_pending', 'bid_decision', 'finance'],
-  finance: ['finance', 'shipping_invoicing'],
-  invoicing: ['shipping_invoicing']
-};
+// 附件上传不限制订单阶段：任何状态下均可补充任意阶段附件（方案/报价/合同/发票等材料）
+// 前端 readOnly 不影响上传，此处不再按订单状态拦截。
 
 router.post('/:orderId/attachments', upload.single('file'), (req, res) => {
   const db = getDb();
@@ -35,11 +29,6 @@ router.post('/:orderId/attachments', upload.single('file'), (req, res) => {
   const stage = req.body.stage == null ? '' : String(req.body.stage);
   if (!stage) { cleanupUploadedFiles([req.file]); return badRequest(res, '请指定上传阶段'); }
   if (!STAGES.includes(stage)) { cleanupUploadedFiles([req.file]); return badRequest(res, '上传阶段无效'); }
-  const allowedStatuses = STAGE_ALLOWED_STATUSES[stage];
-  if (!allowedStatuses || !allowedStatuses.includes(orderRow.status)) {
-    cleanupUploadedFiles([req.file]);
-    return badRequest(res, `当前状态 ${orderRow.status} 不允许上传 ${stage} 阶段附件`);
-  }
   const referenceType = req.body.reference_type ? String(req.body.reference_type) : null;
   const referenceId = req.body.reference_id ? Number(req.body.reference_id) : null;
   if (referenceType) {

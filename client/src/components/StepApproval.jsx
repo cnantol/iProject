@@ -198,7 +198,7 @@ export default function StepApproval({ order, readOnly, onChanged }) {
                 </TableCell>
               </TableRow>
             )}
-            {approvals.map((item) => {
+            {[...approvals].reverse().map((item) => {
               const line = LINES.find((lineDef) => lineDef.key === item.approval_type);
               const round = (order.quotations || []).find((roundDef) => roundDef.id === item.quotation_id);
               return (

@@ -40,6 +40,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
   const [poForm, setPoForm] = useState({ po_number: '', po_amount: '', remark: '' });
   const [editingPoId, setEditingPoId] = useState(null);
   const [soDirty, setSoDirty] = useState(false);
+  const [termsDirty, setTermsDirty] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -69,6 +70,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
     try {
       await api.patch(`/orders/${order.id}`, { sales_order: salesOrder, payment_terms: paymentTerms });
       setSoDirty(false);
+      setTermsDirty(false);
       onChanged();
     } catch (err) {
       setError(errorMessage(err));
@@ -225,6 +227,10 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
                 onChange={(e) => {
                   const value = e.target.value;
                   setPaymentTerms(value === 'Other' ? '' : value);
+                  setTermsDirty(true);
+                }}
+                onBlur={() => {
+                  if (editable && termsDirty) saveOrder();
                 }}
                 disabled={!editable}
                 sx={{ flex: 1, minWidth: 180 }}
@@ -240,7 +246,13 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
                   label="自定义付款条款"
                   placeholder="请输入付款方式"
                   value={paymentTerms}
-                  onChange={(e) => setPaymentTerms(e.target.value)}
+                  onChange={(e) => {
+                    setPaymentTerms(e.target.value);
+                    setTermsDirty(true);
+                  }}
+                  onBlur={() => {
+                    if (editable && termsDirty) saveOrder();
+                  }}
                   disabled={!editable}
                   sx={{ flex: 1, minWidth: 220 }}
                 />
