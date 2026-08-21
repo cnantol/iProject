@@ -30,7 +30,7 @@ const STATUS_COLORS = { pending: 'warning', approved: 'success', rejected: 'erro
 const STATUS_HEX = { pending: '#F57C00', approved: '#1E7A46', rejected: '#C33D3D', superseded: '#78909C' };
 
 export default function StepApproval({ order, readOnly, onChanged }) {
-  const [rejectTarget, setRejectTarget] = useState(null);
+  const [target, setTarget] = useState(null); // { record, action: 'approve' | 'reject' }
   const [remark, setRemark] = useState('');
   const [error, setError] = useState('');
   const approvals = order.approvals || [];
@@ -50,8 +50,9 @@ export default function StepApproval({ order, readOnly, onChanged }) {
   const act = async (recordId, action) => {
     setError('');
     try {
-      await api.put(`/orders/${order.id}/approvals/${recordId}`, { action, remark: action === 'reject' ? remark : undefined });
-      setRejectTarget(null);
+      // 通过/驳回均可填写备注; 备注为空时不覆盖已有备注
+      await api.put(`/orders/${order.id}/approvals/${recordId}`, { action, remark: remark.trim() ? remark : undefined });
+      setTarget(null);
       setRemark('');
       onChanged();
     } catch (err) {
@@ -160,10 +161,10 @@ export default function StepApproval({ order, readOnly, onChanged }) {
                   )}
                   {record && record.status === 'pending' && editable && (
                     <>
-                      <Button size="small" variant="contained" color="success" onClick={() => act(record.id, 'approve')}>
+                      <Button size="small" variant="contained" color="success" onClick={() => setTarget({ record, action: 'approve' })}>
                         通过
                       </Button>
-                      <Button size="small" variant="outlined" color="error" onClick={() => setRejectTarget(record)}>
+                      <Button size="small" variant="outlined" color="error" onClick={() => setTarget({ record, action: 'reject' })}>
                         驳回
                       </Button>
                     </>
@@ -221,25 +222,33 @@ export default function StepApproval({ order, readOnly, onChanged }) {
         </Table>
       </Box>
 
-      <Dialog open={Boolean(rejectTarget)} onClose={() => setRejectTarget(null)}>
-        <DialogTitle>确认驳回审批</DialogTitle>
+      <Dialog open={Boolean(target)} onClose={() => { setTarget(null); setRemark(''); }}>
+        <DialogTitle>{target?.action === 'reject' ? '确认驳回审批' : '确认通过审批'}</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" sx={{ mb: 1.5 }}>
-            驳回后商机将回退至报价阶段，选中轮次回退草稿，需重新提交报价后再送审。
-          </Typography>
+          {target?.action === 'reject' && (
+            <Typography variant="body2" sx={{ mb: 1.5 }}>
+              驳回后商机将回退至报价阶段，选中轮次回退草稿，需重新提交报价后再送审。
+            </Typography>
+          )}
+          {target?.action === 'approve' && (
+            <Typography variant="body2" sx={{ mb: 1.5, color: 'text.secondary' }}>
+              通过后该审批线生效；两条审批线均通过后，商机将进入下一步。
+            </Typography>
+          )}
           <TextField
-            label="审批备注"
+            label="审批备注（选填）"
             fullWidth
             multiline
             minRows={2}
+            placeholder="填写审批意见，将记录在审批历史中"
             value={remark}
             onChange={(e) => setRemark(e.target.value)}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRejectTarget(null)}>取消</Button>
-          <Button color="error" onClick={() => act(rejectTarget.id, 'reject')}>
-            确认驳回
+          <Button onClick={() => { setTarget(null); setRemark(''); }}>取消</Button>
+          <Button color={target?.action === 'reject' ? 'error' : 'success'} variant={target?.action === 'reject' ? 'outlined' : 'contained'} onClick={() => target && act(target.record.id, target.action)}>
+            {target?.action === 'reject' ? '确认驳回' : '确认通过'}
           </Button>
         </DialogActions>
       </Dialog>
