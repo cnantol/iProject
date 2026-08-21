@@ -88,7 +88,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
     }
     setError('');
     try {
-      if (soDirty && salesOrder.trim()) {
+      if (soDirty) {
         await api.patch(`/orders/${order.id}`, { sales_order: salesOrder, payment_terms: paymentTerms });
         setSoDirty(false);
       }
@@ -190,7 +190,7 @@ export default function StepFinance({ order, readOnly, onChanged, onAdvance }) {
               setSoDirty(true);
             }}
             onBlur={() => {
-              if (editable && soDirty && salesOrder.trim()) saveOrder();
+              if (editable && soDirty) saveOrder();
             }}
             fullWidth
             disabled={!editable}

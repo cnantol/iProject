@@ -422,9 +422,13 @@ router.patch('/:id', (req, res) => {
     const data = pick(body, FINANCE_FIELDS);
     if (data.sales_order !== undefined) {
       const so = String(data.sales_order).trim();
-      if (!so) return badRequest(res, 'Sales Order 必填');
-      if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他商机使用');
-      data.sales_order = so;
+      if (!so) {
+        // 允许清空 Sales Order: 存 NULL(UNIQUE 列允许多个 NULL, 空串会与其他空串冲突)
+        data.sales_order = null;
+      } else {
+        if (!checkSalesOrderUnique(db, so, order.id)) return badRequest(res, '该 SO 号已被其他商机使用');
+        data.sales_order = so;
+      }
     }
     db.prepare('UPDATE orders SET sales_order=?, payment_terms=?, updated_at=? WHERE id=?').run(
       data.sales_order !== undefined ? data.sales_order : order.sales_order,
